@@ -1,49 +1,79 @@
 # VanishVoice Project Status
 
 ## Completed ✅
-- [x] Initialize Expo React Native project with TypeScript
-  - Created project in `/VanishVoice` subdirectory
-  - Installed core dependencies (supabase, zustand, expo-av, etc.)
-  - Set up project directory structure
-- [x] Set up Supabase project and configure authentication
-  - Created project "VanishVoice" (ID: dhzblvgfexkgkxhhdlpk)
-  - Configured environment variables in `.env`
-  - Project URL: https://dhzblvgfexkgkxhhdlpk.supabase.co
-- [x] Create database schema (users and messages tables)
-  - Applied initial schema migration
-  - Created users, messages, and friends tables
-  - Set up Row Level Security policies
-- [x] Configure storage bucket for voice messages
-  - Created 'voice-messages' bucket with 10MB limit
-  - Set up storage policies for secure access
 
-- [x] Implement basic navigation structure
-  - Created tab navigation with Home, Inbox, Friends, and Profile screens
-  - Set up React Navigation with bottom tabs
-- [x] Build voice recording UI component (60s max)
-  - Implemented press-and-hold recording with expo-av
-  - Added recording duration display and 60s limit
-  - Visual feedback with pulse animation
-- [x] Create auth context and anonymous user support
-  - Anonymous sign-in flow implemented
-  - User profile management with friend codes
+### Initial Setup
+- [x] Initialize Expo React Native project with TypeScript
+- [x] Set up Supabase project and configure authentication
+  - Project URL: https://dhzblvgfexkgkxhhdlpk.supabase.co
+- [x] Create database schema with RLS policies
+- [x] Configure storage bucket for voice messages
+
+### Core Features
+- [x] Anonymous user system with friend codes
+- [x] Voice recording (hold-to-record, 60s max)
+- [x] Voice message upload/download with Supabase Storage
+- [x] Message playback with proper audio routing
+- [x] Ephemeral messaging (vanish after playback)
+- [x] Friend management (add via code, swipe to delete/block)
+- [x] Random Connect feature for anonymous connections
+- [x] Unified inbox/friends screen
+
+### UI/UX Improvements
+- [x] Modern, clean design with consistent styling
+- [x] Swipe actions for friend management
+- [x] Floating action button for add friend/random connect
+- [x] Empty states with animations
+- [x] Navigation renamed from "VanishVoice" to "Chats"
+- [x] Improved Profile screen with settings groups
+- [x] Privacy-first inbox (sender hidden until tap)
+
+### Technical Implementation
+- [x] Supabase Edge Functions for message expiry
+- [x] Storage cleanup function
+- [x] Anonymous auth flow
+- [x] Real-time polling (WebSocket disabled)
+- [x] Git repository with comprehensive documentation
 
 ## In Progress 🔄
-- [ ] Implement client-side encryption for voice messages
-- [ ] Create message sending functionality
-- [ ] Add message playback in inbox
-- [ ] Implement expiry system (time-based first)
-- [ ] Implement time-based expiry (simplest expiry type)
-- [ ] Add friend saving functionality
+- [ ] Add username editing capability
+- [ ] Security audit preparation
+
+## Pending Features 📋
+- [ ] Client-side encryption for voice messages
+- [ ] Push notifications for new messages
+- [ ] Save request feature with mutual consent
+- [ ] Time-based expiry (expire even if not played)
+- [ ] Blocked users management screen
+- [ ] Location-based expiry
+- [ ] Event-based expiry
+- [ ] Onboarding tutorial
+- [ ] Voice message waveform visualization
 
 ## Key Decisions Made
-- Using anonymous users for MVP
+- Using anonymous users for MVP (no email/phone required)
 - 60-second max recording duration
-- Friend saving via friend codes
-- React + Expo (no native Xcode/Android Studio needed)
+- Friend connections via shareable codes
+- Messages vanish immediately after playback
+- Privacy-first design (sender hidden until revealed)
+- React Native + Expo for cross-platform development
+- Supabase for backend (database, storage, auth)
 
-## Next Steps After Restart
-1. Use Supabase MCP to create project
-2. Run database schema
-3. Configure storage bucket
-4. Continue with navigation and UI components
+## Security Considerations
+- Created comprehensive security audit checklist
+- Need to implement client-side encryption before production
+- RLS policies in place for data access control
+- Storage bucket configured with proper access controls
+- Planning professional security audit before launch
+
+## Next Priority Tasks
+1. **Username editing** - Allow users to set custom usernames
+2. **Security audit** - Complete checklist items
+3. **Encryption** - Implement client-side voice encryption
+4. **Push notifications** - Critical for user engagement
+
+## Repository
+- GitHub: https://github.com/micksolo/WYD
+- Comprehensive documentation in /docs
+- Security audit checklist created
+- Environment variables properly configured

@@ -13,8 +13,10 @@ import {
   ScrollView,
   Animated,
   AppState,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Swipeable } from 'react-native-gesture-handler';
 import { Audio } from 'expo-av';
 import { useAuth } from '../contexts/AnonymousAuthContext';
 import { supabase } from '../services/supabase';
@@ -59,6 +61,25 @@ export default function EphemeralInboxScreen({ navigation }: any) {
   const [playingMessage, setPlayingMessage] = useState<string | null>(null);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const bounceAnim = useRef(new Animated.Value(1)).current;
+  const floatAnim = useRef(new Animated.Value(0)).current;
+
+  // Floating animation for empty state
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, {
+          toValue: 1,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(floatAnim, {
+          toValue: 0,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -314,6 +335,60 @@ export default function EphemeralInboxScreen({ navigation }: any) {
     return colors[index];
   };
 
+  const deleteFriend = async (friendId: string) => {
+    try {
+      const { error } = await supabase
+        .from('friends')
+        .delete()
+        .eq('user_id', user?.id)
+        .eq('friend_id', friendId);
+
+      if (!error) {
+        Alert.alert('Success', 'Friend removed');
+        fetchData();
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to remove friend');
+    }
+  };
+
+  const blockUser = async (friendId: string) => {
+    // For now, just remove them. In future, add blocked_users table
+    Alert.alert(
+      'Block User',
+      'Are you sure you want to block this user? They will be removed from your friends.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Block', 
+          style: 'destructive',
+          onPress: () => deleteFriend(friendId)
+        }
+      ]
+    );
+  };
+
+  const renderRightActions = (friendId: string) => {
+    return (
+      <View style={styles.swipeActions}>
+        <TouchableOpacity
+          style={[styles.swipeAction, styles.blockAction]}
+          onPress={() => blockUser(friendId)}
+        >
+          <Ionicons name="ban" size={24} color="#fff" />
+          <Text style={styles.swipeActionText}>Block</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.swipeAction, styles.deleteAction]}
+          onPress={() => deleteFriend(friendId)}
+        >
+          <Ionicons name="trash" size={24} color="#fff" />
+          <Text style={styles.swipeActionText}>Delete</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   const renderMessage = ({ item }: { item: Message }) => (
     <TouchableOpacity
       style={styles.messageItem}
@@ -340,26 +415,48 @@ export default function EphemeralInboxScreen({ navigation }: any) {
   );
 
   const renderFriend = ({ item }: { item: Friend }) => (
-    <TouchableOpacity
-      style={styles.friendItem}
-      onPress={() => {
-        setRecordingFor({
-          id: item.friend_id,
-          name: item.nickname || item.friend?.friend_code || 'Friend',
-        });
-        setRecordingModalVisible(true);
-      }}
+    <Swipeable
+      renderRightActions={() => renderRightActions(item.friend_id)}
+      overshootRight={false}
     >
-      <View style={[styles.avatar, { backgroundColor: getAvatarColor(item.friend?.avatar_seed) }]}>
-        <Text style={styles.avatarText}>
-          {(item.nickname || item.friend?.friend_code || '?')[0].toUpperCase()}
-        </Text>
-      </View>
-      <Text style={styles.friendName}>
-        {item.nickname || item.friend?.friend_code || 'Friend'}
-      </Text>
-      <Ionicons name="mic-outline" size={24} color="#666" />
-    </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.friendCard}
+        onPress={() => {
+          setRecordingFor({
+            id: item.friend_id,
+            name: item.nickname || item.friend?.friend_code || 'Friend',
+          });
+          setRecordingModalVisible(true);
+        }}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.friendAvatar, { backgroundColor: getAvatarColor(item.friend?.avatar_seed) }]}>
+          <Text style={styles.friendAvatarText}>
+            {(item.nickname || item.friend?.friend_code || '?')[0].toUpperCase()}
+          </Text>
+        </View>
+        <View style={styles.friendInfo}>
+          <Text style={styles.friendName}>
+            {item.nickname || 'Anonymous'}
+          </Text>
+          <Text style={styles.friendCode}>
+            {item.friend?.friend_code || 'Unknown'}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={styles.micButton}
+          onPress={() => {
+            setRecordingFor({
+              id: item.friend_id,
+              name: item.nickname || item.friend?.friend_code || 'Friend',
+            });
+            setRecordingModalVisible(true);
+          }}
+        >
+          <Ionicons name="mic" size={24} color="#4ECDC4" />
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Swipeable>
   );
 
   if (loading) {
@@ -414,28 +511,67 @@ export default function EphemeralInboxScreen({ navigation }: any) {
 
           {/* Friends List */}
           <View style={styles.friendsSection}>
-            <Text style={styles.sectionTitle}>Send a message</Text>
-            <FlatList
-              data={friends}
-              renderItem={renderFriend}
-              keyExtractor={(item) => item.id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.friendsList}
-              ListEmptyComponent={
-                <Text style={styles.emptyText}>Add friends to send messages</Text>
-              }
-            />
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Send a message</Text>
+              <Text style={styles.friendsCount}>{friends.length} friends</Text>
+            </View>
+            {friends.length > 0 ? (
+              <FlatList
+                data={friends}
+                renderItem={renderFriend}
+                keyExtractor={(item) => item.id}
+                scrollEnabled={false}
+                ItemSeparatorComponent={() => <View style={styles.separator} />}
+              />
+            ) : (
+              <TouchableOpacity
+                style={styles.addFriendPrompt}
+                onPress={() => setAddFriendModalVisible(true)}
+              >
+                <Ionicons name="person-add-outline" size={32} color="#4ECDC4" />
+                <Text style={styles.addFriendText}>Add your first friend</Text>
+                <Text style={styles.addFriendSubtext}>Share friend codes to connect</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Empty State */}
-          {newMessageCount === 0 && !showMessages && (
-            <View style={styles.emptyState}>
-              <Ionicons name="mail-open-outline" size={60} color="#ddd" />
-              <Text style={styles.emptyTitle}>No new messages</Text>
-              <Text style={styles.emptySubtext}>
-                Messages will appear here when friends send them
-              </Text>
+          {newMessageCount === 0 && !showMessages && friends.length > 0 && (
+            <View style={styles.emptyStateWrapper}>
+              <View style={styles.emptyState}>
+                <Animated.View 
+                  style={[
+                    styles.emptyIconContainer,
+                    {
+                      transform: [
+                        {
+                          translateY: floatAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0, -10],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                >
+                  <View style={styles.ghostContainer}>
+                    <Ionicons name="chatbubble-outline" size={60} color="#E0E0E0" />
+                    <View style={styles.ghostEyes}>
+                      <View style={styles.ghostEye} />
+                      <View style={styles.ghostEye} />
+                    </View>
+                  </View>
+                  <View style={styles.vanishEffect}>
+                    <View style={styles.vanishDot} />
+                    <View style={[styles.vanishDot, styles.vanishDotMedium]} />
+                    <View style={[styles.vanishDot, styles.vanishDotSmall]} />
+                  </View>
+                </Animated.View>
+                <Text style={styles.emptyTitle}>No New Messages</Text>
+                <Text style={styles.emptySubtext}>
+                  New messages will appear here{'\n'}and will be deleted forever after you listen
+                </Text>
+              </View>
             </View>
           )}
           </View>
@@ -550,13 +686,15 @@ export default function EphemeralInboxScreen({ navigation }: any) {
   );
 }
 
+const { width } = Dimensions.get('window');
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: '#FAFAFA',
   },
   content: {
-    padding: 20,
+    flex: 1,
   },
   centerContent: {
     flex: 1,
@@ -564,11 +702,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   messageCounter: {
-    backgroundColor: '#000',
-    padding: 30,
+    backgroundColor: '#1A1A1A',
+    padding: 24,
     borderRadius: 20,
     alignItems: 'center',
-    marginBottom: 30,
+    marginHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
   },
   counterDot: {
     width: 12,
@@ -578,27 +723,31 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   counterText: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 28,
+    fontWeight: '700',
     color: '#fff',
-    marginBottom: 5,
+    marginBottom: 8,
   },
   tapToReveal: {
-    fontSize: 16,
-    color: '#ccc',
+    fontSize: 15,
+    color: '#999',
+    fontWeight: '500',
   },
   messagesSection: {
-    marginBottom: 30,
+    marginBottom: 20,
+    paddingHorizontal: 20,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 16,
+    paddingHorizontal: 20,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1A1A1A',
   },
   messagesList: {
     maxHeight: 300,
@@ -630,72 +779,187 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   friendsSection: {
-    marginBottom: 30,
+    flex: 1,
+    marginTop: 24,
   },
-  friendsList: {
-    paddingVertical: 15,
+  friendsCount: {
+    fontSize: 14,
+    color: '#999',
+    fontWeight: '500',
   },
-  friendItem: {
+  friendCard: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 20,
-    paddingVertical: 10,
+    backgroundColor: '#fff',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
   },
-  avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+  friendAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
+    marginRight: 16,
   },
-  avatarText: {
-    fontSize: 20,
+  friendAvatarText: {
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
   },
-  friendName: {
-    fontSize: 14,
-    color: '#333',
-    marginBottom: 5,
-  },
-  emptyState: {
+  friendInfo: {
     flex: 1,
+  },
+  friendName: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#1A1A1A',
+    marginBottom: 4,
+  },
+  friendCode: {
+    fontSize: 14,
+    color: '#666',
+  },
+  micButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F0FFFE',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  emptyTitle: {
-    fontSize: 20,
+  separator: {
+    height: 1,
+    backgroundColor: '#F0F0F0',
+    marginLeft: 92,
+  },
+  swipeActions: {
+    flexDirection: 'row',
+  },
+  swipeAction: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    height: '100%',
+  },
+  swipeActionText: {
+    color: '#fff',
+    fontSize: 12,
+    marginTop: 4,
     fontWeight: '600',
-    marginTop: 20,
-    color: '#333',
+  },
+  blockAction: {
+    backgroundColor: '#FF9500',
+  },
+  deleteAction: {
+    backgroundColor: '#FF3B30',
+  },
+  addFriendPrompt: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 32,
+    marginHorizontal: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  addFriendText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1A1A1A',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  addFriendSubtext: {
+    fontSize: 14,
+    color: '#666',
+  },
+  emptyStateWrapper: {
+    flex: 1,
+    marginTop: 60,
+    paddingHorizontal: 20,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  emptyIconContainer: {
+    position: 'relative',
+    marginBottom: 24,
+  },
+  ghostContainer: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ghostEyes: {
+    position: 'absolute',
+    flexDirection: 'row',
+    top: 20,
+    gap: 12,
+  },
+  ghostEye: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#CCCCCC',
+  },
+  vanishEffect: {
+    position: 'absolute',
+    bottom: -20,
+    right: -20,
+    flexDirection: 'row',
+    gap: 4,
+  },
+  vanishDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#E0E0E0',
+    opacity: 0.6,
+  },
+  vanishDotMedium: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    opacity: 0.4,
+  },
+  vanishDotSmall: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    opacity: 0.2,
+  },
+  emptyTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 16,
     color: '#666',
-    marginTop: 10,
     textAlign: 'center',
-  },
-  emptyText: {
-    color: '#999',
-    fontSize: 16,
-    textAlign: 'center',
-    padding: 20,
+    lineHeight: 22,
   },
   fab: {
     position: 'absolute',
-    bottom: 20,
+    bottom: 24,
     right: 20,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#000',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#1A1A1A',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   modalOverlay: {
     flex: 1,
@@ -764,11 +1028,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cancelButton: {
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#F5F5F5',
     marginRight: 10,
   },
   addButton: {
-    backgroundColor: '#000',
+    backgroundColor: '#1A1A1A',
     marginLeft: 10,
   },
   cancelButtonText: {

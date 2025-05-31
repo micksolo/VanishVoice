@@ -42,7 +42,7 @@ function TabNavigator() {
       <Tab.Screen 
         name="Messages" 
         component={EphemeralInboxScreen}
-        options={{ title: 'VanishVoice' }}
+        options={{ title: 'Chats' }}
       />
       <Tab.Screen 
         name="Profile" 
