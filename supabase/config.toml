@@ -1,0 +1,35 @@
+# Supabase Configuration
+
+[api]
+enabled = true
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+pooler_default_pool_size = 10
+pooler_max_client_conn = 100
+
+[storage.voice-messages]
+public = false
+file_size_limit = "10MB"
+allowed_mime_types = ["audio/mpeg", "audio/mp4", "audio/wav", "audio/webm"]
+
+[auth]
+enable_anonymous_sign_ins = true
+enable_signup = true
+
+[auth.external.apple]
+enabled = false
+
+[auth.external.google]
+enabled = false
+
+# Rate limiting
+[functions.expire-messages]
+verify_jwt = false
+cron_schedule = "*/5 * * * *" # Run every 5 minutes
+
+[functions.cleanup-storage]
+verify_jwt = false
+cron_schedule = "0 */6 * * *" # Run every 6 hours

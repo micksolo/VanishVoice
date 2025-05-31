@@ -31,7 +31,44 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
 .env*.local
 
 # typescript
 *.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+coverage/
+*.lcov
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Logs
+logs/
+*.log
+
+# OS files
+Thumbs.db
+
+# Supabase
+supabase/.temp/
+supabase/.branches/
+supabase/.env
+
+# Build artifacts
+build/
+ios/
+android/
+
+# MCP config (contains sensitive info)
+.mcp.json
