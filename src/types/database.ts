@@ -3,6 +3,8 @@ export interface User {
   anon_id: string;
   created_at: string;
   friend_code?: string; // For adding friends
+  username?: string; // Custom username
+  avatar_seed?: string; // For avatar colors
 }
 
 export interface Message {

@@ -1,11 +1,14 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { getOrCreateAnonymousUser, clearAnonymousUser, AnonymousUser } from '../utils/anonymousAuth';
+import { supabase } from '../services/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface AuthContextType {
   user: AnonymousUser | null;
   loading: boolean;
   signInAnonymously: () => Promise<void>;
   signOut: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -66,8 +69,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const refreshUser = async () => {
+    if (!user) return;
+    
+    try {
+      const { data: refreshedUser } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+      
+      if (refreshedUser) {
+        setUser(refreshedUser);
+        await AsyncStorage.setItem('vanishvoice_anon_user', JSON.stringify(refreshedUser));
+      }
+    } catch (error) {
+      console.error('Error refreshing user:', error);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, signInAnonymously, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signInAnonymously, signOut, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

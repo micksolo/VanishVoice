@@ -27,6 +27,9 @@
 - [x] Navigation renamed from "VanishVoice" to "Chats"
 - [x] Improved Profile screen with settings groups
 - [x] Privacy-first inbox (sender hidden until tap)
+- [x] Username editing with real-time validation
+- [x] Keyboard-aware modal for username input
+- [x] Bidirectional friend display (see all connections)
 
 ### Technical Implementation
 - [x] Supabase Edge Functions for message expiry
@@ -34,9 +37,11 @@
 - [x] Anonymous auth flow
 - [x] Real-time polling (WebSocket disabled)
 - [x] Git repository with comprehensive documentation
+- [x] Username availability checking
+- [x] Profile data refresh on username change
+- [x] Smart nickname handling for Random Connect users
 
 ## In Progress 🔄
-- [ ] Add username editing capability
 - [ ] Security audit preparation
 
 ## Pending Features 📋
@@ -58,6 +63,9 @@
 - Privacy-first design (sender hidden until revealed)
 - React Native + Expo for cross-platform development
 - Supabase for backend (database, storage, auth)
+- Unidirectional friendships (like Twitter follow model)
+- Usernames optional but encouraged for better UX
+- Friend code shown only when username not set
 
 ## Security Considerations
 - Created comprehensive security audit checklist
@@ -67,10 +75,10 @@
 - Planning professional security audit before launch
 
 ## Next Priority Tasks
-1. **Username editing** - Allow users to set custom usernames
-2. **Security audit** - Complete checklist items
-3. **Encryption** - Implement client-side voice encryption
-4. **Push notifications** - Critical for user engagement
+1. **Security audit** - Complete checklist items
+2. **Encryption** - Implement client-side voice encryption
+3. **Push notifications** - Critical for user engagement
+4. **Time-based expiry** - Messages expire even if unplayed
 
 ## Repository
 - GitHub: https://github.com/micksolo/WYD

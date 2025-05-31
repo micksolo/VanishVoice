@@ -32,17 +32,21 @@ interface Message {
   sender?: {
     friend_code: string;
     avatar_seed: string;
+    username?: string;
   };
 }
 
 interface Friend {
   id: string;
   friend_id: string;
+  user_id?: string;
   nickname?: string;
   friend?: {
     friend_code: string;
     avatar_seed: string;
+    username?: string;
   };
+  mutual?: boolean;
 }
 
 export default function EphemeralInboxScreen({ navigation }: any) {
@@ -129,7 +133,7 @@ export default function EphemeralInboxScreen({ navigation }: any) {
       // Fetch unplayed messages count
       const { count, data: messagesData } = await supabase
         .from('messages')
-        .select('*, sender:sender_id(friend_code, avatar_seed)', { count: 'exact' })
+        .select('*, sender:sender_id(friend_code, avatar_seed, username)', { count: 'exact' })
         .eq('recipient_id', user?.id)
         .eq('expired', false)
         .is('listened_at', null)
@@ -157,13 +161,40 @@ export default function EphemeralInboxScreen({ navigation }: any) {
       setNewMessageCount(newCount);
       setMessages(messagesData || []);
 
-      // Fetch friends for sending
-      const { data: friendsData } = await supabase
+      // Fetch friends for sending (both directions)
+      // Get people I added as friends
+      const { data: myFriends } = await supabase
         .from('friends')
-        .select('*, friend:friend_id(friend_code, avatar_seed)')
+        .select('*, friend:friend_id(friend_code, avatar_seed, username)')
         .eq('user_id', user?.id);
 
-      setFriends(friendsData || []);
+      // Get people who added me as a friend
+      const { data: friendsOfMe } = await supabase
+        .from('friends')
+        .select('*, friend:user_id(friend_code, avatar_seed, username)')
+        .eq('friend_id', user?.id);
+
+      // Combine and deduplicate
+      const allFriends = [...(myFriends || [])];
+      
+      // Transform friendsOfMe to match the same structure
+      if (friendsOfMe) {
+        friendsOfMe.forEach(fom => {
+          // Check if this person is already in our friends list
+          const alreadyFriend = allFriends.some(f => f.friend_id === fom.user_id);
+          if (!alreadyFriend) {
+            // Add them with a special flag or just add them
+            allFriends.push({
+              ...fom,
+              friend_id: fom.user_id,
+              friend: fom.friend,
+              mutual: false // They added us, but we haven't added them back
+            });
+          }
+        });
+      }
+
+      setFriends(allFriends);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -397,11 +428,11 @@ export default function EphemeralInboxScreen({ navigation }: any) {
     >
       <View style={[styles.avatar, { backgroundColor: getAvatarColor(item.sender?.avatar_seed) }]}>
         <Text style={styles.avatarText}>
-          {(item.sender?.friend_code || '?')[0].toUpperCase()}
+          {(item.sender?.username || item.sender?.friend_code || '?')[0].toUpperCase()}
         </Text>
       </View>
       <View style={styles.messageContent}>
-        <Text style={styles.senderName}>From: {item.sender?.friend_code || 'Unknown'}</Text>
+        <Text style={styles.senderName}>From: {item.sender?.username || item.sender?.friend_code || 'Unknown'}</Text>
         <Text style={styles.messageTime}>
           {new Date(item.created_at).toLocaleTimeString()}
         </Text>
@@ -424,7 +455,7 @@ export default function EphemeralInboxScreen({ navigation }: any) {
         onPress={() => {
           setRecordingFor({
             id: item.friend_id,
-            name: item.nickname || item.friend?.friend_code || 'Friend',
+            name: (item.nickname && !item.nickname.startsWith('Random:')) ? item.nickname : (item.friend?.username || item.friend?.friend_code || 'Friend'),
           });
           setRecordingModalVisible(true);
         }}
@@ -432,23 +463,25 @@ export default function EphemeralInboxScreen({ navigation }: any) {
       >
         <View style={[styles.friendAvatar, { backgroundColor: getAvatarColor(item.friend?.avatar_seed) }]}>
           <Text style={styles.friendAvatarText}>
-            {(item.nickname || item.friend?.friend_code || '?')[0].toUpperCase()}
+            {((item.nickname && !item.nickname.startsWith('Random:')) ? item.nickname : (item.friend?.username || item.friend?.friend_code || '?'))[0].toUpperCase()}
           </Text>
         </View>
         <View style={styles.friendInfo}>
           <Text style={styles.friendName}>
-            {item.nickname || 'Anonymous'}
+            {(item.nickname && !item.nickname.startsWith('Random:')) ? item.nickname : (item.friend?.username || 'Anonymous')}
           </Text>
-          <Text style={styles.friendCode}>
-            {item.friend?.friend_code || 'Unknown'}
-          </Text>
+          {!item.friend?.username && (
+            <Text style={styles.friendCode}>
+              {item.friend?.friend_code || 'Unknown'}
+            </Text>
+          )}
         </View>
         <TouchableOpacity
           style={styles.micButton}
           onPress={() => {
             setRecordingFor({
               id: item.friend_id,
-              name: item.nickname || item.friend?.friend_code || 'Friend',
+              name: (item.nickname && !item.nickname.startsWith('Random:')) ? item.nickname : (item.friend?.username || item.friend?.friend_code || 'Friend'),
             });
             setRecordingModalVisible(true);
           }}
@@ -522,6 +555,7 @@ export default function EphemeralInboxScreen({ navigation }: any) {
                 keyExtractor={(item) => item.id}
                 scrollEnabled={false}
                 ItemSeparatorComponent={() => <View style={styles.separator} />}
+                extraData={friends}
               />
             ) : (
               <TouchableOpacity

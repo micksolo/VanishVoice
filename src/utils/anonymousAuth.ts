@@ -7,6 +7,8 @@ export interface AnonymousUser {
   id: string;
   anon_id: string;
   friend_code: string;
+  username?: string;
+  avatar_seed?: string;
   created_at: string;
 }
 
