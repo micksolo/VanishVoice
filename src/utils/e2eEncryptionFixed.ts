@@ -42,6 +42,8 @@ export const encryptForRecipient = async (
   
   // Encrypt session key for recipient
   const sharedSecret = await deriveSharedSecret(senderPrivateKey, recipientPublicKey);
+  console.log('[ENCRYPT] Session key:', sessionKey);
+  console.log('[ENCRYPT] Shared secret:', sharedSecret.substring(0, 20) + '...');
   const encryptedKey = await encryptTextData(sessionKey, sharedSecret, iv);
   
   return { encryptedData, encryptedKey, iv };
@@ -57,9 +59,11 @@ export const decryptFromSender = async (
 ): Promise<string> => {
   // Derive shared secret
   const sharedSecret = await deriveSharedSecret(recipientPrivateKey, senderPublicKey);
+  console.log('[DECRYPT] Shared secret:', sharedSecret.substring(0, 20) + '...');
   
   // Decrypt session key
   const sessionKey = await decryptTextData(encryptedKey, sharedSecret, iv);
+  console.log('[DECRYPT] Session key:', sessionKey);
   
   // Decrypt audio data
   const audioDataBase64 = await decryptBinaryData(encryptedData, sessionKey, iv);

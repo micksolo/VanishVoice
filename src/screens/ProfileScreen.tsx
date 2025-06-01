@@ -20,6 +20,7 @@ import { useAuth } from '../contexts/AnonymousAuthContext';
 import * as Clipboard from 'expo-clipboard';
 import { supabase } from '../services/supabase';
 import { testE2EEncryption } from '../utils/testE2E';
+import { testE2EDetailed } from '../utils/testE2EDetailed';
 
 export default function ProfileScreen() {
   const { user, signOut, refreshUser } = useAuth();
@@ -283,6 +284,20 @@ export default function ProfileScreen() {
               <Ionicons name="bug-outline" size={20} color="#F59E0B" />
             </View>
             <Text style={styles.settingText}>Test E2E Encryption</Text>
+            <Ionicons name="chevron-forward" size={20} color="#999" />
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.settingItem}
+            onPress={async () => {
+              const result = await testE2EDetailed();
+              Alert.alert('Detailed E2E Test', result ? 'Working!' : 'Failed - check console');
+            }}
+          >
+            <View style={[styles.settingIcon, { backgroundColor: '#FEF3C7' }]}>
+              <Ionicons name="bug-outline" size={20} color="#F59E0B" />
+            </View>
+            <Text style={styles.settingText}>Detailed E2E Test</Text>
             <Ionicons name="chevron-forward" size={20} color="#999" />
           </TouchableOpacity>
         </View>
