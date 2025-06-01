@@ -2,6 +2,7 @@ import { supabase } from '../services/supabase';
 import * as FileSystem from 'expo-file-system';
 import { encryptForRecipient, decryptFromSender } from './e2eEncryption';
 import { Buffer } from 'buffer';
+import { debugE2EDecryption, debugAudioFile } from './debugE2E';
 
 export interface E2EEncryptedUploadResult {
   path: string;
@@ -119,6 +120,7 @@ export const downloadAndDecryptE2EAudio = async (
     const encryptedBase64 = await base64Promise;
     
     // Decrypt the audio using E2E decryption
+    console.log('Starting E2E decryption...');
     const decryptedBase64 = await decryptFromSender(
       encryptedBase64,
       encryptedKey,
@@ -127,11 +129,17 @@ export const downloadAndDecryptE2EAudio = async (
       senderPublicKey
     );
     
+    // Debug the decryption
+    await debugE2EDecryption(encryptedBase64, decryptedBase64, 'pending');
+    
     // Save decrypted audio to cache
     const localUri = `${FileSystem.cacheDirectory}voice_${Date.now()}.mp3`;
     await FileSystem.writeAsStringAsync(localUri, decryptedBase64, {
       encoding: FileSystem.EncodingType.Base64,
     });
+    
+    // Debug the saved file
+    await debugAudioFile(localUri);
     
     return localUri;
   } catch (error) {
