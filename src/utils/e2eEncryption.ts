@@ -54,7 +54,7 @@ export const encryptForRecipient = async (
   // In a real implementation, this would use RSA or ECDH
   // For now, we'll use a derived shared secret
   const sharedSecret = await deriveSharedSecret(senderPrivateKey, recipientPublicKey);
-  const encryptedKey = await encryptWithKey(sessionKey, sharedSecret, iv);
+  const encryptedKey = await encryptSessionKey(sessionKey, sharedSecret, iv);
   
   return {
     encryptedData,
@@ -75,7 +75,7 @@ export const decryptFromSender = async (
   const sharedSecret = await deriveSharedSecret(recipientPrivateKey, senderPublicKey);
   
   // Decrypt the session key
-  const sessionKey = await decryptWithKey(encryptedKey, sharedSecret, iv);
+  const sessionKey = await decryptSessionKey(encryptedKey, sharedSecret, iv);
   
   // Decrypt the actual data
   const decryptedData = await decryptWithKey(encryptedData, sessionKey, iv);
@@ -105,8 +105,8 @@ async function encryptWithKey(data: string, key: string, iv: string): Promise<st
     { encoding: Crypto.CryptoEncoding.BASE64 }
   );
   
-  // Convert to buffers
-  const dataBuffer = Buffer.from(data, 'utf8');
+  // Convert to buffers - data is already base64 for audio
+  const dataBuffer = Buffer.from(data, 'base64');
   const keyBuffer = Buffer.from(keyHash, 'base64');
   
   // XOR encryption (temporary - should use AES)
@@ -132,6 +132,46 @@ async function decryptWithKey(encryptedData: string, key: string, iv: string): P
   const keyBuffer = Buffer.from(keyHash, 'base64');
   
   // XOR decryption
+  const decrypted = Buffer.alloc(encryptedBuffer.length);
+  for (let i = 0; i < encryptedBuffer.length; i++) {
+    decrypted[i] = encryptedBuffer[i] ^ keyBuffer[i % keyBuffer.length];
+  }
+  
+  // Return as base64 for audio data
+  return decrypted.toString('base64');
+}
+
+// Helper: Encrypt session key (text data)
+async function encryptSessionKey(sessionKey: string, sharedSecret: string, iv: string): Promise<string> {
+  const keyHash = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    sharedSecret + iv,
+    { encoding: Crypto.CryptoEncoding.BASE64 }
+  );
+  
+  // Session key is text, not binary
+  const dataBuffer = Buffer.from(sessionKey, 'utf8');
+  const keyBuffer = Buffer.from(keyHash, 'base64');
+  
+  const encrypted = Buffer.alloc(dataBuffer.length);
+  for (let i = 0; i < dataBuffer.length; i++) {
+    encrypted[i] = dataBuffer[i] ^ keyBuffer[i % keyBuffer.length];
+  }
+  
+  return encrypted.toString('base64');
+}
+
+// Helper: Decrypt session key (text data)
+async function decryptSessionKey(encryptedKey: string, sharedSecret: string, iv: string): Promise<string> {
+  const keyHash = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    sharedSecret + iv,
+    { encoding: Crypto.CryptoEncoding.BASE64 }
+  );
+  
+  const encryptedBuffer = Buffer.from(encryptedKey, 'base64');
+  const keyBuffer = Buffer.from(keyHash, 'base64');
+  
   const decrypted = Buffer.alloc(encryptedBuffer.length);
   for (let i = 0; i < encryptedBuffer.length; i++) {
     decrypted[i] = encryptedBuffer[i] ^ keyBuffer[i % keyBuffer.length];
