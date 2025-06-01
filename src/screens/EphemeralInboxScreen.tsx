@@ -385,17 +385,29 @@ export default function EphemeralInboxScreen({ navigation }: any) {
 
   const deleteFriend = async (friendId: string) => {
     try {
-      const { error } = await supabase
+      // Delete both directions of the friendship
+      // 1. Delete where I added them
+      const { error: error1 } = await supabase
         .from('friends')
         .delete()
         .eq('user_id', user?.id)
         .eq('friend_id', friendId);
 
-      if (!error) {
+      // 2. Delete where they added me
+      const { error: error2 } = await supabase
+        .from('friends')
+        .delete()
+        .eq('user_id', friendId)
+        .eq('friend_id', user?.id);
+
+      if (!error1 || !error2) {
         Alert.alert('Success', 'Friend removed');
         fetchData();
+      } else {
+        throw new Error('Failed to remove friend relationship');
       }
     } catch (error) {
+      console.error('Error removing friend:', error);
       Alert.alert('Error', 'Failed to remove friend');
     }
   };
@@ -404,7 +416,7 @@ export default function EphemeralInboxScreen({ navigation }: any) {
     // For now, just remove them. In future, add blocked_users table
     Alert.alert(
       'Block User',
-      'Are you sure you want to block this user? They will be removed from your friends.',
+      'Are you sure you want to block this user? They will be removed from your friends and won\'t be able to send you messages.',
       [
         { text: 'Cancel', style: 'cancel' },
         { 
