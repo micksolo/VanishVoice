@@ -23,12 +23,15 @@ import { supabase } from '../services/supabase';
 import RecordingModal from '../components/RecordingModal';
 import { useFocusEffect } from '@react-navigation/native';
 import { downloadAudio } from '../utils/audioStorage';
+import { downloadAndDecryptAudio } from '../utils/encryptedAudioStorage';
 
 interface Message {
   id: string;
   sender_id: string;
   created_at: string;
   media_path: string;
+  encryption_iv?: string;
+  encrypted_key?: string;
   sender?: {
     friend_code: string;
     avatar_seed: string;
@@ -222,11 +225,23 @@ export default function EphemeralInboxScreen({ navigation }: any) {
         return;
       }
 
-      // Download the audio file
-      const localUri = await downloadAudio(message.media_path);
+      // Download and decrypt the audio file
+      let localUri: string | null;
+      
+      if (message.encryption_iv && message.encrypted_key) {
+        // Message is encrypted, decrypt it
+        localUri = await downloadAndDecryptAudio(
+          message.media_path,
+          message.encrypted_key, // In production, this should be decrypted with recipient's private key
+          message.encryption_iv
+        );
+      } else {
+        // Legacy unencrypted message
+        localUri = await downloadAudio(message.media_path);
+      }
       
       if (!localUri) {
-        throw new Error('Failed to download audio');
+        throw new Error('Failed to download/decrypt audio');
       }
 
       // Set audio mode to play through speaker
@@ -291,7 +306,7 @@ export default function EphemeralInboxScreen({ navigation }: any) {
     }
   };
 
-  const handleSendMessage = async (audioPath: string, duration: number) => {
+  const handleSendMessage = async (audioPath: string, duration: number, encryptionKey: string, iv: string) => {
     if (!recordingFor || !user) return;
 
     try {
@@ -303,8 +318,10 @@ export default function EphemeralInboxScreen({ navigation }: any) {
       const { error } = await supabase.from('messages').insert({
         sender_id: user.id,
         recipient_id: recordingFor.id,
-        media_path: audioPath, // Now using real audio path
+        media_path: audioPath,
         expiry_rule: expiryRule,
+        encryption_iv: iv,
+        encrypted_key: encryptionKey, // In production, this should be encrypted with recipient's public key
       });
 
       if (error) throw error;

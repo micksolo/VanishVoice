@@ -14,6 +14,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { uploadAudio } from '../utils/audioStorage';
+import { uploadEncryptedAudio } from '../utils/encryptedAudioStorage';
+import { supabase } from '../services/supabase';
+import { useAuth } from '../contexts/AnonymousAuthContext';
 
 interface RecordingModalProps {
   visible: boolean;
@@ -21,7 +24,7 @@ interface RecordingModalProps {
   recipientId: string;
   userId: string;
   onClose: () => void;
-  onSend: (audioPath: string, duration: number) => void;
+  onSend: (audioPath: string, duration: number, encryptionKey: string, iv: string) => void;
 }
 
 export default function RecordingModal({
@@ -32,6 +35,7 @@ export default function RecordingModal({
   onClose,
   onSend,
 }: RecordingModalProps) {
+  const { userKeys } = useAuth();
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -128,11 +132,22 @@ export default function RecordingModal({
       setRecording(null);
 
       if (uri) {
-        // Upload the audio file
-        const audioPath = await uploadAudio(uri, userId);
+        // Get recipient's public key
+        const { data: recipientData } = await supabase
+          .from('users')
+          .select('public_key')
+          .eq('id', recipientId)
+          .single();
         
-        if (audioPath) {
-          onSend(audioPath, duration);
+        // Upload encrypted audio
+        const encryptionResult = await uploadEncryptedAudio(
+          uri, 
+          userId,
+          recipientData?.public_key
+        );
+        
+        if (encryptionResult) {
+          onSend(encryptionResult.path, duration, encryptionResult.encryptionKey, encryptionResult.iv);
         } else {
           Alert.alert('Error', 'Failed to upload voice message. Please try again.');
         }
