@@ -75,22 +75,8 @@ async function simpleDecrypt(encryptedData: string, key: string, iv: string): Pr
   return simpleEncrypt(encryptedData, key, iv);
 }
 
-// Generate a key pair for asymmetric encryption (for key exchange)
-export const generateKeyPair = async (): Promise<{ publicKey: string; privateKey: string }> => {
-  // Generate a proper private key
-  const privateKeyBytes = await Crypto.getRandomBytesAsync(32);
-  const privateKey = Buffer.from(privateKeyBytes).toString('base64');
-  
-  // Generate a public key (deterministic from private key for now)
-  // In production, use proper RSA or ECDH key pairs
-  const publicKey = await Crypto.digestStringAsync(
-    Crypto.CryptoDigestAlgorithm.SHA256,
-    privateKey + '_public_key_derivation',
-    { encoding: Crypto.CryptoEncoding.BASE64 }
-  );
-  
-  return { publicKey, privateKey };
-};
+// Re-export from the fixed version
+export { generateKeyPair } from './e2eEncryptionFixed';
 
 // Derive shared secret from recipient's public key
 export const deriveSharedSecret = async (

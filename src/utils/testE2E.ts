@@ -1,4 +1,5 @@
-import { encryptForRecipient, decryptFromSender, generateUserKeyPair } from './e2eEncryption';
+import { encryptForRecipient as encryptOld, decryptFromSender as decryptOld, generateUserKeyPair as generateOld } from './e2eEncryption';
+import { encryptForRecipient, decryptFromSender, generateUserKeyPair } from './e2eEncryptionFixed';
 
 export const testE2EEncryption = async () => {
   try {
@@ -35,7 +36,18 @@ export const testE2EEncryption = async () => {
     );
     
     console.log('Decrypted data:', decrypted);
+    console.log('Decrypted length:', decrypted.length);
+    console.log('Original length:', testAudioBase64.length);
     console.log('Match:', testAudioBase64 === decrypted);
+    
+    // Try to decode to see what we got
+    try {
+      const decoded = Buffer.from(decrypted, 'base64').toString('utf8');
+      console.log('Decoded content:', decoded);
+    } catch (e) {
+      console.log('Could not decode as UTF-8');
+    }
+    
     console.log('============================');
     
     return testAudioBase64 === decrypted;

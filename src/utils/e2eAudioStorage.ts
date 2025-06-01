@@ -1,6 +1,6 @@
 import { supabase } from '../services/supabase';
 import * as FileSystem from 'expo-file-system';
-import { encryptForRecipient, decryptFromSender } from './e2eEncryption';
+import { encryptForRecipient, decryptFromSender } from './e2eEncryptionFixed';
 import { Buffer } from 'buffer';
 import { debugE2EDecryption, debugAudioFile } from './debugE2E';
 
