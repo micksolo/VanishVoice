@@ -163,9 +163,12 @@ async function decryptTextData(encryptedBase64: string, keyBase64: string, ivBas
   return decrypted.toString('utf8');
 }
 
-// Derive shared secret
+// Derive shared secret - must be commutative
 async function deriveSharedSecret(privateKey: string, publicKey: string): Promise<string> {
-  const combined = privateKey + publicKey;
+  // Sort the keys to ensure same result regardless of order
+  const keys = [privateKey, publicKey].sort();
+  const combined = keys[0] + '|' + keys[1];
+  
   const secret = await Crypto.digestStringAsync(
     Crypto.CryptoDigestAlgorithm.SHA256,
     combined,
