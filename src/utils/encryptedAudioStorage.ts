@@ -1,6 +1,7 @@
 import { supabase } from '../services/supabase';
 import * as FileSystem from 'expo-file-system';
-import { encryptAudio, decryptAudio, generateEncryptionKey, deriveSharedSecret } from './encryption';\nimport { encryptForRecipient, decryptFromSender } from './e2eEncryption';
+import { encryptAudio, decryptAudio, generateEncryptionKey, deriveSharedSecret } from './encryption';
+import { encryptForRecipient, decryptFromSender } from './e2eEncryption';
 import { Buffer } from 'buffer';
 
 export interface EncryptedUploadResult {
