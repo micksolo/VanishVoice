@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { uploadAudio } from '../utils/audioStorage';
 import { uploadEncryptedAudio } from '../utils/encryptedAudioStorage';
+import { uploadE2EEncryptedAudio } from '../utils/e2eAudioStorage';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AnonymousAuthContext';
 
@@ -24,7 +25,7 @@ interface RecordingModalProps {
   recipientId: string;
   userId: string;
   onClose: () => void;
-  onSend: (audioPath: string, duration: number, encryptionKey: string, iv: string) => void;
+  onSend: (audioPath: string, duration: number, encryptionKey: string, iv: string, senderPublicKey?: string) => void;
 }
 
 export default function RecordingModal({
@@ -131,26 +132,29 @@ export default function RecordingModal({
       const uri = recording.getURI();
       setRecording(null);
 
-      if (uri) {
-        // Get recipient's public key
-        const { data: recipientData } = await supabase
-          .from('users')
-          .select('public_key')
-          .eq('id', recipientId)
-          .single();
-        
-        // Upload encrypted audio
-        const encryptionResult = await uploadEncryptedAudio(
+      if (uri && userKeys) {
+        // Upload with end-to-end encryption
+        const encryptionResult = await uploadE2EEncryptedAudio(
           uri, 
           userId,
-          recipientData?.public_key
+          recipientId,
+          userKeys
         );
         
         if (encryptionResult) {
-          onSend(encryptionResult.path, duration, encryptionResult.encryptionKey, encryptionResult.iv);
+          // Pass the sender's public key along with other encryption data
+          onSend(
+            encryptionResult.path, 
+            duration, 
+            encryptionResult.encryptedKey, 
+            encryptionResult.iv,
+            encryptionResult.senderPublicKey
+          );
         } else {
           Alert.alert('Error', 'Failed to upload voice message. Please try again.');
         }
+      } else if (!userKeys) {
+        Alert.alert('Error', 'Encryption keys not found. Please restart the app.');
       }
     } catch (error) {
       console.error('Failed to stop recording', error);

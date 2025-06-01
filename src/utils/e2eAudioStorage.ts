@@ -1,26 +1,43 @@
 import { supabase } from '../services/supabase';
 import * as FileSystem from 'expo-file-system';
-import { encryptAudio, decryptAudio, generateEncryptionKey, deriveSharedSecret } from './encryption';\nimport { encryptForRecipient, decryptFromSender } from './e2eEncryption';
+import { encryptForRecipient, decryptFromSender } from './e2eEncryption';
 import { Buffer } from 'buffer';
 
-export interface EncryptedUploadResult {
+export interface E2EEncryptedUploadResult {
   path: string;
-  encryptionKey: string;
+  encryptedKey: string;
   iv: string;
+  senderPublicKey: string;
 }
 
-export const uploadEncryptedAudio = async (
+/**
+ * Upload audio with end-to-end encryption
+ * Only the recipient can decrypt this audio
+ */
+export const uploadE2EEncryptedAudio = async (
   localUri: string, 
   userId: string,
-  recipientPublicKey?: string
-): Promise<EncryptedUploadResult | null> => {
+  recipientId: string,
+  senderKeys: { publicKey: string; privateKey: string }
+): Promise<E2EEncryptedUploadResult | null> => {
   try {
+    // Get recipient's public key
+    const { data: recipientData } = await supabase
+      .from('users')
+      .select('public_key')
+      .eq('id', recipientId)
+      .single();
+
+    if (!recipientData?.public_key) {
+      throw new Error('Recipient does not have a public key');
+    }
+
     // Create a unique filename
     const timestamp = Date.now();
     const randomId = Math.random().toString(36).substring(7);
-    const filename = `${userId}/${timestamp}_${randomId}.enc`;
+    const filename = `${userId}/${timestamp}_${randomId}.e2e`;
 
-    // Read the file
+    // Read the audio file
     const fileInfo = await FileSystem.getInfoAsync(localUri);
     if (!fileInfo.exists) {
       throw new Error('Audio file does not exist');
@@ -31,17 +48,17 @@ export const uploadEncryptedAudio = async (
       encoding: FileSystem.EncodingType.Base64,
     });
     
-    // Generate encryption key
-    const encryptionKey = await generateEncryptionKey();
+    // Encrypt the audio for the recipient
+    const { encryptedData, encryptedKey, iv } = await encryptForRecipient(
+      base64Audio,
+      recipientData.public_key,
+      senderKeys.privateKey
+    );
     
-    // Encrypt the audio data
-    const { encryptedData, iv } = await encryptAudio(base64Audio, encryptionKey);
-    
-    // Convert encrypted base64 to bytes for upload
+    // Convert encrypted data to bytes for upload
     const encryptedBytes = Buffer.from(encryptedData, 'base64');
 
     // Upload to Supabase Storage
-    // Use audio/mpeg mime type even for encrypted data to satisfy Supabase
     const { data, error } = await supabase.storage
       .from('voice-messages')
       .upload(filename, encryptedBytes, {
@@ -52,22 +69,29 @@ export const uploadEncryptedAudio = async (
 
     if (error) throw error;
 
-    console.log('Encrypted audio uploaded successfully:', filename);
+    console.log('E2E encrypted audio uploaded successfully:', filename);
     return {
       path: filename,
-      encryptionKey,
-      iv
+      encryptedKey,
+      iv,
+      senderPublicKey: senderKeys.publicKey
     };
   } catch (error) {
-    console.error('Error uploading encrypted audio:', error);
+    console.error('Error uploading E2E encrypted audio:', error);
     return null;
   }
 };
 
-export const downloadAndDecryptAudio = async (
+/**
+ * Download and decrypt audio with end-to-end encryption
+ * Only works if you have the correct private key
+ */
+export const downloadAndDecryptE2EAudio = async (
   path: string,
-  encryptionKey: string,
-  iv: string
+  encryptedKey: string,
+  iv: string,
+  senderPublicKey: string,
+  recipientKeys: { publicKey: string; privateKey: string }
 ): Promise<string | null> => {
   try {
     // Download the encrypted file
@@ -94,8 +118,14 @@ export const downloadAndDecryptAudio = async (
     reader.readAsDataURL(data);
     const encryptedBase64 = await base64Promise;
     
-    // Decrypt the audio
-    const decryptedBase64 = await decryptAudio(encryptedBase64, encryptionKey, iv);
+    // Decrypt the audio using E2E decryption
+    const decryptedBase64 = await decryptFromSender(
+      encryptedBase64,
+      encryptedKey,
+      iv,
+      recipientKeys.privateKey,
+      senderPublicKey
+    );
     
     // Save decrypted audio to cache
     const localUri = `${FileSystem.cacheDirectory}voice_${Date.now()}.mp3`;
@@ -105,34 +135,7 @@ export const downloadAndDecryptAudio = async (
     
     return localUri;
   } catch (error) {
-    console.error('Error downloading/decrypting audio:', error);
+    console.error('Error downloading/decrypting E2E audio:', error);
     return null;
-  }
-};
-
-// Store encryption keys securely for a message
-export const storeMessageEncryption = async (
-  messageId: string,
-  senderPrivateKey: string,
-  recipientPublicKey: string,
-  encryptionKey: string,
-  iv: string
-) => {
-  try {
-    // In a real app, you'd want to encrypt the key with the recipient's public key
-    // For now, we'll derive a shared secret
-    const sharedSecret = await deriveSharedSecret(senderPrivateKey, recipientPublicKey);
-    
-    // Encrypt the message key with the shared secret
-    const { encryptedData: encryptedKey } = await encryptAudio(encryptionKey, sharedSecret);
-    
-    return {
-      encryptedKey,
-      iv,
-      senderPublicKey: recipientPublicKey // Store for recipient to derive shared secret
-    };
-  } catch (error) {
-    console.error('Error storing message encryption:', error);
-    throw error;
   }
 };

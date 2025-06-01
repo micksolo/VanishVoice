@@ -24,6 +24,7 @@ import RecordingModal from '../components/RecordingModal';
 import { useFocusEffect } from '@react-navigation/native';
 import { downloadAudio } from '../utils/audioStorage';
 import { downloadAndDecryptAudio } from '../utils/encryptedAudioStorage';
+import { downloadAndDecryptE2EAudio } from '../utils/e2eAudioStorage';
 
 interface Message {
   id: string;
@@ -32,6 +33,7 @@ interface Message {
   media_path: string;
   encryption_iv?: string;
   encrypted_key?: string;
+  sender_public_key?: string;
   sender?: {
     friend_code: string;
     avatar_seed: string;
@@ -53,7 +55,7 @@ interface Friend {
 }
 
 export default function EphemeralInboxScreen({ navigation }: any) {
-  const { user } = useAuth();
+  const { user, userKeys } = useAuth();
   const [newMessageCount, setNewMessageCount] = useState(0);
   const [messages, setMessages] = useState<Message[]>([]);
   const [friends, setFriends] = useState<Friend[]>([]);
@@ -228,11 +230,20 @@ export default function EphemeralInboxScreen({ navigation }: any) {
       // Download and decrypt the audio file
       let localUri: string | null;
       
-      if (message.encryption_iv && message.encrypted_key) {
-        // Message is encrypted, decrypt it
+      if (message.sender_public_key && message.encryption_iv && message.encrypted_key && userKeys) {
+        // E2E encrypted message
+        localUri = await downloadAndDecryptE2EAudio(
+          message.media_path,
+          message.encrypted_key,
+          message.encryption_iv,
+          message.sender_public_key,
+          userKeys
+        );
+      } else if (message.encryption_iv && message.encrypted_key) {
+        // Old style encrypted message
         localUri = await downloadAndDecryptAudio(
           message.media_path,
-          message.encrypted_key, // In production, this should be decrypted with recipient's private key
+          message.encrypted_key,
           message.encryption_iv
         );
       } else {
@@ -306,7 +317,7 @@ export default function EphemeralInboxScreen({ navigation }: any) {
     }
   };
 
-  const handleSendMessage = async (audioPath: string, duration: number, encryptionKey: string, iv: string) => {
+  const handleSendMessage = async (audioPath: string, duration: number, encryptionKey: string, iv: string, senderPublicKey?: string) => {
     if (!recordingFor || !user) return;
 
     try {
@@ -321,7 +332,8 @@ export default function EphemeralInboxScreen({ navigation }: any) {
         media_path: audioPath,
         expiry_rule: expiryRule,
         encryption_iv: iv,
-        encrypted_key: encryptionKey, // In production, this should be encrypted with recipient's public key
+        encrypted_key: encryptionKey,
+        sender_public_key: senderPublicKey || null,
       });
 
       if (error) throw error;

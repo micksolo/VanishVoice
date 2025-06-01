@@ -3,6 +3,7 @@ import { getOrCreateAnonymousUser, clearAnonymousUser, AnonymousUser } from '../
 import { supabase } from '../services/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { generateKeyPair } from '../utils/encryption';
+import { ensureUserHasKeys } from '../utils/keyMigration';
 
 interface AuthContextType {
   user: AnonymousUser | null;
@@ -48,27 +49,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   
   const loadOrGenerateKeys = async (userId: string) => {
     try {
-      // Try to load existing keys
-      const storedKeys = await AsyncStorage.getItem(`vanishvoice_keys_${userId}`);
-      
-      if (storedKeys) {
-        setUserKeys(JSON.parse(storedKeys));
-      } else {
-        // Generate new keys
-        const keys = await generateKeyPair();
+      // Use the key migration utility to ensure user has keys
+      const keys = await ensureUserHasKeys(userId);
+      if (keys) {
         setUserKeys(keys);
-        
-        // Store keys locally
-        await AsyncStorage.setItem(`vanishvoice_keys_${userId}`, JSON.stringify(keys));
-        
-        // Update user's public key in database
-        await supabase
-          .from('users')
-          .update({ 
-            public_key: keys.publicKey,
-            key_generated_at: new Date().toISOString()
-          })
-          .eq('id', userId);
+        console.log('User keys loaded/generated successfully');
+      } else {
+        console.error('Failed to load or generate user keys');
       }
     } catch (error) {
       console.error('Error managing encryption keys:', error);
