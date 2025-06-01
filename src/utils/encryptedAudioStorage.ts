@@ -41,10 +41,11 @@ export const uploadEncryptedAudio = async (
     const encryptedBytes = Buffer.from(encryptedData, 'base64');
 
     // Upload to Supabase Storage
+    // Use audio/mpeg mime type even for encrypted data to satisfy Supabase
     const { data, error } = await supabase.storage
       .from('voice-messages')
       .upload(filename, encryptedBytes, {
-        contentType: 'application/octet-stream', // Binary data
+        contentType: 'audio/mpeg', // Use audio mime type for compatibility
         cacheControl: '3600',
         upsert: false,
       });
