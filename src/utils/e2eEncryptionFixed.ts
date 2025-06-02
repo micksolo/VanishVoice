@@ -40,11 +40,17 @@ export const encryptForRecipient = async (
   // Encrypt audio data
   const encryptedData = await encryptBinaryData(audioDataBase64, sessionKey, iv);
   
-  // Encrypt session key for recipient
-  const sharedSecret = await deriveSharedSecret(senderPrivateKey, recipientPublicKey);
+  // For now, just use recipient's public key as the encryption key
+  // In real implementation, this would use proper asymmetric encryption
+  const keyForEncryption = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    recipientPublicKey + '_encryption',
+    { encoding: Crypto.CryptoEncoding.BASE64 }
+  );
+  
   console.log('[ENCRYPT] Session key:', sessionKey);
-  console.log('[ENCRYPT] Shared secret:', sharedSecret.substring(0, 20) + '...');
-  const encryptedKey = await encryptTextData(sessionKey, sharedSecret, iv);
+  console.log('[ENCRYPT] Key for encryption:', keyForEncryption.substring(0, 20) + '...');
+  const encryptedKey = await encryptTextData(sessionKey, keyForEncryption, iv);
   
   return { encryptedData, encryptedKey, iv };
 };
@@ -57,12 +63,24 @@ export const decryptFromSender = async (
   recipientPrivateKey: string,
   senderPublicKey: string
 ): Promise<string> => {
-  // Derive shared secret
-  const sharedSecret = await deriveSharedSecret(recipientPrivateKey, senderPublicKey);
-  console.log('[DECRYPT] Shared secret:', sharedSecret.substring(0, 20) + '...');
+  // For now, use recipient's public key (derived from private key) as decryption key
+  // In real implementation, this would use proper asymmetric decryption
+  const recipientPublicKey = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    recipientPrivateKey + '_public_key_derivation',
+    { encoding: Crypto.CryptoEncoding.BASE64 }
+  );
+  
+  const keyForDecryption = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    recipientPublicKey + '_encryption',
+    { encoding: Crypto.CryptoEncoding.BASE64 }
+  );
+  
+  console.log('[DECRYPT] Key for decryption:', keyForDecryption.substring(0, 20) + '...');
   
   // Decrypt session key
-  const sessionKey = await decryptTextData(encryptedKey, sharedSecret, iv);
+  const sessionKey = await decryptTextData(encryptedKey, keyForDecryption, iv);
   console.log('[DECRYPT] Session key:', sessionKey);
   
   // Decrypt audio data
@@ -163,17 +181,40 @@ async function decryptTextData(encryptedBase64: string, keyBase64: string, ivBas
   return decrypted.toString('utf8');
 }
 
-// Derive shared secret - must be commutative
+// Derive shared secret - simulate ECDH behavior
 async function deriveSharedSecret(privateKey: string, publicKey: string): Promise<string> {
-  // Sort the keys to ensure same result regardless of order
-  const keys = [privateKey, publicKey].sort();
-  const combined = keys[0] + '|' + keys[1];
+  // In real ECDH: privateKey * publicKey = sharedSecret
+  // We'll simulate this with hashing
   
+  // First hash to normalize lengths
+  const privateHash = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    privateKey,
+    { encoding: Crypto.CryptoEncoding.HEX }
+  );
+  
+  const publicHash = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    publicKey,
+    { encoding: Crypto.CryptoEncoding.HEX }
+  );
+  
+  // XOR the hashes to simulate multiplication
+  const privateBytes = Buffer.from(privateHash, 'hex');
+  const publicBytes = Buffer.from(publicHash, 'hex');
+  
+  const combined = Buffer.alloc(32);
+  for (let i = 0; i < 32; i++) {
+    combined[i] = privateBytes[i] ^ publicBytes[i];
+  }
+  
+  // Final hash for the shared secret
   const secret = await Crypto.digestStringAsync(
     Crypto.CryptoDigestAlgorithm.SHA256,
-    combined,
+    combined.toString('hex'),
     { encoding: Crypto.CryptoEncoding.BASE64 }
   );
+  
   return secret;
 }
 
