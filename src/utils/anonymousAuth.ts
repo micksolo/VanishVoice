@@ -14,39 +14,64 @@ export interface AnonymousUser {
 
 export const getOrCreateAnonymousUser = async (): Promise<AnonymousUser | null> => {
   try {
+    console.log('Getting or creating anonymous user...');
+    console.log('Supabase configured:', !!supabase);
+    
     // Check if we have a stored anonymous user
     const storedUser = await AsyncStorage.getItem(ANON_USER_KEY);
     
     if (storedUser) {
       const parsedUser = JSON.parse(storedUser);
       
-      // Verify the user still exists in the database
-      const { data: existingUser, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', parsedUser.id)
-        .maybeSingle();
+      // Check if we have an active session
+      const { data: { session } } = await supabase.auth.getSession();
       
-      if (existingUser && !error) {
-        return existingUser;
+      if (session && session.user.id === parsedUser.id) {
+        // Session is valid, return the stored user
+        return parsedUser;
+      }
+      
+      // Try to restore the session
+      const { data: authData, error: authError } = await supabase.auth.signInAnonymously();
+      
+      if (authError || !authData.user) {
+        console.log('Could not restore session, creating new user');
+        // Continue to create new user below
+      } else {
+        // Verify the user still exists in the database
+        const { data: existingUser, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', authData.user.id)
+          .maybeSingle();
+        
+        if (existingUser && !error) {
+          await AsyncStorage.setItem(ANON_USER_KEY, JSON.stringify(existingUser));
+          return existingUser;
+        }
       }
     }
     
-    // Create a new anonymous user directly in the database
-    const anonId = `anon_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-    const userId = generateUUID();
+    // Sign in anonymously using Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signInAnonymously();
     
+    if (authError || !authData.user) {
+      console.error('Error signing in anonymously:', authError);
+      return null;
+    }
+    
+    // Create or get the user profile
     const { data: newUser, error: createError } = await supabase
       .from('users')
-      .insert({
-        id: userId,
-        anon_id: anonId
+      .upsert({
+        id: authData.user.id,
+        anon_id: `anon_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`
       })
       .select()
       .single();
     
     if (createError) {
-      console.error('Error creating anonymous user:', createError);
+      console.error('Error creating user profile:', createError);
       return null;
     }
     

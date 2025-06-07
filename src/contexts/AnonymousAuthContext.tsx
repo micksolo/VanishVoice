@@ -4,6 +4,7 @@ import { supabase } from '../services/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { generateKeyPair } from '../utils/encryption';
 import { ensureUserHasKeys } from '../utils/keyMigration';
+import pushNotifications from '../services/pushNotifications';
 
 interface AuthContextType {
   user: AnonymousUser | null;
@@ -36,10 +37,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const checkUser = async () => {
     try {
       const anonymousUser = await getOrCreateAnonymousUser();
+      
+      if (!anonymousUser) {
+        console.error('Failed to create anonymous user');
+        return;
+      }
+      
       setUser(anonymousUser);
       
       // Load or generate encryption keys
       await loadOrGenerateKeys(anonymousUser.id);
+      
+      // Register for push notifications
+      await pushNotifications.registerForPushNotifications(anonymousUser.id);
     } catch (error) {
       console.error('Error checking user:', error);
     } finally {

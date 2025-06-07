@@ -14,6 +14,7 @@ import {
   Animated,
   AppState,
   Dimensions,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -25,6 +26,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { downloadAudio } from '../utils/audioStorage';
 import { downloadAndDecryptAudio } from '../utils/encryptedAudioStorage';
 import { downloadAndDecryptE2EAudio } from '../utils/e2eAudioStorage';
+import { downloadAndDecryptAudioCompat } from '../utils/secureE2EAudioStorage';
+import { downloadAndDecryptAudioUniversal } from '../utils/audioDecryptionCompat';
 
 interface Message {
   id: string;
@@ -34,6 +37,8 @@ interface Message {
   encryption_iv?: string;
   encrypted_key?: string;
   sender_public_key?: string;
+  auth_tag?: string;
+  encryption_version?: number;
   sender?: {
     friend_code: string;
     avatar_seed: string;
@@ -230,24 +235,18 @@ export default function EphemeralInboxScreen({ navigation }: any) {
       // Download and decrypt the audio file
       let localUri: string | null;
       
-      if (message.sender_public_key && message.encryption_iv && message.encrypted_key && userKeys) {
-        // E2E encrypted message
-        localUri = await downloadAndDecryptE2EAudio(
-          message.media_path,
-          message.encrypted_key,
-          message.encryption_iv,
-          message.sender_public_key,
-          userKeys
-        );
-      } else if (message.encryption_iv && message.encrypted_key) {
-        // Old style encrypted message
-        localUri = await downloadAndDecryptAudio(
-          message.media_path,
-          message.encrypted_key,
-          message.encryption_iv
-        );
+      // Use universal decryption that handles all versions
+      if (userKeys && message.encryption_iv && message.encrypted_key) {
+        console.log('[EphemeralInbox] Playing message with:');
+        console.log('- Encryption version:', message.encryption_version);
+        console.log('- Encrypted key:', message.encrypted_key?.substring(0, 10) + '...');
+        console.log('- IV:', message.encryption_iv?.substring(0, 10) + '...');
+        console.log('- Sender public key:', message.sender_public_key?.substring(0, 10) + '...');
+        
+        localUri = await downloadAndDecryptAudioUniversal(message, userKeys);
       } else {
-        // Legacy unencrypted message
+        // Legacy unencrypted message (shouldn't happen)
+        console.warn('Unencrypted message detected - this should not happen');
         localUri = await downloadAudio(message.media_path);
       }
       
@@ -317,7 +316,7 @@ export default function EphemeralInboxScreen({ navigation }: any) {
     }
   };
 
-  const handleSendMessage = async (audioPath: string, duration: number, encryptionKey: string, iv: string, senderPublicKey?: string) => {
+  const handleSendMessage = async (audioPath: string, duration: number, encryptionKey: string, iv: string, senderPublicKey?: string, authTag?: string) => {
     if (!recordingFor || !user) return;
 
     try {
@@ -326,7 +325,21 @@ export default function EphemeralInboxScreen({ navigation }: any) {
         play_count: 1,
       };
 
-      const { error } = await supabase.from('messages').insert({
+      // Determine encryption version based on what was used
+      let encryptionVersion = 1; // Default legacy
+      if (authTag) {
+        encryptionVersion = 2; // Secure encryption with auth tag
+      } else if (userKeys?.secretKey && !authTag) {
+        encryptionVersion = 3; // NaCl (no auth tag, uses built-in MAC)
+      }
+      
+      console.log('[EphemeralInbox] Saving message with:');
+      console.log('- Encryption version:', encryptionVersion);
+      console.log('- Encrypted key (ephemeral):', encryptionKey?.substring(0, 10) + '...');
+      console.log('- IV (nonce):', iv?.substring(0, 10) + '...');
+      console.log('- Sender public key:', senderPublicKey?.substring(0, 10) + '...');
+      
+      const { data: messageData, error } = await supabase.from('messages').insert({
         sender_id: user.id,
         recipient_id: recordingFor.id,
         media_path: audioPath,
@@ -334,9 +347,48 @@ export default function EphemeralInboxScreen({ navigation }: any) {
         encryption_iv: iv,
         encrypted_key: encryptionKey,
         sender_public_key: senderPublicKey || null,
-      });
+        auth_tag: authTag || null,
+        encryption_version: encryptionVersion,
+      }).select().single();
 
       if (error) throw error;
+
+      // Send push notification (skip if in Expo Go SDK 53+)
+      const isExpoGo = Platform.OS === 'ios' || Platform.OS === 'android'; // Simple check for mobile
+      const skipPushNotifications = __DEV__ && isExpoGo; // Skip in development mode on mobile
+      
+      if (!skipPushNotifications) {
+        try {
+          console.log('Sending push notification to:', recordingFor.id);
+          console.log('Request payload:', {
+            recipientId: recordingFor.id,
+            senderId: user.id,
+            senderName: user.username || user.friend_code,
+            messageId: messageData.id,
+          });
+          
+          const { data: notifData, error: notifError } = await supabase.functions.invoke('send-push-notification', {
+            body: {
+              recipientId: recordingFor.id,
+              senderId: user.id,
+              senderName: user.username || user.friend_code,
+              messageId: messageData.id,
+            },
+          });
+          
+          if (notifError) {
+            console.error('Failed to send push notification:', notifError);
+            console.error('Error details:', JSON.stringify(notifError, null, 2));
+          } else {
+            console.log('Push notification sent successfully:', notifData);
+          }
+        } catch (notifError: any) {
+          console.error('Error sending push notification:', notifError);
+          console.error('Caught error details:', notifError.message, notifError.status);
+        }
+      } else {
+        console.log('Skipping push notifications in Expo Go development mode');
+      }
 
       Alert.alert('Sent!', `Voice message sent to ${recordingFor.name}`);
       setRecordingModalVisible(false);

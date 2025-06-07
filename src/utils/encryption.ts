@@ -75,8 +75,8 @@ async function simpleDecrypt(encryptedData: string, key: string, iv: string): Pr
   return simpleEncrypt(encryptedData, key, iv);
 }
 
-// Re-export from the fixed version
-export { generateKeyPair } from './e2eEncryptionFixed';
+// Re-export from the fixed version with correct name
+export { generateUserKeyPair as generateKeyPair } from './e2eEncryptionFixed';
 
 // Derive shared secret from recipient's public key
 export const deriveSharedSecret = async (

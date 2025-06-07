@@ -16,6 +16,8 @@ import { Audio } from 'expo-av';
 import { uploadAudio } from '../utils/audioStorage';
 import { uploadEncryptedAudio } from '../utils/encryptedAudioStorage';
 import { uploadE2EEncryptedAudio } from '../utils/e2eAudioStorage';
+import { uploadSecureE2EAudio } from '../utils/secureE2EAudioStorage';
+import { uploadNaClEncryptedAudio } from '../utils/nacl/naclAudioStorage';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AnonymousAuthContext';
 
@@ -25,7 +27,7 @@ interface RecordingModalProps {
   recipientId: string;
   userId: string;
   onClose: () => void;
-  onSend: (audioPath: string, duration: number, encryptionKey: string, iv: string, senderPublicKey?: string) => void;
+  onSend: (audioPath: string, duration: number, encryptionKey: string, iv: string, senderPublicKey?: string, authTag?: string) => void;
 }
 
 export default function RecordingModal({
@@ -133,25 +135,88 @@ export default function RecordingModal({
       setRecording(null);
 
       if (uri && userKeys) {
-        // Upload with end-to-end encryption
-        const encryptionResult = await uploadE2EEncryptedAudio(
-          uri, 
-          userId,
-          recipientId,
-          userKeys
-        );
+        // Get recipient's public key
+        const { data: recipientData } = await supabase
+          .from('users')
+          .select('public_key, encryption_version')
+          .eq('id', recipientId)
+          .single();
         
-        if (encryptionResult) {
-          // Pass the sender's public key along with other encryption data
-          onSend(
-            encryptionResult.path, 
-            duration, 
-            encryptionResult.encryptedKey, 
-            encryptionResult.iv,
-            encryptionResult.senderPublicKey
+        if (!recipientData?.public_key) {
+          Alert.alert('Error', 'Recipient does not have encryption keys.');
+          return;
+        }
+        
+        // Check encryption versions
+        const senderVersion = userKeys.secretKey ? 3 : 2; // v3 if has secretKey (NaCl)
+        const recipientVersion = recipientData.encryption_version || 1;
+        
+        // Use NaCl if both users support it
+        if (senderVersion === 3 && recipientVersion === 3 && userKeys.secretKey) {
+          console.log('Using NaCl encryption');
+          const naclResult = await uploadNaClEncryptedAudio(
+            uri,
+            recipientData.public_key,
+            {
+              publicKey: userKeys.publicKey,
+              secretKey: userKeys.secretKey
+            }
           );
+          
+          if (naclResult) {
+            onSend(
+              naclResult.storagePath,
+              duration,
+              naclResult.ephemeralPublicKey, // NaCl uses ephemeral public key as "encrypted key"
+              naclResult.nonce, // NaCl nonce as IV
+              naclResult.senderPublicKey,
+              undefined // No auth tag for NaCl (built into the box)
+            );
+          } else {
+            Alert.alert('Error', 'Failed to encrypt message with NaCl.');
+          }
+        } else if (senderVersion >= 2) {
+          // Fall back to secure encryption if recipient doesn't support NaCl
+          console.log('Using secure encryption (v2)');
+          const secureResult = await uploadSecureE2EAudio(
+            uri,
+            recipientData.public_key,
+            userKeys
+          );
+          
+          if (secureResult) {
+            onSend(
+              secureResult.storagePath,
+              duration,
+              secureResult.encryptedKey,
+              secureResult.iv,
+              secureResult.senderPublicKey,
+              secureResult.authTag
+            );
+          } else {
+            Alert.alert('Error', 'Failed to encrypt and upload message.');
+          }
         } else {
-          Alert.alert('Error', 'Failed to upload voice message. Please try again.');
+          // Very old fallback (shouldn't happen)
+          console.log('Using legacy encryption');
+          const encryptionResult = await uploadE2EEncryptedAudio(
+            uri, 
+            userId,
+            recipientId,
+            userKeys
+          );
+          
+          if (encryptionResult) {
+            onSend(
+              encryptionResult.path, 
+              duration, 
+              encryptionResult.encryptedKey, 
+              encryptionResult.iv,
+              encryptionResult.senderPublicKey
+            );
+          } else {
+            Alert.alert('Error', 'Failed to upload voice message.');
+          }
         }
       } else if (!userKeys) {
         Alert.alert('Error', 'Encryption keys not found. Please restart the app.');

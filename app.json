@@ -2,6 +2,7 @@
   "expo": {
     "name": "VanishVoice",
     "slug": "VanishVoice",
+    "owner": "micksolo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -13,17 +14,41 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.vanishvoice.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "VanishVoice needs access to your microphone to record voice messages.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "entitlements": {
+        "aps-environment": "development"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.vanishvoice.app",
+      "permissions": [
+        "RECORD_AUDIO"
+      ],
+      "googleServicesFile": "./google-services.json"
+    },
+    "notification": {
+      "icon": "./assets/icon.png",
+      "color": "#000000",
+      "androidMode": "default",
+      "androidCollapsedTitle": "#{unread_notifications} new messages"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "40517f57-f67f-46ae-b512-923fd48d239a"
+      }
     }
   }
 }

@@ -42,11 +42,16 @@
 - [x] Smart nickname handling for Random Connect users
 
 ## In Progress 🔄
-- [ ] Client-side encryption for voice messages (90% complete)
-- [ ] Security audit preparation
+- [ ] Push notifications for new messages (80% complete)
+  - Database table created ✅
+  - Push token registration implemented ✅
+  - Edge function created and deployed ✅
+  - Local notification testing added ✅
+  - **IMPORTANT**: Expo Go no longer supports push notifications in SDK 53+
+  - Need to create a development build to test push notifications
+  - See DEVELOPMENT_BUILD_SETUP.md for instructions
 
 ## Pending Features 📋
-- [ ] Push notifications for new messages
 - [ ] Save request feature with mutual consent
 - [ ] Time-based expiry (expire even if not played)
 - [ ] Blocked users management screen
@@ -69,20 +74,21 @@
 
 ## Security Considerations
 - Created comprehensive security audit checklist
-- Client-side encryption implemented (using expo-crypto)
+- Client-side E2E encryption implemented ✅
   - Voice messages encrypted before upload
-  - Encryption keys generated per user
-  - Decryption on playback
-  - Need to improve key exchange mechanism
+  - Public/private key pairs generated per user
+  - Proper E2E encryption with recipient's public key
+  - Fixed encoding issues with binary data handling
+  - Encryption keys stored locally in AsyncStorage
 - RLS policies in place for data access control
 - Storage bucket configured with proper access controls
 - Planning professional security audit before launch
 
 ## Next Priority Tasks
-1. **Security audit** - Complete checklist items
-2. **Encryption** - Implement client-side voice encryption
-3. **Push notifications** - Critical for user engagement
-4. **Time-based expiry** - Messages expire even if unplayed
+1. **Push notifications testing** - Test on physical devices
+2. **Security audit** - Complete checklist items
+3. **Time-based expiry** - Messages expire even if unplayed
+4. **Save request feature** - Allow mutual consent saving
 
 ## Repository
 - GitHub: https://github.com/micksolo/WYD
