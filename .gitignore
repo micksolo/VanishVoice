@@ -72,3 +72,4 @@ android/
 
 # MCP config (contains sensitive info)
 .mcp.json
+CLAUDE.md

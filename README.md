@@ -1,23 +1,54 @@
 # VanishVoice 👻🎙️
 
-An ephemeral voice messaging app where messages vanish after being heard. Built with React Native (Expo) and Supabase.
+A secure ephemeral voice messaging app with military-grade end-to-end encryption. Messages vanish after being heard, leaving no trace.
+
+## 🔐 Security First
+
+VanishVoice uses **NaCl (Networking and Cryptography library)** for end-to-end encryption, the same cryptographic foundation used by Signal:
+
+- **🔑 Curve25519** - Elliptic curve Diffie-Hellman for key exchange
+- **🔒 XSalsa20-Poly1305** - Authenticated encryption with additional data
+- **🎲 Perfect Forward Secrecy** - Each message uses unique ephemeral keys
+- **📱 Device-only keys** - Private keys never leave your device
+- **🚫 Zero-knowledge** - Server never sees unencrypted content
 
 ## Features
 
 - 🎤 **One-tap voice recording** - Hold to record, release to send
-- 👻 **Auto-vanishing messages** - Messages disappear after playback
-- 🔐 **Anonymous user system** - No email/phone required
-- 🎲 **Random Connect** - Connect with random users anonymously
-- 📍 **Privacy-first design** - Message count only, sender hidden until tap
-- 🔄 **Real-time updates** - New message notifications
-- 🎯 **Friend codes** - Share your code to connect
+- 👻 **Auto-vanishing messages** - Messages disappear forever after playback
+- 🔐 **End-to-end encryption** - Military-grade NaCl encryption
+- 🎭 **Anonymous accounts** - No email, phone, or personal data required
+- 🔑 **Secure key storage** - iOS Keychain / Android Keystore
+- 📍 **Privacy-first design** - Minimal metadata, maximum privacy
+- 🎯 **Friend codes** - Connect without sharing personal info
+
+## Security Architecture
+
+### End-to-End Encryption Flow
+```
+Sender Device                    Server                    Recipient Device
+-------------                    ------                    ----------------
+1. Record audio
+2. Generate ephemeral keys
+3. Encrypt with NaCl      →     Stores encrypted blob    →    4. Download blob
+                                (never sees content)           5. Decrypt with NaCl
+                                                              6. Play & auto-delete
+```
+
+### What Makes It Secure
+- **No access to content**: Server only stores encrypted blobs
+- **No key escrow**: Private keys are generated on-device and never uploaded
+- **Forward secrecy**: Compromising one message doesn't affect others
+- **Authenticated encryption**: Messages can't be tampered with
+- **Ephemeral by design**: Messages auto-delete after playback
 
 ## Tech Stack
 
 - **Frontend**: React Native with Expo (TypeScript)
 - **Backend**: Supabase (PostgreSQL, Storage, Auth)
+- **Encryption**: TweetNaCl (NaCl in JavaScript)
+- **Key Storage**: react-native-keychain (iOS Keychain / Android Keystore)
 - **Audio**: expo-av for recording/playback
-- **Storage**: Supabase Storage for voice files
 - **State**: React Context + Zustand
 
 ## Getting Started
@@ -102,13 +133,22 @@ VanishVoice/
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
+## Documentation
+
+For detailed documentation, see the [`/docs`](./docs) directory:
+- [Security Implementation](./docs/security/NACL_IMPLEMENTATION_GUIDE.md)
+- [Setup Guide](./docs/setup/SETUP.md)
+- [Development Guide](./docs/development/PROJECT_STATUS.md)
+- [Troubleshooting](./docs/troubleshooting/)
+
 ## Future Features
 
-- 💾 Mutual save requests
-- 📍 Location-based messages
-- 🎉 Event-triggered messages
-- 🔐 End-to-end encryption
-- 🌍 Multi-language support
+- 💾 **Mutual save requests** - Both parties consent to save a message
+- 📍 **Location-based expiry** - Messages vanish when you leave an area
+- 🎉 **Event-triggered expiry** - Messages tied to calendar events
+- 👥 **Group messages** - Encrypted group voice notes
+- 🌍 **Multi-language support** - Localized interface
+- 🔍 **Voice transcription** - Optional encrypted transcripts
 
 ## License
 
