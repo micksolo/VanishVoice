@@ -183,13 +183,12 @@ export default function FriendChatScreen({ route, navigation }: any) {
       const { data: sentMessage, error } = await supabase
         .from('messages')
         .insert({
-          conversation_id: conversationId,
           sender_id: user.id,
           recipient_id: friendId,
           type: 'text',
           content: messageText,
           is_encrypted: false, // TODO: Add encryption for friend messages
-          expiry_type: 'none'
+          expiry_rule: { type: 'none' }
         })
         .select()
         .single();

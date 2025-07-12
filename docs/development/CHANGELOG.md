@@ -19,7 +19,8 @@
   - Re-enabled WebSocket for real-time updates
   - Bidirectional message sync between users
 - ✅ Last message display in friends list with timestamps
-- 🚧 TODO: Voice message upload and encryption
+- ✅ Fixed bidirectional friend relationships (both users see friendship)
+- 🚧 TODO: Voice message upload and encryption  
 - 🚧 TODO: Message history pagination
 - 🚧 TODO: Friend message encryption
 
