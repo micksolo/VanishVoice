@@ -22,6 +22,8 @@ import { supabase } from '../services/supabase';
 import { testE2EEncryption } from '../utils/testE2E';
 import { testE2EDetailed } from '../utils/testE2EDetailed';
 import pushNotifications from '../services/pushNotifications';
+import * as Notifications from 'expo-notifications';
+import { Linking } from 'react-native';
 
 export default function ProfileScreen() {
   const { user, signOut, refreshUser } = useAuth();
@@ -32,11 +34,59 @@ export default function ProfileScreen() {
   const [usernameError, setUsernameError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [displayUsername, setDisplayUsername] = useState(user?.username);
+  const [notificationStatus, setNotificationStatus] = useState<string>('undetermined');
 
   // Update display username when user changes
   React.useEffect(() => {
     setDisplayUsername(user?.username);
   }, [user?.username]);
+
+  // Check notification permissions on mount
+  React.useEffect(() => {
+    checkNotificationPermissions();
+  }, []);
+
+  const checkNotificationPermissions = async () => {
+    const { status } = await Notifications.getPermissionsAsync();
+    setNotificationStatus(status);
+  };
+
+  const handleNotificationToggle = async () => {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    
+    if (existingStatus === 'denied') {
+      Alert.alert(
+        'Notifications Disabled',
+        'Please enable notifications in your device settings to receive message alerts.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openSettings() }
+        ]
+      );
+      return;
+    }
+
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      setNotificationStatus(status);
+      
+      if (status === 'granted' && user) {
+        // Register push token
+        await pushNotifications.registerForPushNotifications(user.id);
+        Alert.alert('Success', 'Push notifications enabled!');
+      }
+    } else {
+      // Already granted - show option to disable in settings
+      Alert.alert(
+        'Notifications Enabled',
+        'To disable notifications, please go to your device settings.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openSettings() }
+        ]
+      );
+    }
+  };
 
   const getAvatarColor = () => {
     const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#FF9FF3'];
@@ -220,12 +270,17 @@ export default function ProfileScreen() {
         <View style={styles.settingsSection}>
           <Text style={styles.sectionTitle}>Settings</Text>
           
-          <TouchableOpacity style={styles.settingItem}>
+          <TouchableOpacity style={styles.settingItem} onPress={handleNotificationToggle}>
             <View style={[styles.settingIcon, { backgroundColor: '#F0F9FF' }]}>
               <Ionicons name="notifications-outline" size={20} color="#3B82F6" />
             </View>
             <Text style={styles.settingText}>Notifications</Text>
-            <Ionicons name="chevron-forward" size={20} color="#999" />
+            <View style={styles.notificationStatus}>
+              <Text style={styles.notificationStatusText}>
+                {notificationStatus === 'granted' ? 'On' : 'Off'}
+              </Text>
+              <Ionicons name="chevron-forward" size={20} color="#999" />
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.settingItem}>
@@ -682,5 +737,15 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  notificationStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  notificationStatusText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '500',
   },
 });

@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.vanishvoice.app",
+      "bundleIdentifier": "com.generictech.vanishvoice",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "VanishVoice needs access to your microphone to record voice messages.",
         "ITSAppUsesNonExemptEncryption": false
@@ -30,7 +30,7 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.vanishvoice.app",
+      "package": "com.generictech.vanishvoice",
       "permissions": [
         "RECORD_AUDIO"
       ],

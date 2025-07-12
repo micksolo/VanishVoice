@@ -36,8 +36,24 @@ export class PushNotificationService {
       }
 
       // Check if we're in Expo Go with SDK 53+
-      const isExpoGo = Constants.appOwnership === 'expo';
-      const sdkVersion = parseInt(Constants.expoConfig?.sdkVersion || '0');
+      const appOwnership = Constants.appOwnership;
+      const sdkVersion = parseInt(Constants.expoConfig?.sdkVersion || Constants.manifest?.sdkVersion || '0');
+      
+      console.log('Push notification environment check:');
+      console.log('- App ownership:', appOwnership);
+      console.log('- SDK Version:', sdkVersion);
+      console.log('- Is device:', Device.isDevice);
+      
+      // Check if we're in a development build by looking for EAS project ID
+      const isDevelopmentBuild = Constants.expoConfig?.extra?.eas?.projectId || 
+                                  Constants.manifest?.extra?.eas?.projectId ||
+                                  Constants.easConfig?.projectId ||
+                                  false;
+      
+      console.log('- Is development build:', isDevelopmentBuild);
+      
+      // Only skip in actual Expo Go app (not development builds)
+      const isExpoGo = appOwnership === 'expo' && !isDevelopmentBuild;
       
       if (isExpoGo && sdkVersion >= 53) {
         console.warn('Push notifications are not supported in Expo Go for SDK 53+');

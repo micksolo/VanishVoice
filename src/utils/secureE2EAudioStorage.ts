@@ -40,14 +40,14 @@ export const uploadSecureE2EAudio = async (
     const storagePath = `${senderKeys.publicKey.substring(0, 8)}/${fileName}`;
     
     // Convert encrypted data to blob
-    const encryptedBlob = await fetch(`data:application/octet-stream;base64,${encrypted.encryptedData}`)
+    const encryptedBlob = await fetch(`data:audio/mpeg;base64,${encrypted.encryptedData}`)
       .then(res => res.blob());
     
     // Upload to Supabase storage
     const { data, error } = await supabase.storage
       .from('voice-messages')
       .upload(storagePath, encryptedBlob, {
-        contentType: 'application/octet-stream',
+        contentType: 'audio/mpeg',
         upsert: false,
       });
     

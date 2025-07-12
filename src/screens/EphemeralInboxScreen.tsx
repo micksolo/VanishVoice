@@ -19,6 +19,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Audio } from 'expo-av';
+import Constants from 'expo-constants';
 import { useAuth } from '../contexts/AnonymousAuthContext';
 import { supabase } from '../services/supabase';
 import RecordingModal from '../components/RecordingModal';
@@ -353,11 +354,11 @@ export default function EphemeralInboxScreen({ navigation }: any) {
 
       if (error) throw error;
 
-      // Send push notification (skip if in Expo Go SDK 53+)
-      const isExpoGo = Platform.OS === 'ios' || Platform.OS === 'android'; // Simple check for mobile
-      const skipPushNotifications = __DEV__ && isExpoGo; // Skip in development mode on mobile
+      // Send push notification
+      // Only skip if we're in Expo Go (not development builds)
+      const isExpoGo = Constants.appOwnership === 'expo';
       
-      if (!skipPushNotifications) {
+      if (!isExpoGo) {
         try {
           console.log('Sending push notification to:', recordingFor.id);
           console.log('Request payload:', {
@@ -387,7 +388,7 @@ export default function EphemeralInboxScreen({ navigation }: any) {
           console.error('Caught error details:', notifError.message, notifError.status);
         }
       } else {
-        console.log('Skipping push notifications in Expo Go development mode');
+        console.log('Skipping push notifications in Expo Go');
       }
 
       Alert.alert('Sent!', `Voice message sent to ${recordingFor.name}`);
@@ -437,8 +438,8 @@ export default function EphemeralInboxScreen({ navigation }: any) {
 
   const randomConnect = async () => {
     setActionModalVisible(false);
-    // Use the same random connect logic from before
-    Alert.alert('Random Connect', 'Finding someone to connect with...');
+    // Navigate to anonymous chat lobby
+    navigation.navigate('AnonymousLobby');
   };
 
   const getAvatarColor = (seed: string = '') => {

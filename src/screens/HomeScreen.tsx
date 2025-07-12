@@ -136,7 +136,8 @@ export default function HomeScreen({ navigation }: any) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.welcomeText}>Welcome!</Text>
+        <Text style={styles.welcomeText}>WYD</Text>
+        <Text style={styles.subtitle}>What You Doing?</Text>
         <Text style={styles.friendCode}>
           Friend Code: {user?.friend_code || 'Loading...'}
         </Text>
@@ -184,12 +185,18 @@ export default function HomeScreen({ navigation }: any) {
         </Text>
 
         <View style={styles.quickActions}>
-          <TouchableOpacity style={styles.actionButton}>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => navigation.navigate('AnonymousLobby')}
+          >
             <Ionicons name="shuffle-outline" size={24} color="#000" />
             <Text style={styles.actionText}>Random Connect</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.actionButton}>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => navigation.navigate('Friends')}
+          >
             <Ionicons name="person-add-outline" size={24} color="#000" />
             <Text style={styles.actionText}>Add Friend</Text>
           </TouchableOpacity>
@@ -209,8 +216,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   welcomeText: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
+    color: '#1A1A1A',
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 4,
   },
   friendCode: {
     fontSize: 14,

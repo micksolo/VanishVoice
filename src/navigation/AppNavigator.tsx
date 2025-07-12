@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AnonymousAuthContext';
 import { ActivityIndicator, View } from 'react-native';
@@ -8,8 +9,38 @@ import { ActivityIndicator, View } from 'react-native';
 import EphemeralInboxScreen from '../screens/EphemeralInboxScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import AuthScreen from '../screens/AuthScreen';
+import AnonymousLobbyScreen from '../screens/AnonymousLobbyScreen';
+import AnonymousChatScreen from '../screens/AnonymousChatScreen';
 
 const Tab = createBottomTabNavigator();
+const Stack = createStackNavigator();
+
+function MessagesStack() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen 
+        name="MessagesMain" 
+        component={EphemeralInboxScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="AnonymousLobby" 
+        component={AnonymousLobbyScreen}
+        options={{ 
+          title: 'Find Someone',
+          headerBackTitle: 'Back'
+        }}
+      />
+      <Stack.Screen 
+        name="AnonymousChat" 
+        component={AnonymousChatScreen}
+        options={{ 
+          headerShown: false 
+        }}
+      />
+    </Stack.Navigator>
+  );
+}
 
 function TabNavigator() {
   return (
@@ -41,8 +72,8 @@ function TabNavigator() {
     >
       <Tab.Screen 
         name="Messages" 
-        component={EphemeralInboxScreen}
-        options={{ title: 'Chats' }}
+        component={MessagesStack}
+        options={{ title: 'Chats', headerShown: false }}
       />
       <Tab.Screen 
         name="Profile" 

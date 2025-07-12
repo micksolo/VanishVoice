@@ -48,8 +48,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Load or generate encryption keys
       await loadOrGenerateKeys(anonymousUser.id);
       
-      // Register for push notifications
-      await pushNotifications.registerForPushNotifications(anonymousUser.id);
+      // Register for push notifications - this will request permissions on first launch
+      try {
+        const token = await pushNotifications.registerForPushNotifications(anonymousUser.id);
+        if (token) {
+          console.log('Push notifications registered successfully');
+        }
+      } catch (error) {
+        console.error('Failed to register push notifications:', error);
+      }
     } catch (error) {
       console.error('Error checking user:', error);
     } finally {
