@@ -11,50 +11,95 @@
 - Mobile-only (iOS and Android) - no web version
 
 ## Phase 1: MVP - Anonymous Chat ✅ COMPLETED
+*All features documented in CHANGELOG.md*
 
-### Week 1: Core Infrastructure ✅
-- [x] Rebrand app from VanishVoice to "WYD"
-  - [x] Update app.json and package.json
-  - [x] Update all UI text and navigation  
-  - [x] Clean lobby screen design
-- [x] Simplify database schema for anonymous sessions
-  - [x] Remove complex friend relationships
-  - [x] Add session-based tables (anonymous_sessions, waiting_pool, etc.)
-  - [x] Implement auto-cleanup functions
-- [x] Build matching engine
-  - [x] Waiting pool system with real-time subscriptions
-  - [x] Basic 1-to-1 matching with Edge Functions
-  - [x] Session management with device hashing
+## Phase 2: Unified Chat Experience + Account Recovery (1-2 weeks)
 
-### Week 2: Chat Features ✅
-- [x] Multi-modal messaging
-  - [x] Text messaging UI with real-time delivery
-  - [x] Voice messages (adapted for anonymous)
-  - [ ] Video message recording (30s limit) - NEXT
-- [x] Simple E2E encryption
-  - [x] NaCl box encryption per conversation
-  - [x] Ephemeral key exchange mechanism
-  - [x] No long-term key storage
-- [x] Basic safety features
-  - [x] Report button with multiple categories
-  - [x] Skip/Next person functionality
-  - [x] Trust scoring system
-  - [ ] Screenshot prevention (Android) / detection (iOS) - NEXT
-  - [ ] Screen recording blocking - NEXT
+### Priority: Fix Chat UX Fragmentation 🎯
+**Current Problem**: Friends have fragmented messaging experience vs unified stranger chat
 
-## Phase 2: Friend System + Premium (1 week)
+- [ ] **Unified Friend Chat System**
+  - [ ] Rename "Chats" tab to "Friends" 
+  - [ ] Create `FriendChatScreen` (unified like AnonymousChatScreen)
+  - [ ] Replace fragmented inbox → Use real-time chat interface
+  - [ ] Support both text + voice in friend conversations
+  - [ ] Message history for friends (optional persistent storage)
+  - [ ] Consistent UX: Friends get same quality experience as strangers
 
-### Friend Features
-- [ ] Hybrid user system
-  - [ ] Optional username claiming
+### Implementation Priority Order:
+1. **Complete Unified Friend Chat** (3-4 days)
+   - Text messaging integration
+   - Real-time delivery
+   - Message history
+
+2. **Account Recovery System** (3-4 days) 
+   - Critical for user retention
+   - Must have before launch
+   
+3. **Remaining Features** (2-3 days)
+   - Video messages
+   - Screenshot prevention
+   - Premium features
+
+### Remaining Phase 1 Features
+- [ ] **Complete Anonymous Chat**
+  - [ ] Video message recording (30s limit)
+  - [ ] Screenshot prevention (Android) / detection (iOS)
+  - [ ] Screen recording blocking
+
+### Technical Implementation Plan
+- [ ] **Navigation Restructure**
+  - [ ] Update `AppNavigator.tsx`: "Messages" → "Friends" tab
+  - [ ] Create `FriendsListScreen` (shows friend list with last message preview)
+  - [ ] Create `FriendChatScreen` (duplicate AnonymousChatScreen architecture)
+- [ ] **Database Schema Updates**
+  - [ ] Extend friend messages to support text + real-time delivery
+  - [ ] Optional persistent storage toggle for friend conversations
+  - [ ] Message threading for friend conversations
+- [ ] **Code Reuse Strategy**  
+  - [ ] Extract shared chat components from AnonymousChatScreen
+  - [ ] Create reusable `UnifiedChatScreen` component
+  - [ ] Support both anonymous and friend messaging modes
+
+### Account Recovery System (Priority: HIGH 🔥)
+**Why Priority**: Users losing accounts = bad retention, must fix before launch
+**Implementation Order**: After unified friend chat completion
+
+- [ ] **Username + Password Recovery**
+  - [ ] Add password_hash field to users table (nullable)
+  - [ ] "Set Password" UI in Profile screen (optional but encouraged)
+  - [ ] Password validation (min 8 chars, strong password rules)
+  - [ ] Secure password hashing (bcrypt/argon2)
+  - [ ] Remove old recovery code system (recoveryCode.ts)
+  
+- [ ] **Account Recovery Flow**
+  - [ ] "Sign In" option on auth screen
+  - [ ] Username + password login form
+  - [ ] Recover: identity, friends list, settings, premium status
+  - [ ] Generate new encryption keys on new device
+  - [ ] Clear messaging: "Messages are end-to-end encrypted and cannot be recovered"
+  - [ ] Store new device keys in key_storage table
+
+- [ ] **Default Username System** ✅
+  - [x] Auto-generate fun usernames (CoolPanda123)
+  - [x] Ensure uniqueness on creation
+  - [ ] Show username prominently in UI (home screen welcome)
+  - [ ] Encourage password setup in onboarding flow
+
+- [ ] **Security Considerations**
+  - [ ] Hybrid approach: password recovers identity, not messages
+  - [ ] Each device gets unique encryption keys
+  - [ ] Friends can re-establish secure connections
+  - [ ] Optional: backup encryption keys to cloud (future feature)
+
+### Friend System Enhancements  
+- [ ] Enhanced friend features
   - [ ] Optional profile photo upload
-  - [ ] Add friends by username
   - [ ] Phone number hashing for discovery
   - [ ] QR code/link sharing
-- [ ] Separate friend chat from stranger chat
-  - [ ] Different UI modes
-  - [ ] Optional message saving for friends
-  - [ ] Friend list management
+  - [ ] Online/offline status
+  - [ ] Last seen timestamps
+  - [ ] Friend list organization
 
 ### Premium Tier ($4.99/month)
 - [ ] Gender filter (male/female/any)
