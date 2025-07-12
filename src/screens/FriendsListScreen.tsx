@@ -168,12 +168,11 @@ export default function FriendsListScreen({ navigation }: any) {
         return;
       }
 
-      // Check if already friends
+      // Check if already friends (check both directions)
       const { data: existingFriend } = await supabase
         .from('friends')
         .select('id')
-        .eq('user_id', user.id)
-        .eq('friend_id', targetUser.id)
+        .or(`and(user_id.eq.${user.id},friend_id.eq.${targetUser.id}),and(user_id.eq.${targetUser.id},friend_id.eq.${user.id})`)
         .single();
 
       if (existingFriend) {
@@ -181,14 +180,21 @@ export default function FriendsListScreen({ navigation }: any) {
         return;
       }
 
-      // Add friend
+      // Add friend (bidirectional)
       const { error: addError } = await supabase
         .from('friends')
-        .insert({
-          user_id: user.id,
-          friend_id: targetUser.id,
-          nickname: targetUser.username || `User ${targetUser.friend_code}`
-        });
+        .insert([
+          {
+            user_id: user.id,
+            friend_id: targetUser.id,
+            nickname: targetUser.username || `User ${targetUser.friend_code}`
+          },
+          {
+            user_id: targetUser.id,
+            friend_id: user.id,
+            nickname: user.username || `User ${user.friend_code}`
+          }
+        ]);
 
       if (addError) throw addError;
 
