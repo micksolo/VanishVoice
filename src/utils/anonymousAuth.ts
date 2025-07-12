@@ -1,5 +1,6 @@
 import { supabase } from '../services/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { generateUniqueUsername } from './usernameGenerator';
 
 const ANON_USER_KEY = 'vanishvoice_anon_user';
 
@@ -60,12 +61,16 @@ export const getOrCreateAnonymousUser = async (): Promise<AnonymousUser | null> 
       return null;
     }
     
+    // Generate a default username for new users
+    const defaultUsername = await generateUniqueUsername(supabase);
+    
     // Create or get the user profile
     const { data: newUser, error: createError } = await supabase
       .from('users')
       .upsert({
         id: authData.user.id,
-        anon_id: `anon_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`
+        anon_id: `anon_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+        username: defaultUsername // Set default username
       })
       .select()
       .single();

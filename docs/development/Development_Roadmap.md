@@ -18,19 +18,35 @@
 ### Priority: Fix Chat UX Fragmentation 🎯
 **Current Problem**: Friends have fragmented messaging experience vs unified stranger chat
 
-- [ ] **Unified Friend Chat System**
-  - [ ] Rename "Chats" tab to "Friends" 
-  - [ ] Create `FriendChatScreen` (unified like AnonymousChatScreen)
-  - [ ] Replace fragmented inbox → Use real-time chat interface
-  - [ ] Support both text + voice in friend conversations
-  - [ ] Message history for friends (optional persistent storage)
+- [ ] **Unified Friend Chat System** (25% complete)
+  - [x] Rename "Chats" tab to "Friends" ✅
+  - [x] Create `FriendChatScreen` (UI shell created) ✅
+  - [x] Create `FriendsListScreen` with username search ✅
+  - [ ] **Text Message Implementation** 🚨 CRITICAL
+    - [ ] Add `type` column to messages table (text/voice/video)
+    - [ ] Add `content` column for text message content
+    - [ ] Implement message saving to database
+    - [ ] Handle text message encryption
+  - [ ] **Fix Real-time Delivery** 🚨 CRITICAL
+    - [ ] Re-enable WebSocket transport in supabase.ts
+    - [ ] Fix real-time subscriptions
+    - [ ] Test message delivery between devices
+  - [ ] **Voice Message Support**
+    - [ ] Implement voice upload with encryption
+    - [ ] Add playback functionality
+    - [ ] Progress indicators for upload/download
+  - [ ] **Message History**
+    - [ ] Load historical messages on chat open
+    - [ ] Implement pagination for long conversations
+    - [ ] Add last message preview in friends list
   - [ ] Consistent UX: Friends get same quality experience as strangers
 
 ### Implementation Priority Order:
-1. **Complete Unified Friend Chat** (3-4 days)
-   - Text messaging integration
-   - Real-time delivery
-   - Message history
+1. **Complete Unified Friend Chat** (3-4 days) 🚧 IN PROGRESS
+   - Day 1: Database schema + text message persistence
+   - Day 2: Fix WebSocket/real-time delivery 
+   - Day 3: Voice messages + history + last message
+   - Day 4: Testing and bug fixes
 
 2. **Account Recovery System** (3-4 days) 
    - Critical for user retention
@@ -48,18 +64,22 @@
   - [ ] Screen recording blocking
 
 ### Technical Implementation Plan
-- [ ] **Navigation Restructure**
-  - [ ] Update `AppNavigator.tsx`: "Messages" → "Friends" tab
-  - [ ] Create `FriendsListScreen` (shows friend list with last message preview)
-  - [ ] Create `FriendChatScreen` (duplicate AnonymousChatScreen architecture)
-- [ ] **Database Schema Updates**
-  - [ ] Extend friend messages to support text + real-time delivery
-  - [ ] Optional persistent storage toggle for friend conversations
-  - [ ] Message threading for friend conversations
-- [ ] **Code Reuse Strategy**  
-  - [ ] Extract shared chat components from AnonymousChatScreen
-  - [ ] Create reusable `UnifiedChatScreen` component
-  - [ ] Support both anonymous and friend messaging modes
+- [x] **Navigation Restructure** ✅
+  - [x] Update `AppNavigator.tsx`: "Messages" → "Friends" tab
+  - [x] Create `FriendsListScreen` (missing last message preview)
+  - [x] Create `FriendChatScreen` (UI only, no backend)
+- [ ] **Database Schema Updates** 🚨 URGENT
+  - [ ] Migration: Add `type` enum column (text/voice/video)
+  - [ ] Migration: Add `content` text column for messages
+  - [ ] Migration: Add `is_encrypted` boolean column
+  - [ ] Update RLS policies for text messages
+  - [ ] Add indexes for performance
+- [ ] **Implementation Tasks**
+  - [ ] Fix message sending in FriendChatScreen
+  - [ ] Implement message encryption for text
+  - [ ] Add typing indicators
+  - [ ] Handle offline message queue
+  - [ ] Add read receipts (optional)
 
 ### Account Recovery System (Priority: HIGH 🔥)
 **Why Priority**: Users losing accounts = bad retention, must fix before launch

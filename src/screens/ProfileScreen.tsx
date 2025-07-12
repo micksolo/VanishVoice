@@ -24,6 +24,7 @@ import { testE2EDetailed } from '../utils/testE2EDetailed';
 import pushNotifications from '../services/pushNotifications';
 import * as Notifications from 'expo-notifications';
 import { Linking } from 'react-native';
+import { generateRecoveryCode, saveRecoveryCode, getStoredRecoveryCode } from '../utils/recoveryCode';
 
 export default function ProfileScreen() {
   const { user, signOut, refreshUser } = useAuth();
@@ -249,6 +250,15 @@ export default function ProfileScreen() {
           </View>
           <Text style={styles.userCode}>{user?.friend_code}</Text>
         </View>
+
+        {!displayUsername && (
+          <View style={styles.usernamePromptContainer}>
+            <Ionicons name="information-circle" size={16} color="#FF9500" />
+            <Text style={styles.usernamePromptText}>
+              Set a username so friends can find you easily
+            </Text>
+          </View>
+        )}
 
         <View style={styles.friendCodeContainer}>
           <View style={styles.friendCodeHeader}>
@@ -538,6 +548,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     fontFamily: 'monospace',
+  },
+  usernamePromptContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF3CD',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 16,
+    marginHorizontal: 20,
+    gap: 8,
+  },
+  usernamePromptText: {
+    fontSize: 13,
+    color: '#856404',
+    flex: 1,
   },
   friendCodeContainer: {
     backgroundColor: '#fff',

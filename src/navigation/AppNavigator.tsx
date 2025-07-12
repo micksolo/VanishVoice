@@ -7,6 +7,8 @@ import { useAuth } from '../contexts/AnonymousAuthContext';
 import { ActivityIndicator, View } from 'react-native';
 
 import EphemeralInboxScreen from '../screens/EphemeralInboxScreen';
+import FriendsListScreen from '../screens/FriendsListScreen';
+import FriendChatScreen from '../screens/FriendChatScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import AuthScreen from '../screens/AuthScreen';
 import AnonymousLobbyScreen from '../screens/AnonymousLobbyScreen';
@@ -15,13 +17,20 @@ import AnonymousChatScreen from '../screens/AnonymousChatScreen';
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
-function MessagesStack() {
+function FriendsStack() {
   return (
     <Stack.Navigator>
       <Stack.Screen 
-        name="MessagesMain" 
-        component={EphemeralInboxScreen}
+        name="FriendsList" 
+        component={FriendsListScreen}
         options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="FriendChat" 
+        component={FriendChatScreen}
+        options={{ 
+          headerShown: false 
+        }}
       />
       <Stack.Screen 
         name="AnonymousLobby" 
@@ -49,8 +58,8 @@ function TabNavigator() {
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap;
 
-          if (route.name === 'Messages') {
-            iconName = focused ? 'chatbubbles' : 'chatbubbles-outline';
+          if (route.name === 'Friends') {
+            iconName = focused ? 'people' : 'people-outline';
           } else if (route.name === 'Profile') {
             iconName = focused ? 'person' : 'person-outline';
           } else {
@@ -71,9 +80,9 @@ function TabNavigator() {
       })}
     >
       <Tab.Screen 
-        name="Messages" 
-        component={MessagesStack}
-        options={{ title: 'Chats', headerShown: false }}
+        name="Friends" 
+        component={FriendsStack}
+        options={{ title: 'Friends', headerShown: false }}
       />
       <Tab.Screen 
         name="Profile" 

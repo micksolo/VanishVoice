@@ -2,6 +2,27 @@
 
 ## WYD App Phase (Current - July 2025)
 
+### Unified Friend Chat System (In Progress)
+- ✅ Created FriendsListScreen with username-based friend search
+- ✅ Created FriendChatScreen with unified chat interface
+- ✅ Renamed "Chats" tab to "Friends" for clarity
+- ✅ Username system implementation:
+  - Auto-generate fun usernames (CoolPanda123 style)
+  - Replace friend codes with username search
+  - Real-time username availability checking
+- ✅ Database migration for text message support:
+  - Added message type enum (text/voice/video)
+  - Added content column for text messages
+  - Added is_encrypted flag for future encryption
+- ✅ Text message persistence and real-time delivery:
+  - Messages save to database with proper type
+  - Re-enabled WebSocket for real-time updates
+  - Bidirectional message sync between users
+- ✅ Last message display in friends list with timestamps
+- 🚧 TODO: Voice message upload and encryption
+- 🚧 TODO: Message history pagination
+- 🚧 TODO: Friend message encryption
+
 ### Anonymous Chat System ✅
 - Complete anonymous matching engine with real-time subscriptions
 - E2E encrypted messaging using NaCl encryption

@@ -12,7 +12,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     detectSessionInUrl: false,
   },
+  // Enable realtime for message delivery
   realtime: {
-    transport: null as any, // Disable WebSocket transport
+    params: {
+      eventsPerSecond: 10
+    }
   },
 });
