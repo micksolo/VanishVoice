@@ -198,11 +198,31 @@ export default function FriendsListScreen({ navigation }: any) {
 
       if (addError) throw addError;
 
+      // Close modal and clear form first
       setAddFriendModalVisible(false);
       setSearchUsername('');
       setSearchError('');
-      Alert.alert('Success', `Added ${targetUser.username} as a friend!`);
-      loadFriends();
+      
+      // Refresh friends list
+      await loadFriends();
+      
+      // Show success feedback with action options
+      Alert.alert(
+        'Friend Added! 🎉', 
+        `${targetUser.username} has been added to your friends list. You can now start chatting!`,
+        [
+          { text: 'Maybe Later', style: 'cancel' },
+          { 
+            text: 'Start Chatting', 
+            onPress: () => navigateToChat({
+              id: 'temp', // Will be replaced by the actual friend record
+              friend_id: targetUser.id,
+              friend: { username: targetUser.username, friend_code: targetUser.friend_code },
+              nickname: targetUser.username
+            })
+          }
+        ]
+      );
     } catch (error) {
       console.error('Error adding friend:', error);
       Alert.alert('Error', 'Failed to add friend');
