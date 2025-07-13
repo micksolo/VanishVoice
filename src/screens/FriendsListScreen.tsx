@@ -51,8 +51,8 @@ export default function FriendsListScreen({ navigation }: any) {
       loadFriends();
       loadPendingRequests();
       
-      // Subscribe to friend requests
-      const subscription = supabase
+      // Subscribe to friend requests (incoming)
+      const requestsSubscription = supabase
         .channel(`friend-requests:${user.id}`)
         .on(
           'postgres_changes',
@@ -63,15 +63,73 @@ export default function FriendsListScreen({ navigation }: any) {
             filter: `to_user_id=eq.${user.id}`
           },
           (payload) => {
-            console.log('Friend request change:', payload);
+            console.log('Friend request change (incoming):', payload);
             // Reload pending requests when there's a change
             loadPendingRequests();
           }
         )
         .subscribe();
 
+      // Subscribe to friend requests (outgoing - to know when accepted)
+      const outgoingRequestsSubscription = supabase
+        .channel(`friend-requests-sent:${user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'friend_requests',
+            filter: `from_user_id=eq.${user.id}`
+          },
+          (payload) => {
+            console.log('Friend request update (outgoing):', payload);
+            // If request was accepted, reload friends and show notification
+            if (payload.new.status === 'accepted') {
+              console.log('Friend request accepted! Reloading friends...');
+              loadFriends();
+              
+              // Get the username of who accepted
+              supabase
+                .from('users')
+                .select('username')
+                .eq('id', payload.new.to_user_id)
+                .single()
+                .then(({ data }) => {
+                  if (data) {
+                    Alert.alert(
+                      'Friend Request Accepted! 🎉',
+                      `${data.username} accepted your friend request!`
+                    );
+                  }
+                });
+            }
+          }
+        )
+        .subscribe();
+
+      // Subscribe to friends table changes
+      const friendsSubscription = supabase
+        .channel(`friends:${user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'friends',
+            filter: `user_id=eq.${user.id}`
+          },
+          (payload) => {
+            console.log('Friends list change:', payload);
+            // Reload friends when there's a change
+            loadFriends();
+          }
+        )
+        .subscribe();
+
       return () => {
-        subscription.unsubscribe();
+        requestsSubscription.unsubscribe();
+        outgoingRequestsSubscription.unsubscribe();
+        friendsSubscription.unsubscribe();
       };
     }
   }, [user]);
@@ -340,20 +398,30 @@ export default function FriendsListScreen({ navigation }: any) {
         if (updateError) throw updateError;
 
         // Create bidirectional friendship
-        const { error: friendError } = await supabase
+        // Insert them separately to ensure both are created
+        const { error: friendError1 } = await supabase
           .from('friends')
-          .insert([
-            {
-              user_id: user.id,
-              friend_id: fromUserId
-            },
-            {
-              user_id: fromUserId,
-              friend_id: user.id
-            }
-          ]);
+          .insert({
+            user_id: user.id,
+            friend_id: fromUserId
+          });
 
-        if (friendError) throw friendError;
+        if (friendError1) {
+          console.error('Error creating first friendship:', friendError1);
+          throw friendError1;
+        }
+
+        const { error: friendError2 } = await supabase
+          .from('friends')
+          .insert({
+            user_id: fromUserId,
+            friend_id: user.id
+          });
+
+        if (friendError2) {
+          console.error('Error creating second friendship:', friendError2);
+          throw friendError2;
+        }
 
         Alert.alert('Success', 'Friend request accepted!');
       } else {
