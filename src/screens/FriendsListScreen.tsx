@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,10 +10,12 @@ import {
   Alert,
   Modal,
   TextInput,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AnonymousAuthContext';
 import { supabase } from '../services/supabase';
+import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 
 interface Friend {
   id: string;
@@ -42,10 +44,12 @@ export default function FriendsListScreen({ navigation }: any) {
   const [searchUsername, setSearchUsername] = useState('');
   const [searchError, setSearchError] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
 
   useEffect(() => {
     if (user) {
       loadFriends();
+      loadPendingRequests();
     }
   }, [user]);
 
@@ -106,8 +110,35 @@ export default function FriendsListScreen({ navigation }: any) {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadFriends();
+    await Promise.all([loadFriends(), loadPendingRequests()]);
     setRefreshing(false);
+  };
+
+  const loadPendingRequests = async () => {
+    if (!user) return;
+
+    try {
+      // Load friend requests where this user is the recipient
+      const { data: requests, error } = await supabase
+        .from('friend_requests')
+        .select(`
+          *,
+          from_user:users!friend_requests_from_user_id_fkey(
+            id,
+            username,
+            friend_code
+          )
+        `)
+        .eq('to_user_id', user.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      setPendingRequests(requests || []);
+    } catch (error) {
+      console.error('Error loading friend requests:', error);
+    }
   };
 
   const formatTimestamp = (date: Date) => {
@@ -180,48 +211,40 @@ export default function FriendsListScreen({ navigation }: any) {
         return;
       }
 
-      // Add friend (bidirectional)
-      const { error: addError } = await supabase
-        .from('friends')
-        .insert([
-          {
-            user_id: user.id,
-            friend_id: targetUser.id,
-            nickname: targetUser.username || `User ${targetUser.friend_code}`
-          },
-          {
-            user_id: targetUser.id,
-            friend_id: user.id,
-            nickname: user.username || `User ${user.friend_code}`
-          }
-        ]);
+      // Check if there's already a pending request
+      const { data: existingRequest } = await supabase
+        .from('friend_requests')
+        .select('id, status')
+        .or(`and(from_user_id.eq.${user.id},to_user_id.eq.${targetUser.id}),and(from_user_id.eq.${targetUser.id},to_user_id.eq.${user.id})`)
+        .eq('status', 'pending')
+        .single();
 
-      if (addError) throw addError;
+      if (existingRequest) {
+        setSearchError('A friend request is already pending with this user');
+        return;
+      }
+
+      // Send friend request instead of adding directly
+      const { error: requestError } = await supabase
+        .from('friend_requests')
+        .insert({
+          from_user_id: user.id,
+          to_user_id: targetUser.id,
+          status: 'pending'
+        });
+
+      if (requestError) throw requestError;
 
       // Close modal and clear form first
       setAddFriendModalVisible(false);
       setSearchUsername('');
       setSearchError('');
       
-      // Refresh friends list
-      await loadFriends();
-      
-      // Show success feedback with action options
+      // Show success feedback for friend request
       Alert.alert(
-        'Friend Added! 🎉', 
-        `${targetUser.username} has been added to your friends list. You can now start chatting!`,
-        [
-          { text: 'Maybe Later', style: 'cancel' },
-          { 
-            text: 'Start Chatting', 
-            onPress: () => navigateToChat({
-              id: 'temp', // Will be replaced by the actual friend record
-              friend_id: targetUser.id,
-              friend: { username: targetUser.username, friend_code: targetUser.friend_code },
-              nickname: targetUser.username
-            })
-          }
-        ]
+        'Friend Request Sent! 📤', 
+        `Your friend request has been sent to ${targetUser.username}. They'll need to accept it before you can start chatting.`,
+        [{ text: 'OK' }]
       );
     } catch (error) {
       console.error('Error adding friend:', error);
@@ -242,50 +265,157 @@ export default function FriendsListScreen({ navigation }: any) {
     });
   };
 
+  const removeFriend = async (friend: Friend) => {
+    const friendName = friend.friend?.username || friend.nickname || 'Anonymous User';
+    
+    Alert.alert(
+      'Remove Friend',
+      `Are you sure you want to remove ${friendName} from your friends list?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Only remove the friendship from this user's perspective
+              const { error } = await supabase
+                .from('friends')
+                .delete()
+                .match({
+                  user_id: user.id,
+                  friend_id: friend.friend_id
+                });
+
+              if (error) throw error;
+
+              Alert.alert('Friend Removed', `${friendName} has been removed from your friends list.`);
+              loadFriends();
+            } catch (error) {
+              console.error('Error removing friend:', error);
+              Alert.alert('Error', 'Failed to remove friend');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleFriendRequest = async (requestId: string, fromUserId: string, accept: boolean) => {
+    try {
+      if (accept) {
+        // Update request status to accepted
+        const { error: updateError } = await supabase
+          .from('friend_requests')
+          .update({ 
+            status: 'accepted',
+            responded_at: new Date().toISOString()
+          })
+          .eq('id', requestId);
+
+        if (updateError) throw updateError;
+
+        // Create bidirectional friendship
+        const { error: friendError } = await supabase
+          .from('friends')
+          .insert([
+            {
+              user_id: user.id,
+              friend_id: fromUserId
+            },
+            {
+              user_id: fromUserId,
+              friend_id: user.id
+            }
+          ]);
+
+        if (friendError) throw friendError;
+
+        Alert.alert('Success', 'Friend request accepted!');
+      } else {
+        // Update request status to rejected
+        const { error } = await supabase
+          .from('friend_requests')
+          .update({ 
+            status: 'rejected',
+            responded_at: new Date().toISOString()
+          })
+          .eq('id', requestId);
+
+        if (error) throw error;
+      }
+
+      // Refresh both lists
+      await Promise.all([loadFriends(), loadPendingRequests()]);
+    } catch (error) {
+      console.error('Error handling friend request:', error);
+      Alert.alert('Error', 'Failed to process friend request');
+    }
+  };
+
   const renderFriend = ({ item }: { item: Friend }) => {
     const friendName = item.friend?.username || item.nickname || 'Anonymous User';
     const displayName = friendName.startsWith('User ') ? 'Anonymous User' : friendName;
     const lastMessage = item.lastMessage;
 
+    const renderRightActions = () => {
+      return (
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={() => removeFriend(item)}
+        >
+          <Ionicons name="trash-outline" size={24} color="#fff" />
+          <Text style={styles.deleteButtonText}>Remove</Text>
+        </TouchableOpacity>
+      );
+    };
+
     return (
-      <TouchableOpacity
-        style={styles.friendItem}
-        onPress={() => navigateToChat(item)}
+      <Swipeable
+        renderRightActions={renderRightActions}
+        rightThreshold={40}
+        overshootRight={false}
       >
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {displayName.charAt(0).toUpperCase()}
-          </Text>
-        </View>
-        
-        <View style={styles.friendInfo}>
-          <View style={styles.friendHeader}>
-            <Text style={styles.friendName}>{displayName}</Text>
-            {item.mutual && (
-              <Ionicons name="people" size={16} color="#4ECDC4" />
+        <TouchableOpacity
+          style={styles.friendItem}
+          onPress={() => navigateToChat(item)}
+          activeOpacity={0.95}
+        >
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>
+              {displayName.charAt(0).toUpperCase()}
+            </Text>
+          </View>
+          
+          <View style={styles.friendInfo}>
+            <View style={styles.friendHeader}>
+              <Text style={styles.friendName}>{displayName}</Text>
+              {item.mutual && (
+                <Ionicons name="people" size={16} color="#4ECDC4" />
+              )}
+            </View>
+            
+            {item.friend?.username && (
+              <Text style={styles.friendUsername}>
+                @{item.friend.username}
+              </Text>
+            )}
+            
+            {lastMessage && (
+              <View style={styles.lastMessageContainer}>
+                <Text style={styles.lastMessage} numberOfLines={1}>
+                  {lastMessage.isFromMe ? 'You: ' : ''}{lastMessage.content}
+                </Text>
+                <Text style={styles.timestamp}>
+                  {formatTimestamp(lastMessage.timestamp)}
+                </Text>
+              </View>
             )}
           </View>
           
-          {item.friend?.username && (
-            <Text style={styles.friendUsername}>
-              @{item.friend.username}
-            </Text>
-          )}
-          
-          {lastMessage && (
-            <View style={styles.lastMessageContainer}>
-              <Text style={styles.lastMessage} numberOfLines={1}>
-                {lastMessage.isFromMe ? 'You: ' : ''}{lastMessage.content}
-              </Text>
-              <Text style={styles.timestamp}>
-                {formatTimestamp(lastMessage.timestamp)}
-              </Text>
-            </View>
-          )}
-        </View>
-        
-        <Ionicons name="chevron-forward" size={20} color="#ccc" />
-      </TouchableOpacity>
+          <Ionicons name="chevron-forward" size={20} color="#ccc" />
+        </TouchableOpacity>
+      </Swipeable>
     );
   };
 
@@ -306,9 +436,10 @@ export default function FriendsListScreen({ navigation }: any) {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaView style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
         <Text style={styles.title}>Friends</Text>
         <View style={styles.headerActions}>
           <TouchableOpacity
@@ -334,8 +465,41 @@ export default function FriendsListScreen({ navigation }: any) {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
+        ListHeaderComponent={
+          pendingRequests.length > 0 ? (
+            <View style={styles.requestsSection}>
+              <Text style={styles.requestsTitle}>Friend Requests ({pendingRequests.length})</Text>
+              {pendingRequests.map((request) => (
+                <View key={request.id} style={styles.requestItem}>
+                  <View style={styles.requestInfo}>
+                    <Text style={styles.requestUsername}>
+                      {request.from_user?.username || 'Anonymous User'}
+                    </Text>
+                    <Text style={styles.requestTime}>
+                      {formatTimestamp(new Date(request.created_at))}
+                    </Text>
+                  </View>
+                  <View style={styles.requestActions}>
+                    <TouchableOpacity
+                      style={[styles.requestButton, styles.declineButton]}
+                      onPress={() => handleFriendRequest(request.id, request.from_user_id, false)}
+                    >
+                      <Ionicons name="close" size={20} color="#666" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.requestButton, styles.acceptButton]}
+                      onPress={() => handleFriendRequest(request.id, request.from_user_id, true)}
+                    >
+                      <Ionicons name="checkmark" size={20} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : null
+        }
         ListEmptyComponent={renderEmpty}
-        contentContainerStyle={friends.length === 0 ? styles.emptyList : undefined}
+        contentContainerStyle={friends.length === 0 && pendingRequests.length === 0 ? styles.emptyList : undefined}
         showsVerticalScrollIndicator={false}
       />
 
@@ -401,7 +565,8 @@ export default function FriendsListScreen({ navigation }: any) {
           </View>
         </SafeAreaView>
       </Modal>
-    </SafeAreaView>
+      </SafeAreaView>
+    </GestureHandlerRootView>
   );
 }
 
@@ -614,5 +779,71 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#856404',
     flex: 1,
+  },
+  deleteButton: {
+    backgroundColor: '#FF3B30',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 100,
+    height: '100%',
+    flexDirection: 'column',
+    paddingHorizontal: 20,
+  },
+  deleteButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    marginTop: 4,
+    fontWeight: '600',
+  },
+  requestsSection: {
+    backgroundColor: '#FFF8E1',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FFE082',
+  },
+  requestsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#F57C00',
+    marginBottom: 12,
+  },
+  requestItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  requestInfo: {
+    flex: 1,
+  },
+  requestUsername: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1A1A1A',
+  },
+  requestTime: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  requestActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  requestButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  declineButton: {
+    backgroundColor: '#F5F5F5',
+  },
+  acceptButton: {
+    backgroundColor: '#4ECDC4',
   },
 });
