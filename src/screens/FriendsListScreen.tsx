@@ -50,6 +50,29 @@ export default function FriendsListScreen({ navigation }: any) {
     if (user) {
       loadFriends();
       loadPendingRequests();
+      
+      // Subscribe to friend requests
+      const subscription = supabase
+        .channel(`friend-requests:${user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'friend_requests',
+            filter: `to_user_id=eq.${user.id}`
+          },
+          (payload) => {
+            console.log('Friend request change:', payload);
+            // Reload pending requests when there's a change
+            loadPendingRequests();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        subscription.unsubscribe();
+      };
     }
   }, [user]);
 
@@ -135,6 +158,7 @@ export default function FriendsListScreen({ navigation }: any) {
 
       if (error) throw error;
 
+      console.log('[FriendsListScreen] Loaded pending requests:', requests?.length || 0);
       setPendingRequests(requests || []);
     } catch (error) {
       console.error('Error loading friend requests:', error);
@@ -440,7 +464,14 @@ export default function FriendsListScreen({ navigation }: any) {
       <SafeAreaView style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-        <Text style={styles.title}>Friends</Text>
+        <View style={styles.titleContainer}>
+          <Text style={styles.title}>Friends</Text>
+          {pendingRequests.length > 0 && (
+            <View style={styles.requestBadge}>
+              <Text style={styles.requestBadgeText}>{pendingRequests.length}</Text>
+            </View>
+          )}
+        </View>
         <View style={styles.headerActions}>
           <TouchableOpacity
             style={styles.headerButton}
@@ -845,5 +876,23 @@ const styles = StyleSheet.create({
   },
   acceptButton: {
     backgroundColor: '#4ECDC4',
+  },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  requestBadge: {
+    backgroundColor: '#FF9800',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    minWidth: 24,
+    alignItems: 'center',
+  },
+  requestBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
