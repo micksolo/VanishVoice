@@ -293,17 +293,34 @@ export default function FriendsListScreen({ navigation }: any) {
         return;
       }
 
-      // Check if there's already a pending request
+      // Check if there's already any request between these users
       const { data: existingRequest } = await supabase
         .from('friend_requests')
-        .select('id, status')
+        .select('id, status, from_user_id')
         .or(`and(from_user_id.eq.${user.id},to_user_id.eq.${targetUser.id}),and(from_user_id.eq.${targetUser.id},to_user_id.eq.${user.id})`)
-        .eq('status', 'pending')
         .single();
 
       if (existingRequest) {
-        setSearchError('A friend request is already pending with this user');
-        return;
+        if (existingRequest.status === 'pending') {
+          if (existingRequest.from_user_id === user.id) {
+            setSearchError('You already sent a friend request to this user');
+          } else {
+            setSearchError('This user already sent you a friend request - check your pending requests');
+          }
+        } else if (existingRequest.status === 'accepted') {
+          setSearchError('You are already friends with this user');
+        } else if (existingRequest.status === 'rejected') {
+          // Allow re-sending if previously rejected
+          // Delete the old rejected request first
+          await supabase
+            .from('friend_requests')
+            .delete()
+            .eq('id', existingRequest.id);
+        }
+        
+        if (existingRequest.status !== 'rejected') {
+          return;
+        }
       }
 
       // Send friend request instead of adding directly
