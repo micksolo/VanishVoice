@@ -378,7 +378,7 @@ export default function FriendsListScreen({ navigation }: any) {
           onPress: async () => {
             try {
               // Only remove the friendship from this user's perspective
-              const { error } = await supabase
+              const { error: friendError } = await supabase
                 .from('friends')
                 .delete()
                 .match({
@@ -386,7 +386,17 @@ export default function FriendsListScreen({ navigation }: any) {
                   friend_id: friend.friend_id
                 });
 
-              if (error) throw error;
+              if (friendError) throw friendError;
+
+              // Also clean up any friend requests between these users
+              const { error: requestError } = await supabase
+                .from('friend_requests')
+                .delete()
+                .or(`and(from_user_id.eq.${user.id},to_user_id.eq.${friend.friend_id}),and(from_user_id.eq.${friend.friend_id},to_user_id.eq.${user.id})`);
+
+              if (requestError) {
+                console.error('Error cleaning up friend requests:', requestError);
+              }
 
               Alert.alert('Friend Removed', `${friendName} has been removed from your friends list.`);
               loadFriends();
