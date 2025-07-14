@@ -20,7 +20,7 @@ import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler'
 import { useFocusEffect } from '@react-navigation/native';
 import RealtimeDebugger from '../components/RealtimeDebugger';
 import * as Notifications from 'expo-notifications';
-import { MessageNotificationData } from '../services/pushNotifications';
+import { MessageNotificationData, sendFriendRequestNotification } from '../services/pushNotifications';
 import FriendEncryption from '../utils/friendEncryption';
 
 interface Friend {
@@ -79,6 +79,24 @@ export default function FriendsListScreen({ navigation }: any) {
         
         // Also update total unread count
         updateUnreadCounts();
+      } else if (data.type === 'friend_request' && data.sender_name) {
+        console.log('[FriendsListScreen] Friend request notification from:', data.sender_name);
+        
+        // Show in-app alert for friend request
+        Alert.alert(
+          'New Friend Request! 👋',
+          `${data.sender_name} wants to be your friend`,
+          [
+            { 
+              text: 'View', 
+              onPress: () => {
+                // Reload pending requests to show the new one
+                loadPendingRequests();
+              }
+            },
+            { text: 'Later', style: 'cancel' }
+          ]
+        );
       }
     });
 
@@ -684,6 +702,25 @@ export default function FriendsListScreen({ navigation }: any) {
         });
 
       if (requestError) throw requestError;
+
+      // Send push notification to recipient
+      try {
+        // Get current user's username
+        const { data: userData } = await supabase
+          .from('users')
+          .select('username')
+          .eq('id', user.id)
+          .single();
+        
+        await sendFriendRequestNotification(
+          targetUser.id,
+          user.id,
+          userData?.username || 'Someone'
+        );
+      } catch (pushError) {
+        console.log('[FriendsListScreen] Push notification failed:', pushError);
+        // Don't fail the friend request if push fails
+      }
 
       // Close modal and clear form first
       setAddFriendModalVisible(false);

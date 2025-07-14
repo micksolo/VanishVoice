@@ -52,6 +52,37 @@ export async function sendMessageNotification(
   }
 }
 
+// Send friend request notification
+export async function sendFriendRequestNotification(
+  recipientId: string,
+  senderId: string,
+  senderName: string
+) {
+  try {
+    // Call Edge Function to send push
+    const { data, error } = await supabase.functions.invoke('send-push-notification', {
+      body: {
+        recipient_id: recipientId,
+        title: 'New Friend Request! 👋',
+        body: `${senderName} wants to be your friend`,
+        data: {
+          type: 'friend_request',
+          sender_id: senderId,
+          sender_name: senderName,
+        },
+      },
+    });
+
+    if (error) {
+      console.error('Error sending friend request notification:', error);
+    } else {
+      console.log('[Push] Friend request notification sent to:', recipientId);
+    }
+  } catch (error) {
+    console.error('Failed to send friend request notification:', error);
+  }
+}
+
 // Handle notification interactions
 export function setupNotificationHandlers(navigation: any) {
   // Handle notifications when app is in foreground
@@ -81,6 +112,9 @@ export function setupNotificationHandlers(navigation: any) {
           friendId: data.sender_id,
           friendName: data.sender_name || 'Friend',
         });
+      } else if (data.type === 'friend_request') {
+        // Navigate to friends list to see pending requests
+        navigation.navigate('Friends');
       }
     }
   );
@@ -164,5 +198,6 @@ export default {
   registerForPushNotifications,
   setupNotificationListeners: setupNotificationHandlers,
   sendMessageNotification,
+  sendFriendRequestNotification,
   updateBadgeCount,
 };
