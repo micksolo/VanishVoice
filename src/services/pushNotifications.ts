@@ -1,11 +1,10 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
-import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 
-// Configure how notifications are displayed
+// Configure notification handler
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -14,198 +13,156 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export class PushNotificationService {
-  private static instance: PushNotificationService;
-  
-  private constructor() {}
-  
-  static getInstance(): PushNotificationService {
-    if (!PushNotificationService.instance) {
-      PushNotificationService.instance = new PushNotificationService();
-    }
-    return PushNotificationService.instance;
-  }
+export interface MessageNotificationData {
+  type: 'new_message' | 'friend_request';
+  sender_id?: string;
+  message_id?: string;
+  sender_name?: string;
+}
 
-  // Register for push notifications
-  async registerForPushNotifications(userId: string): Promise<string | null> {
-    try {
-      // Check if we're on a physical device
-      if (!Device.isDevice) {
-        console.log('Push notifications only work on physical devices');
-        return null;
-      }
-
-      // Check if we're in Expo Go with SDK 53+
-      const appOwnership = Constants.appOwnership;
-      const sdkVersion = parseInt(Constants.expoConfig?.sdkVersion || Constants.manifest?.sdkVersion || '0');
-      
-      console.log('Push notification environment check:');
-      console.log('- App ownership:', appOwnership);
-      console.log('- SDK Version:', sdkVersion);
-      console.log('- Is device:', Device.isDevice);
-      
-      // Check if we're in a development build by looking for EAS project ID
-      const isDevelopmentBuild = Constants.expoConfig?.extra?.eas?.projectId || 
-                                  Constants.manifest?.extra?.eas?.projectId ||
-                                  Constants.easConfig?.projectId ||
-                                  false;
-      
-      console.log('- Is development build:', isDevelopmentBuild);
-      
-      // Only skip in actual Expo Go app (not development builds)
-      const isExpoGo = appOwnership === 'expo' && !isDevelopmentBuild;
-      
-      if (isExpoGo && sdkVersion >= 53) {
-        console.warn('Push notifications are not supported in Expo Go for SDK 53+');
-        console.warn('Please use a development build. See DEVELOPMENT_BUILD_SETUP.md');
-        // Return a mock token for testing purposes
-        const mockToken = `ExponentPushToken[MOCK-${userId.substring(0, 8)}]`;
-        console.log('Using mock token for testing:', mockToken);
-        // Don't save mock tokens to database
-        return null;
-      }
-
-      // Get existing permission status
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-
-      // Request permission if not granted
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-
-      if (finalStatus !== 'granted') {
-        console.log('Push notification permission denied');
-        return null;
-      }
-
-      // Get the push token
-      let token;
-      
-      console.log('App ownership:', Constants.appOwnership);
-      console.log('SDK Version:', sdkVersion);
-      
-      if (isExpoGo) {
-        // This won't work in SDK 53+ but keeping for older SDKs
-        const experienceId = `@${Constants.expoConfig?.owner || 'micksolo'}/${Constants.expoConfig?.slug || 'VanishVoice'}`;
-        console.log('Using experienceId for Expo Go:', experienceId);
-        
-        token = await Notifications.getExpoPushTokenAsync({
-          experienceId: experienceId
-        });
-      } else {
-        // In standalone/development builds
-        token = await Notifications.getExpoPushTokenAsync();
-      }
-
-      console.log('Push token:', token.data);
-
-      // Save token to database
-      await this.savePushToken(userId, token.data);
-
-      // Save token locally for reference
-      await AsyncStorage.setItem('vanishvoice_push_token', token.data);
-
-      return token.data;
-    } catch (error) {
-      console.error('Error registering for push notifications:', error);
-      return null;
-    }
-  }
-
-  // Save push token to database
-  private async savePushToken(userId: string, token: string): Promise<void> {
-    try {
-      const platform = Platform.OS as 'ios' | 'android';
-      
-      // Debug: Check current session
-      const { data: { session } } = await supabase.auth.getSession();
-      console.log('Current session when saving token:', session?.user?.id);
-      console.log('Session exists:', !!session);
-      console.log('Session user:', session?.user);
-      console.log('Trying to save token for userId:', userId);
-      
-      if (!session || session.user?.id !== userId) {
-        console.error('Session mismatch! Session userId:', session?.user?.id, 'Provided userId:', userId);
-      }
-      
-      const { error } = await supabase
-        .from('push_tokens')
-        .upsert({
-          user_id: userId,
-          token,
-          platform,
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'user_id,token'
-        });
-
-      if (error) throw error;
-      
-      console.log('Push token saved successfully');
-    } catch (error) {
-      console.error('Error saving push token:', error);
-    }
-  }
-
-  // Remove push token (on logout)
-  async removePushToken(userId: string): Promise<void> {
-    try {
-      const token = await AsyncStorage.getItem('vanishvoice_push_token');
-      
-      if (token) {
-        const { error } = await supabase
-          .from('push_tokens')
-          .delete()
-          .eq('user_id', userId)
-          .eq('token', token);
-
-        if (error) throw error;
-        
-        await AsyncStorage.removeItem('vanishvoice_push_token');
-      }
-    } catch (error) {
-      console.error('Error removing push token:', error);
-    }
-  }
-
-  // Listen for notification interactions
-  setupNotificationListeners() {
-    // This listener is fired whenever a notification is received while the app is foregrounded
-    const notificationListener = Notifications.addNotificationReceivedListener(notification => {
-      console.log('Notification received:', notification);
-    });
-
-    // This listener is fired whenever a user taps on or interacts with a notification
-    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
-      console.log('Notification response:', response);
-      // Navigate to the appropriate screen based on notification data
-      const data = response.notification.request.content.data;
-      if (data.type === 'new_message') {
-        // Navigate to messages screen
-        // You'll need to implement navigation here
-      }
-    });
-
-    return () => {
-      notificationListener.remove();
-      responseListener.remove();
-    };
-  }
-
-  // Schedule a local notification (for testing)
-  async scheduleLocalNotification(title: string, body: string, data?: any) {
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title,
-        body,
-        data,
-        sound: true,
+// Send push notification via Supabase Edge Function
+export async function sendMessageNotification(
+  recipientId: string,
+  senderId: string,
+  senderName: string,
+  messageType: 'text' | 'voice' = 'text'
+) {
+  try {
+    // Call Edge Function to send push
+    const { data, error } = await supabase.functions.invoke('send-push-notification', {
+      body: {
+        recipient_id: recipientId,
+        title: 'New Message',
+        body: `${senderName} sent you a ${messageType} message`,
+        data: {
+          type: 'new_message',
+          sender_id: senderId,
+          sender_name: senderName,
+        },
       },
-      trigger: { seconds: 1 },
     });
+
+    if (error) {
+      console.error('Error sending push notification:', error);
+    } else {
+      console.log('[Push] Notification sent successfully to:', recipientId);
+    }
+  } catch (error) {
+    console.error('Failed to send push notification:', error);
   }
 }
 
-export default PushNotificationService.getInstance();
+// Handle notification interactions
+export function setupNotificationHandlers(navigation: any) {
+  // Handle notifications when app is in foreground
+  const foregroundSubscription = Notifications.addNotificationReceivedListener(
+    (notification) => {
+      console.log('Notification received in foreground:', notification);
+      
+      const data = notification.request.content.data as MessageNotificationData;
+      
+      if (data.type === 'new_message') {
+        // Update unread counts in UI
+        // The component will handle this via state updates
+      }
+    }
+  );
+
+  // Handle notification taps
+  const responseSubscription = Notifications.addNotificationResponseReceivedListener(
+    (response) => {
+      console.log('Notification tapped:', response);
+      
+      const data = response.notification.request.content.data as MessageNotificationData;
+      
+      if (data.type === 'new_message' && data.sender_id) {
+        // Navigate to chat with sender
+        navigation.navigate('FriendChat', {
+          friendId: data.sender_id,
+          friendName: data.sender_name || 'Friend',
+        });
+      }
+    }
+  );
+
+  return () => {
+    foregroundSubscription.remove();
+    responseSubscription.remove();
+  };
+}
+
+// Update badge count
+export async function updateBadgeCount(count: number) {
+  try {
+    await Notifications.setBadgeCountAsync(count);
+  } catch (error) {
+    console.error('Error setting badge count:', error);
+  }
+}
+
+// Register for push notifications
+async function registerForPushNotifications(userId: string): Promise<string | null> {
+  try {
+    // Check if we're on a physical device
+    if (!Device.isDevice) {
+      console.log('Push notifications require a physical device');
+      return null;
+    }
+
+    // Get existing permissions
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+
+    // Request permissions if not granted
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    if (finalStatus !== 'granted') {
+      console.log('Failed to get push token for push notification!');
+      return null;
+    }
+
+    // Get the push token
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? 
+                     Constants.easConfig?.projectId ?? 
+                     '@micksolo/VanishVoice'; // Fallback for Expo Go
+    
+    console.log('App ownership:', Constants.appOwnership);
+    console.log('SDK Version:', Constants.expoConfig?.sdkVersion);
+    
+    const token = await Notifications.getExpoPushTokenAsync({ projectId });
+    console.log('Push token:', token.data);
+
+    // Save token to database
+    const { error } = await supabase
+      .from('push_tokens')
+      .upsert({
+        user_id: userId,
+        token: token.data,
+        platform: Platform.OS,
+      }, {
+        onConflict: 'user_id,token'
+      });
+
+    if (error) {
+      console.error('Error saving push token:', error);
+    } else {
+      console.log('Push token saved successfully');
+    }
+
+    return token.data;
+  } catch (error) {
+    console.error('Error registering for push notifications:', error);
+    return null;
+  }
+}
+
+// Default export for compatibility
+export default {
+  registerForPushNotifications,
+  setupNotificationListeners: setupNotificationHandlers,
+  sendMessageNotification,
+  updateBadgeCount,
+};

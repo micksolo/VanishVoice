@@ -13,40 +13,34 @@
 ## Phase 1: MVP - Anonymous Chat ✅ COMPLETED
 *All features documented in CHANGELOG.md*
 
-## Phase 2: Unified Chat Experience + Account Recovery (1-2 weeks)
+## Phase 2: Account Recovery + Remaining Features (1-2 weeks)
 
-### Priority: Fix Chat UX Fragmentation 🎯
-**Current Problem**: Friends have fragmented messaging experience vs unified stranger chat
+### Current Priority: E2E Encryption for Friend Messages 🚨
+**CRITICAL SECURITY ISSUE**: Friend messages are currently stored in PLAIN TEXT
 
-- [ ] **Unified Friend Chat System** (25% complete)
-  - [x] Rename "Chats" tab to "Friends" ✅
-  - [x] Create `FriendChatScreen` (UI shell created) ✅
-  - [x] Create `FriendsListScreen` with username search ✅
-  - [ ] **Text Message Implementation** 🚨 CRITICAL
-    - [ ] Add `type` column to messages table (text/voice/video)
-    - [ ] Add `content` column for text message content
-    - [ ] Implement message saving to database
-    - [ ] Handle text message encryption
-  - [ ] **Fix Real-time Delivery** 🚨 CRITICAL
-    - [ ] Re-enable WebSocket transport in supabase.ts
-    - [ ] Fix real-time subscriptions
-    - [ ] Test message delivery between devices
-  - [ ] **Voice Message Support**
-    - [ ] Implement voice upload with encryption
-    - [ ] Add playback functionality
-    - [ ] Progress indicators for upload/download
-  - [ ] **Message History**
-    - [ ] Load historical messages on chat open
-    - [ ] Implement pagination for long conversations
-    - [ ] Add last message preview in friends list
-  - [ ] Consistent UX: Friends get same quality experience as strangers
+- [ ] **🚨 URGENT: E2E Encryption for Friend Messages** (2-3 days)
+  - [ ] Implement key exchange for friend relationships
+  - [ ] Encrypt text messages before database storage
+  - [ ] Decrypt messages on client side only
+  - [ ] Ensure server cannot read friend message content
+  
+- [ ] **Complete Friend Chat Features** (2-3 days)
+  - [ ] Voice message support in friend chat UI
+  - [ ] Progress indicators for upload/download
+  - [ ] Message history with pagination
+  - [ ] Last message preview in friends list (encrypted)
 
 ### Implementation Priority Order:
-1. **Complete Unified Friend Chat** (3-4 days) 🚧 IN PROGRESS
-   - Day 1: Database schema + text message persistence
-   - Day 2: Fix WebSocket/real-time delivery 
-   - Day 3: Voice messages + history + last message
-   - Day 4: Testing and bug fixes
+1. **🚨 URGENT: Implement E2E Encryption for Friend Messages** (2-3 days) 
+   - **SECURITY RISK**: Currently all friend messages stored in plain text
+   - Day 1: Implement friend key exchange system
+   - Day 2: Add client-side encryption/decryption for text messages
+   - Day 3: Test encryption between devices, audit security
+
+2. **Complete Friend Chat Features** (2-3 days) 
+   - Voice message encryption integration
+   - Message history with proper decryption
+   - Last message previews (encrypted)
 
 2. **Account Recovery System** (3-4 days) 
    - Critical for user retention
@@ -63,23 +57,53 @@
   - [ ] Screenshot prevention (Android) / detection (iOS)
   - [ ] Screen recording blocking
 
-### Technical Implementation Plan
-- [x] **Navigation Restructure** ✅
-  - [x] Update `AppNavigator.tsx`: "Messages" → "Friends" tab
-  - [x] Create `FriendsListScreen` (missing last message preview)
-  - [x] Create `FriendChatScreen` (UI only, no backend)
-- [ ] **Database Schema Updates** 🚨 URGENT
-  - [ ] Migration: Add `type` enum column (text/voice/video)
-  - [ ] Migration: Add `content` text column for messages
-  - [ ] Migration: Add `is_encrypted` boolean column
-  - [ ] Update RLS policies for text messages
-  - [ ] Add indexes for performance
-- [ ] **Implementation Tasks**
-  - [ ] Fix message sending in FriendChatScreen
+### Remaining Technical Tasks
+- [ ] **Encryption Implementation**
   - [ ] Implement message encryption for text
+  - [ ] Add friend key exchange system
+  - [ ] Update database for encrypted storage
+- [ ] **UX Enhancements**
   - [ ] Add typing indicators
   - [ ] Handle offline message queue
   - [ ] Add read receipts (optional)
+
+### 🚨 IMMEDIATE SECURITY CONCERNS
+**Current State**: Friend messages are stored and transmitted in PLAIN TEXT
+**Risk Level**: HIGH - Violates core privacy promise of the app
+**Action Required**: Implement E2E encryption before any production use
+
+**Anonymous Chat**: ✅ Already has proper E2E encryption via NaCl
+**Friend Chat**: ❌ NO ENCRYPTION - All messages readable by server/database
+
+### Friend Message Encryption Implementation Plan
+**Goal**: Match the security level of anonymous chat for friend messages
+
+**Technical Approach**:
+1. **Key Exchange for Friends**:
+   - Generate unique encryption keys when friendship is established
+   - Store friend's public key in friends table
+   - Use existing E2E encryption utilities from anonymous chat
+
+2. **Message Encryption Flow**:
+   - Encrypt message content client-side before sending
+   - Store only encrypted content in database
+   - Decrypt on recipient's device using shared keys
+   - Server cannot read message content
+
+3. **Database Changes**:
+   - Add `friend_public_key` column to friends table
+   - Ensure `content` column only stores encrypted data
+   - Add `nonce` column for encryption security
+
+4. **Code Changes**:
+   - Extend `AnonymousEncryption` utility for friend messages
+   - Update `FriendChatScreen` to encrypt before send/decrypt after receive
+   - Update message loading to handle decryption failures gracefully
+
+**Files to Modify**:
+- `src/utils/friendEncryption.ts` (new - based on AnonymousEncryption)
+- `src/screens/FriendChatScreen.tsx` (add encryption/decryption)
+- Database migration for friend key storage
 
 ### Account Recovery System (Priority: HIGH 🔥)
 **Why Priority**: Users losing accounts = bad retention, must fix before launch
@@ -161,11 +185,11 @@
 
 ## Technical Stack
 - **Frontend**: React Native (Expo) - iOS & Android only
-- **Backend**: Supabase
-- **Encryption**: NaCl (TweetNaCl)
-- **Payments**: Native IAP only (no Stripe needed)
-- **Analytics**: Mixpanel/Amplitude
-- **Push Notifications**: Expo Push Service
+- **Backend**: Supabase (PostgreSQL + Edge Functions + Realtime)
+- **Encryption**: NaCl (TweetNaCl) - Anonymous chat only currently
+- **Push Notifications**: Expo Push Service ✅ (Implemented)
+- **Payments**: Native IAP only (no Stripe needed) - Pending
+- **Analytics**: Mixpanel/Amplitude - Pending
 
 ## Design Guidelines
 - **Brand**: Fun, casual, young adult focused

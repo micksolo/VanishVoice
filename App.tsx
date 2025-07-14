@@ -13,11 +13,6 @@ function AppContent() {
   useEffect(() => {
     // Initialize secure storage
     initializeDeviceId();
-    
-    // Set up notification listeners
-    const cleanup = pushNotifications.setupNotificationListeners();
-    
-    return cleanup;
   }, []);
   
   return (

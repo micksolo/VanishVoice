@@ -1,95 +1,66 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.0';
 
-const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send'
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-interface PushMessage {
-  to: string
-  sound: 'default' | null
-  title: string
-  body: string
-  data?: Record<string, any>
-  badge?: number
-  categoryId?: string
+interface PushNotificationRequest {
+  recipient_id: string;
+  title: string;
+  body: string;
+  data?: Record<string, any>;
 }
 
-Deno.serve(async (req: Request) => {
+serve(async (req) => {
   try {
-    // Verify the request is authorized
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader) {
-      return new Response('Unauthorized', { status: 401 })
-    }
+    const { recipient_id, title, body, data } = await req.json() as PushNotificationRequest;
 
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    // Initialize Supabase client with service role key
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { recipientId, senderId, senderName, messageId } = await req.json()
-
-    // Get recipient's push tokens from database
-    const { data: pushTokens, error: tokenError } = await supabase
+    // Get recipient's push token from push_tokens table
+    const { data: tokenData, error: tokenError } = await supabase
       .from('push_tokens')
       .select('token')
-      .eq('user_id', recipientId)
+      .eq('user_id', recipient_id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
 
-    if (tokenError) {
-      throw new Error(`Failed to fetch push tokens: ${tokenError.message}`)
+    if (tokenError || !tokenData?.token) {
+      throw new Error('Push token not found for recipient');
     }
 
-    if (!pushTokens || pushTokens.length === 0) {
-      console.log('No push tokens found for recipient')
-      return new Response(JSON.stringify({ success: true, message: 'No tokens' }), {
-        headers: { 
-          'Content-Type': 'application/json',
-          'Connection': 'keep-alive'
-        },
-      })
-    }
-
-    // Prepare push messages
-    const messages: PushMessage[] = pushTokens.map(({ token }) => ({
-      to: token,
+    // Send push notification using Expo Push API
+    const message = {
+      to: tokenData.token,
       sound: 'default',
-      title: 'New Voice Message',
-      body: `${senderName || 'Someone'} sent you a voice message`,
-      data: {
-        type: 'new_message',
-        messageId,
-        senderId,
-      },
-      badge: 1,
-    }))
+      title,
+      body,
+      data: data || {},
+      priority: 'high',
+    };
 
-    // Send to Expo Push Notification service
-    const response = await fetch(EXPO_PUSH_URL, {
+    const response = await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',
       headers: {
-        'Accept': 'application/json',
-        'Accept-Encoding': 'gzip, deflate',
+        Accept: 'application/json',
+        'Accept-encoding': 'gzip, deflate',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(messages),
-    })
+      body: JSON.stringify(message),
+    });
 
-    const result = await response.json()
-    console.log('Push notification result:', result)
+    const result = await response.json();
 
-    return new Response(JSON.stringify({ success: true, result }), {
-      headers: { 
-        'Content-Type': 'application/json',
-        'Connection': 'keep-alive'
-      },
-    })
+    return new Response(
+      JSON.stringify({ success: true, result }),
+      { headers: { 'Content-Type': 'application/json' } }
+    );
   } catch (error) {
-    console.error('Error sending push notification:', error)
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { 
-        'Content-Type': 'application/json',
-        'Connection': 'keep-alive'
-      },
-    })
+    return new Response(
+      JSON.stringify({ success: false, error: error.message }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } }
+    );
   }
-})
+});

@@ -11,11 +11,16 @@ import {
   Modal,
   TextInput,
   Animated,
+  AppState,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AnonymousAuthContext';
-import { supabase } from '../services/supabase';
+import { supabase, debugRealtimeConnection } from '../services/supabase';
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useFocusEffect } from '@react-navigation/native';
+import RealtimeDebugger from '../components/RealtimeDebugger';
+import * as Notifications from 'expo-notifications';
+import { MessageNotificationData } from '../services/pushNotifications';
 
 interface Friend {
   id: string;
@@ -28,11 +33,7 @@ interface Friend {
     username?: string;
   };
   mutual?: boolean;
-  lastMessage?: {
-    content: string;
-    timestamp: string;
-    isVoice: boolean;
-  };
+  unreadCount?: number;
 }
 
 export default function FriendsListScreen({ navigation }: any) {
@@ -45,11 +46,207 @@ export default function FriendsListScreen({ navigation }: any) {
   const [searchError, setSearchError] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [outgoingRequests, setOutgoingRequests] = useState<any[]>([]);
+  const pollingInterval = useRef<NodeJS.Timeout | null>(null);
+  const focusPollingInterval = useRef<NodeJS.Timeout | null>(null);
+  const notifiedRequests = useRef<Set<string>>(new Set());
+  const [isScreenFocused, setIsScreenFocused] = useState(true);
+  const lastMessageChecksum = useRef<string>('');
+  const pollFrequency = useRef<number>(3000); // Start at 3 seconds
+
+  // Set up push notification listener
+  useEffect(() => {
+    if (!user) return;
+
+    // Listen for notifications when app is foregrounded
+    const notificationListener = Notifications.addNotificationReceivedListener((notification) => {
+      console.log('[FriendsListScreen] Push notification received:', notification);
+      
+      const data = notification.request.content.data as MessageNotificationData;
+      
+      if (data.type === 'new_message' && data.sender_id) {
+        console.log('[FriendsListScreen] New message notification from:', data.sender_id);
+        
+        // Update unread count for specific friend immediately
+        setFriends(prevFriends => 
+          prevFriends.map(friend => 
+            friend.friend_id === data.sender_id 
+              ? { ...friend, unreadCount: (friend.unreadCount || 0) + 1 }
+              : friend
+          )
+        );
+        
+        // Also update total unread count
+        updateUnreadCounts();
+      }
+    });
+
+    return () => {
+      notificationListener.remove();
+    };
+  }, [user]);
+
+  // Handle screen focus - load data once when focused, no polling
+  useFocusEffect(
+    React.useCallback(() => {
+      if (user) {
+        setIsScreenFocused(true);
+        
+        // Load data once when screen is focused
+        const loadScreenData = async () => {
+          await Promise.all([
+            loadFriends(),
+            loadPendingRequests(),
+            updateUnreadCounts()
+          ]);
+        };
+        
+        loadScreenData();
+        
+        // Only poll for friend request acceptances (temporary until push is fully working)
+        const friendRequestInterval = setInterval(() => {
+          checkAcceptedRequests();
+        }, 10000); // Check every 10 seconds for accepted requests only
+        
+        return () => {
+          setIsScreenFocused(false);
+          clearInterval(friendRequestInterval);
+        };
+      }
+    }, [user])
+  );
+
+  // Update unread counts for all friends with adaptive polling
+  const updateUnreadCounts = async () => {
+    if (!user) return;
+    
+    try {
+      // Get unread message summary in a single efficient query
+      const { data: unreadSummary, error } = await supabase
+        .from('messages')
+        .select('sender_id, id')
+        .eq('recipient_id', user.id)
+        .is('read_at', null)
+        .order('created_at', { ascending: false })
+        .limit(100); // Limit to prevent huge queries
+      
+      if (error) {
+        console.error('[FriendsListScreen] Error fetching unread counts:', error);
+        return;
+      }
+      
+      // Create a checksum to detect changes
+      const currentChecksum = JSON.stringify(unreadSummary?.map(m => m.id).sort() || []);
+      const hasChanges = currentChecksum !== lastMessageChecksum.current;
+      
+      if (hasChanges) {
+        console.log('[FriendsListScreen] New messages detected!');
+        lastMessageChecksum.current = currentChecksum;
+        
+        // Reset to fast polling when new messages arrive
+        pollFrequency.current = 3000;
+        
+        // Count messages per sender
+        const unreadCounts: Record<string, number> = {};
+        (unreadSummary || []).forEach(msg => {
+          unreadCounts[msg.sender_id] = (unreadCounts[msg.sender_id] || 0) + 1;
+        });
+        
+        // Update friends with new counts
+        setFriends(prevFriends => 
+          prevFriends.map(friend => ({
+            ...friend,
+            unreadCount: unreadCounts[friend.friend_id] || 0
+          }))
+        );
+        
+        console.log('[FriendsListScreen] Updated unread counts:', unreadCounts);
+      } else {
+        // No changes - gradually slow down polling
+        pollFrequency.current = Math.min(pollFrequency.current * 1.5, 30000); // Max 30 seconds
+        console.log('[FriendsListScreen] No new messages, slowing poll to', pollFrequency.current, 'ms');
+      }
+    } catch (error) {
+      console.error('[FriendsListScreen] Error updating unread counts:', error);
+    }
+  };
+
+  // Check for accepted friend requests periodically
+  const checkAcceptedRequests = async () => {
+    if (!user) return;
+    
+    try {
+      // Check outgoing requests that might have been accepted
+      const { data: sentRequests } = await supabase
+        .from('friend_requests')
+        .select('*')
+        .eq('from_user_id', user.id)
+        .eq('status', 'accepted')
+        .gt('responded_at', new Date(Date.now() - 60000).toISOString()); // Last minute
+
+      if (sentRequests && sentRequests.length > 0) {
+        console.log('[FriendsListScreen] Found recently accepted requests:', sentRequests.length);
+        
+        // Check if these are new (not already in friends list)
+        const currentFriendIds = friends.map(f => f.friend_id);
+        const newlyAccepted = sentRequests.filter(req => !currentFriendIds.includes(req.to_user_id));
+        
+        if (newlyAccepted.length > 0) {
+          // Filter out requests we've already notified about
+          const unnotifiedRequests = newlyAccepted.filter(req => !notifiedRequests.current.has(req.id));
+          
+          if (unnotifiedRequests.length > 0) {
+            console.log('[FriendsListScreen] New friends detected via polling!');
+            loadFriends();
+            
+            // Get usernames for notification
+            for (const request of unnotifiedRequests) {
+              // Mark as notified
+              notifiedRequests.current.add(request.id);
+              
+              const { data: userData } = await supabase
+                .from('users')
+                .select('username')
+                .eq('id', request.to_user_id)
+                .single();
+                
+              if (userData) {
+                Alert.alert(
+                  'Friend Request Accepted! 🎉',
+                  `${userData.username} accepted your friend request!`
+                );
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[FriendsListScreen] Error checking accepted requests:', error);
+    }
+  };
+
+  // Handle app state changes
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: string) => {
+      console.log('[FriendsListScreen] App state changed to:', nextAppState);
+      if (nextAppState === 'active' && isScreenFocused) {
+        // App became active and screen is focused - refresh data
+        loadFriends();
+        loadPendingRequests();
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription?.remove();
+  }, [isScreenFocused, user]);
 
   useEffect(() => {
     if (user) {
       loadFriends();
       loadPendingRequests();
+      
+      // Start background polling for accepted requests (less frequent)
+      pollingInterval.current = setInterval(checkAcceptedRequests, 15000); // Check every 15 seconds
       
       // Subscribe to friend requests (incoming)
       const requestsSubscription = supabase
@@ -62,8 +259,27 @@ export default function FriendsListScreen({ navigation }: any) {
             table: 'friend_requests',
             filter: `to_user_id=eq.${user.id}`
           },
-          (payload) => {
-            console.log('Friend request change (incoming):', payload);
+          async (payload) => {
+            // Show alert for new friend requests
+            if (payload.eventType === 'INSERT' && payload.new.status === 'pending') {
+              // Get sender's username
+              const { data: sender } = await supabase
+                .from('users')
+                .select('username')
+                .eq('id', payload.new.from_user_id)
+                .single();
+              
+              if (sender) {
+                Alert.alert(
+                  'New Friend Request! 👋',
+                  `${sender.username} wants to be your friend`,
+                  [
+                    { text: 'View', onPress: () => loadPendingRequests() }
+                  ]
+                );
+              }
+            }
+            
             // Reload pending requests when there's a change
             loadPendingRequests();
           }
@@ -82,10 +298,8 @@ export default function FriendsListScreen({ navigation }: any) {
             filter: `from_user_id=eq.${user.id}`
           },
           (payload) => {
-            console.log('Friend request update (outgoing):', payload);
             // If request was accepted, reload friends and show notification
-            if (payload.new.status === 'accepted') {
-              console.log('Friend request accepted! Reloading friends...');
+            if (payload.new && payload.new.status === 'accepted') {
               loadFriends();
               
               // Get the username of who accepted
@@ -107,7 +321,7 @@ export default function FriendsListScreen({ navigation }: any) {
         )
         .subscribe();
 
-      // Subscribe to friends table changes
+      // Subscribe to friends table changes (when this user's friendships change)
       const friendsSubscription = supabase
         .channel(`friends:${user.id}`)
         .on(
@@ -119,9 +333,121 @@ export default function FriendsListScreen({ navigation }: any) {
             filter: `user_id=eq.${user.id}`
           },
           (payload) => {
-            console.log('Friends list change:', payload);
-            // Reload friends when there's a change
             loadFriends();
+          }
+        )
+        .subscribe();
+
+      // Subscribe to when this user is removed as someone else's friend
+      const friendRemovedSubscription = supabase
+        .channel(`friend-removed:${user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'friends',
+            filter: `friend_id=eq.${user.id}`
+          },
+          (payload) => {
+            Alert.alert(
+              'Friend Removed',
+              'A friend has removed you from their friends list.',
+              [{ text: 'OK' }]
+            );
+            loadFriends();
+          }
+        )
+        .subscribe();
+
+      // Subscribe to new messages to update unread counts
+      const messagesSubscription = supabase
+        .channel(`new-messages:${user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'messages',
+            filter: `recipient_id=eq.${user.id}`
+          },
+          async (payload) => {
+            console.log('[FriendsListScreen] 🔔 NEW MESSAGE EVENT RECEIVED!');
+            console.log('[FriendsListScreen] New message from:', payload.new.sender_id);
+            console.log('[FriendsListScreen] Message ID:', payload.new.id);
+            console.log('[FriendsListScreen] Message type:', payload.new.type);
+            console.log('[FriendsListScreen] Full payload:', JSON.stringify(payload, null, 2));
+            
+            // Update unread count for the specific friend
+            const senderId = payload.new.sender_id;
+            
+            // Get updated unread count for this friend
+            const { count: unreadCount } = await supabase
+              .from('messages')
+              .select('id', { count: 'exact', head: true })
+              .eq('sender_id', senderId)
+              .eq('recipient_id', user.id)
+              .is('read_at', null);
+            
+            console.log('[FriendsListScreen] Real-time unread count for sender:', senderId, 'is:', unreadCount);
+            
+            // Update the specific friend's unread count
+            setFriends(prevFriends => {
+              console.log('[FriendsListScreen] Updating friends list with new unread count');
+              const updated = prevFriends.map(friend => 
+                friend.friend_id === senderId 
+                  ? { ...friend, unreadCount: unreadCount || 0 }
+                  : friend
+              );
+              console.log('[FriendsListScreen] Friends list updated via real-time event');
+              return updated;
+            });
+          }
+        )
+        .subscribe((status) => {
+          console.log('[FriendsListScreen] Messages subscription status:', status);
+          if (status === 'SUBSCRIBED') {
+            console.log('[FriendsListScreen] Successfully subscribed to new messages channel');
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error('[FriendsListScreen] Channel subscription error');
+          } else if (status === 'TIMED_OUT') {
+            console.error('[FriendsListScreen] Channel subscription timed out');
+          }
+        });
+
+      // Subscribe to message updates (when messages are marked as read)
+      const messagesUpdateSubscription = supabase
+        .channel(`message-updates:${user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'messages',
+            filter: `recipient_id=eq.${user.id}`
+          },
+          async (payload) => {
+            // If message was just marked as read, update the count
+            if (payload.new.read_at && !payload.old.read_at) {
+              const senderId = payload.new.sender_id;
+              
+              // Get updated unread count for this friend
+              const { count: unreadCount } = await supabase
+                .from('messages')
+                .select('id', { count: 'exact', head: true })
+                .eq('sender_id', senderId)
+                .eq('recipient_id', user.id)
+                .is('read_at', null);
+              
+              // Update the specific friend's unread count
+              setFriends(prevFriends => 
+                prevFriends.map(friend => 
+                  friend.friend_id === senderId 
+                    ? { ...friend, unreadCount: unreadCount || 0 }
+                    : friend
+                )
+              );
+            }
           }
         )
         .subscribe();
@@ -130,6 +456,22 @@ export default function FriendsListScreen({ navigation }: any) {
         requestsSubscription.unsubscribe();
         outgoingRequestsSubscription.unsubscribe();
         friendsSubscription.unsubscribe();
+        friendRemovedSubscription.unsubscribe();
+        messagesSubscription.unsubscribe();
+        messagesUpdateSubscription.unsubscribe();
+        
+        // Clear polling intervals
+        if (pollingInterval.current) {
+          clearInterval(pollingInterval.current);
+          pollingInterval.current = null;
+        }
+        if (focusPollingInterval.current) {
+          clearInterval(focusPollingInterval.current);
+          focusPollingInterval.current = null;
+        }
+        
+        // Clear notified requests when component unmounts
+        notifiedRequests.current.clear();
       };
     }
   }, [user]);
@@ -155,32 +497,33 @@ export default function FriendsListScreen({ navigation }: any) {
 
       if (error) throw error;
 
-      // Load last message for each friend
-      const friendsWithLastMessage = await Promise.all(
-        (friendsData || []).map(async (friend) => {
-          // Get the last message between this user and friend
-          const { data: lastMessage } = await supabase
-            .from('messages')
-            .select('*')
-            .or(`and(sender_id.eq.${user.id},recipient_id.eq.${friend.friend_id}),and(sender_id.eq.${friend.friend_id},recipient_id.eq.${user.id})`)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single();
+      // Get all unread messages in a single query
+      const friendIds = (friendsData || []).map(f => f.friend_id);
+      
+      const { data: unreadMessages, error: unreadError } = await supabase
+        .from('messages')
+        .select('sender_id')
+        .eq('recipient_id', user.id)
+        .in('sender_id', friendIds)
+        .is('read_at', null);
+      
+      if (unreadError) {
+        console.error('Error loading unread counts:', unreadError);
+      }
+      
+      // Count messages per sender
+      const unreadCounts: Record<string, number> = {};
+      (unreadMessages || []).forEach(msg => {
+        unreadCounts[msg.sender_id] = (unreadCounts[msg.sender_id] || 0) + 1;
+      });
+      
+      // Merge unread counts with friends data
+      const friendsWithUnreadCount = (friendsData || []).map(friend => ({
+        ...friend,
+        unreadCount: unreadCounts[friend.friend_id] || 0
+      }));
 
-          return {
-            ...friend,
-            lastMessage: lastMessage ? {
-              content: lastMessage.type === 'text' 
-                ? lastMessage.content 
-                : '🎤 Voice message',
-              timestamp: new Date(lastMessage.created_at),
-              isFromMe: lastMessage.sender_id === user.id
-            } : null
-          };
-        })
-      );
-
-      setFriends(friendsWithLastMessage);
+      setFriends(friendsWithUnreadCount);
     } catch (error) {
       console.error('Error loading friends:', error);
       Alert.alert('Error', 'Failed to load friends');
@@ -216,10 +559,10 @@ export default function FriendsListScreen({ navigation }: any) {
 
       if (error) throw error;
 
-      console.log('[FriendsListScreen] Loaded pending requests:', requests?.length || 0);
       setPendingRequests(requests || []);
     } catch (error) {
       console.error('Error loading friend requests:', error);
+      Alert.alert('Error', 'Failed to load friend requests');
     }
   };
 
@@ -293,32 +636,39 @@ export default function FriendsListScreen({ navigation }: any) {
         return;
       }
 
-      // Check if there's already any request between these users
-      const { data: existingRequest } = await supabase
+      // Check if there's already any request between these users (in both directions)
+      const { data: existingRequests } = await supabase
         .from('friend_requests')
-        .select('id, status, from_user_id')
-        .or(`and(from_user_id.eq.${user.id},to_user_id.eq.${targetUser.id}),and(from_user_id.eq.${targetUser.id},to_user_id.eq.${user.id})`)
-        .single();
+        .select('id, status, from_user_id, to_user_id')
+        .or(`and(from_user_id.eq.${user.id},to_user_id.eq.${targetUser.id}),and(from_user_id.eq.${targetUser.id},to_user_id.eq.${user.id})`);
 
-      if (existingRequest) {
-        if (existingRequest.status === 'pending') {
-          if (existingRequest.from_user_id === user.id) {
-            setSearchError('You already sent a friend request to this user');
-          } else {
-            setSearchError('This user already sent you a friend request - check your pending requests');
-          }
-        } else if (existingRequest.status === 'accepted') {
-          setSearchError('You are already friends with this user');
-        } else if (existingRequest.status === 'rejected') {
-          // Allow re-sending if previously rejected
-          // Delete the old rejected request first
-          await supabase
+      if (existingRequests && existingRequests.length > 0) {
+        // Delete all rejected requests between these users
+        const rejectedRequests = existingRequests.filter(req => req.status === 'rejected');
+        if (rejectedRequests.length > 0) {
+          const { error: deleteError } = await supabase
             .from('friend_requests')
             .delete()
-            .eq('id', existingRequest.id);
+            .in('id', rejectedRequests.map(req => req.id));
+          
+          if (deleteError) {
+            console.error('Error deleting rejected requests:', deleteError);
+          }
         }
         
-        if (existingRequest.status !== 'rejected') {
+        // Check for non-rejected requests
+        const activeRequests = existingRequests.filter(req => req.status !== 'rejected');
+        if (activeRequests.length > 0) {
+          const request = activeRequests[0];
+          if (request.status === 'pending') {
+            if (request.from_user_id === user.id) {
+              setSearchError('You already sent a friend request to this user');
+            } else {
+              setSearchError('This user already sent you a friend request - check your pending requests');
+            }
+          } else if (request.status === 'accepted') {
+            setSearchError('You are already friends with this user');
+          }
           return;
         }
       }
@@ -377,16 +727,34 @@ export default function FriendsListScreen({ navigation }: any) {
           style: 'destructive',
           onPress: async () => {
             try {
-              // Only remove the friendship from this user's perspective
-              const { error: friendError } = await supabase
+              console.log('[removeFriend] Removing bidirectional friendship:', friend.friend_id);
+              console.log('[removeFriend] Current user:', user.id);
+              
+              // Remove BOTH directions of the friendship
+              const { error: friendError1, count: count1 } = await supabase
                 .from('friends')
                 .delete()
                 .match({
                   user_id: user.id,
                   friend_id: friend.friend_id
-                });
+                })
+                .select();
 
-              if (friendError) throw friendError;
+              console.log('[removeFriend] Delete 1st direction - error:', friendError1, 'count:', count1);
+              
+              const { error: friendError2, count: count2 } = await supabase
+                .from('friends')
+                .delete()
+                .match({
+                  user_id: friend.friend_id,
+                  friend_id: user.id
+                })
+                .select();
+
+              console.log('[removeFriend] Delete 2nd direction - error:', friendError2, 'count:', count2);
+
+              if (friendError1) throw friendError1;
+              if (friendError2) throw friendError2;
 
               // Also clean up any friend requests between these users
               const { error: requestError } = await supabase
@@ -398,8 +766,13 @@ export default function FriendsListScreen({ navigation }: any) {
                 console.error('Error cleaning up friend requests:', requestError);
               }
 
-              Alert.alert('Friend Removed', `${friendName} has been removed from your friends list.`);
-              loadFriends();
+              // Update local state immediately
+              setFriends(prevFriends => prevFriends.filter(f => f.friend_id !== friend.friend_id));
+              
+              Alert.alert('Friend Removed', `${friendName} has been removed from both friends lists.`);
+              
+              // Then reload from database to ensure consistency
+              setTimeout(() => loadFriends(), 500);
             } catch (error) {
               console.error('Error removing friend:', error);
               Alert.alert('Error', 'Failed to remove friend');
@@ -412,6 +785,8 @@ export default function FriendsListScreen({ navigation }: any) {
 
   const handleFriendRequest = async (requestId: string, fromUserId: string, accept: boolean) => {
     try {
+      console.log('[handleFriendRequest] Processing request:', { requestId, fromUserId, accept });
+      
       if (accept) {
         // Update request status to accepted
         const { error: updateError } = await supabase
@@ -422,32 +797,41 @@ export default function FriendsListScreen({ navigation }: any) {
           })
           .eq('id', requestId);
 
-        if (updateError) throw updateError;
-
-        // Create bidirectional friendship
-        // Insert them separately to ensure both are created
-        const { error: friendError1 } = await supabase
-          .from('friends')
-          .insert({
-            user_id: user.id,
-            friend_id: fromUserId
-          });
-
-        if (friendError1) {
-          console.error('Error creating first friendship:', friendError1);
-          throw friendError1;
+        if (updateError) {
+          console.error('[handleFriendRequest] Error updating request:', updateError);
+          throw updateError;
         }
 
-        const { error: friendError2 } = await supabase
-          .from('friends')
-          .insert({
-            user_id: fromUserId,
-            friend_id: user.id
-          });
+        console.log('[handleFriendRequest] Request marked as accepted, creating bidirectional friendships...');
 
-        if (friendError2) {
-          console.error('Error creating second friendship:', friendError2);
-          throw friendError2;
+        // Create bidirectional friendship using batch insert with conflict handling
+        const friendships = [
+          { user_id: user.id, friend_id: fromUserId },
+          { user_id: fromUserId, friend_id: user.id }
+        ];
+
+        for (let i = 0; i < friendships.length; i++) {
+          const friendship = friendships[i];
+          const direction = i === 0 ? 'user -> friend' : 'friend -> user';
+          
+          const { error: friendError, data: friendData } = await supabase
+            .from('friends')
+            .insert(friendship)
+            .select()
+            .single();
+
+          if (friendError) {
+            console.error(`[handleFriendRequest] Error creating ${direction} friendship:`, friendError);
+            // Check if it's a duplicate key error
+            if (friendError.code === '23505') {
+              console.log(`[handleFriendRequest] Friendship already exists (${direction})`);
+            } else {
+              // If it's not a duplicate, this is a real error
+              throw friendError;
+            }
+          } else {
+            console.log(`[handleFriendRequest] Created ${direction} friendship:`, friendData);
+          }
         }
 
         Alert.alert('Success', 'Friend request accepted!');
@@ -475,7 +859,6 @@ export default function FriendsListScreen({ navigation }: any) {
   const renderFriend = ({ item }: { item: Friend }) => {
     const friendName = item.friend?.username || item.nickname || 'Anonymous User';
     const displayName = friendName.startsWith('User ') ? 'Anonymous User' : friendName;
-    const lastMessage = item.lastMessage;
 
     const renderRightActions = () => {
       return (
@@ -519,20 +902,15 @@ export default function FriendsListScreen({ navigation }: any) {
                 @{item.friend.username}
               </Text>
             )}
-            
-            {lastMessage && (
-              <View style={styles.lastMessageContainer}>
-                <Text style={styles.lastMessage} numberOfLines={1}>
-                  {lastMessage.isFromMe ? 'You: ' : ''}{lastMessage.content}
-                </Text>
-                <Text style={styles.timestamp}>
-                  {formatTimestamp(lastMessage.timestamp)}
-                </Text>
-              </View>
-            )}
           </View>
           
-          <Ionicons name="chevron-forward" size={20} color="#ccc" />
+          {item.unreadCount && item.unreadCount > 0 ? (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadBadgeText}>
+                {item.unreadCount > 99 ? '99+' : item.unreadCount}
+              </Text>
+            </View>
+          ) : null}
         </TouchableOpacity>
       </Swipeable>
     );
@@ -691,6 +1069,15 @@ export default function FriendsListScreen({ navigation }: any) {
           </View>
         </SafeAreaView>
       </Modal>
+      
+      {/* Push/Polling Status Indicator */}
+      <View style={styles.statusIndicator}>
+        <View style={[styles.statusDot, { backgroundColor: '#4ECDC4' }]} />
+        <Text style={styles.statusText}>Push Notifications Active</Text>
+      </View>
+      
+      {/* Realtime Debugger */}
+      <RealtimeDebugger />
       </SafeAreaView>
     </GestureHandlerRootView>
   );
@@ -762,24 +1149,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#666',
     marginTop: 2,
-  },
-  lastMessageContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-    gap: 4,
-  },
-  messageIcon: {
-    marginRight: 2,
-  },
-  lastMessage: {
-    fontSize: 14,
-    color: '#666',
-    flex: 1,
-  },
-  timestamp: {
-    fontSize: 12,
-    color: '#999',
   },
   emptyContainer: {
     flex: 1,
@@ -986,6 +1355,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   requestBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  unreadBadge: {
+    backgroundColor: '#4ECDC4',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    minWidth: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unreadBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  statusIndicator: {
+    position: 'absolute',
+    bottom: 150,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 8,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  statusText: {
     color: '#fff',
     fontSize: 12,
     fontWeight: '600',

@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AnonymousAuthContext';
+import { sendMessageNotification } from '../services/pushNotifications';
 
 interface Message {
   id: string;
@@ -39,12 +40,24 @@ export default function FriendChatScreen({ route, navigation }: any) {
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const recordingInterval = useRef<NodeJS.Timeout | null>(null);
+  const messagePollingInterval = useRef<NodeJS.Timeout | null>(null);
   const flatListRef = useRef<FlatList>(null);
+  const lastMessageCount = useRef<number>(0);
 
   useEffect(() => {
+    let cleanup: (() => void) | undefined;
+    
     if (user && friendId) {
-      initializeChat();
+      initializeChat().then((cleanupFn) => {
+        cleanup = cleanupFn;
+      });
     }
+    
+    return () => {
+      if (cleanup) {
+        cleanup();
+      }
+    };
   }, [user, friendId]);
 
   useEffect(() => {
@@ -71,9 +84,19 @@ export default function FriendChatScreen({ route, navigation }: any) {
       await loadMessages();
       
       // Subscribe to new messages
-      subscribeToMessages();
+      const unsubscribe = subscribeToMessages();
+      
+      // Start polling for new messages as fallback
+      messagePollingInterval.current = setInterval(checkForNewMessages, 3000);
       
       setLoading(false);
+      
+      return () => {
+        unsubscribe();
+        if (messagePollingInterval.current) {
+          clearInterval(messagePollingInterval.current);
+        }
+      };
     } catch (error) {
       console.error('Error initializing chat:', error);
       Alert.alert('Error', 'Failed to initialize chat');
@@ -84,8 +107,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
     try {
       console.log('[FriendChat] Loading messages between user and friend:', user?.id, friendId);
       
-      // For now, we'll load from the existing messages table
-      // TODO: Extend this to support text messages and real-time delivery
+      // Load messages from the database
       const { data, error } = await supabase
         .from('messages')
         .select('*')
@@ -99,6 +121,24 @@ export default function FriendChatScreen({ route, navigation }: any) {
 
       console.log('[FriendChat] Loaded messages:', data?.length || 0);
 
+      // Mark all messages from friend as read
+      if (data && data.length > 0) {
+        const unreadMessageIds = data
+          .filter(msg => msg.sender_id === friendId && !msg.read_at)
+          .map(msg => msg.id);
+
+        if (unreadMessageIds.length > 0) {
+          const { error: updateError } = await supabase
+            .from('messages')
+            .update({ read_at: new Date().toISOString() })
+            .in('id', unreadMessageIds);
+
+          if (updateError) {
+            console.error('[FriendChat] Error marking messages as read:', updateError);
+          }
+        }
+      }
+
       // Convert to our message format
       const convertedMessages: Message[] = (data || []).map(msg => ({
         id: msg.id,
@@ -110,17 +150,64 @@ export default function FriendChatScreen({ route, navigation }: any) {
       }));
 
       setMessages(convertedMessages);
+      lastMessageCount.current = convertedMessages.length;
     } catch (error) {
       console.error('[FriendChat] Error in loadMessages:', error);
     }
   };
 
+  const checkForNewMessages = async () => {
+    if (!user) return;
+    
+    try {
+      // Check for new messages since last check
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .or(`and(sender_id.eq.${user?.id},recipient_id.eq.${friendId}),and(sender_id.eq.${friendId},recipient_id.eq.${user?.id})`)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('[FriendChat] Error checking for new messages:', error);
+        return;
+      }
+
+      const currentCount = data?.length || 0;
+      
+      if (currentCount > lastMessageCount.current) {
+        console.log('[FriendChat] New messages detected via polling!');
+        
+        // Convert new messages
+        const convertedMessages: Message[] = (data || []).map(msg => ({
+          id: msg.id,
+          type: msg.type || 'voice',
+          content: msg.type === 'text' ? msg.content : (msg.media_path || ''),
+          isMine: msg.sender_id === user?.id,
+          timestamp: new Date(msg.created_at),
+          status: 'sent'
+        }));
+
+        setMessages(convertedMessages);
+        lastMessageCount.current = currentCount;
+        flatListRef.current?.scrollToEnd();
+      }
+    } catch (error) {
+      console.error('[FriendChat] Error in checkForNewMessages:', error);
+    }
+  };
+
   const subscribeToMessages = () => {
     console.log('[FriendChat] Setting up message subscription');
+    console.log('[FriendChat] User ID:', user?.id);
+    console.log('[FriendChat] Friend ID:', friendId);
+    
+    // Create a consistent channel name regardless of who is user/friend
+    const channelName = [user?.id, friendId].sort().join('-');
+    console.log('[FriendChat] Channel name:', `friend-chat:${channelName}`);
     
     // Subscribe to new messages between this user and friend
     const subscription = supabase
-      .channel(`friend-chat:${user?.id}-${friendId}`)
+      .channel(`friend-chat:${channelName}`)
       .on(
         'postgres_changes',
         {
@@ -192,6 +279,28 @@ export default function FriendChatScreen({ route, navigation }: any) {
         })
         .select()
         .single();
+
+      if (!error && sentMessage) {
+        // Send push notification to recipient
+        try {
+          // Get current user's username
+          const { data: userData } = await supabase
+            .from('users')
+            .select('username')
+            .eq('id', user.id)
+            .single();
+          
+          await sendMessageNotification(
+            friendId,
+            user.id,
+            userData?.username || 'Someone',
+            'text'
+          );
+        } catch (pushError) {
+          console.log('[FriendChat] Push notification failed:', pushError);
+          // Don't fail the message send if push fails
+        }
+      }
 
       if (error) {
         console.error('[FriendChat] Error sending message:', error);

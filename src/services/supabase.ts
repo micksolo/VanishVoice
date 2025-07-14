@@ -16,6 +16,34 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   realtime: {
     params: {
       eventsPerSecond: 10
-    }
+    },
+    // Add timeout and heartbeat settings
+    timeout: 10000,
+    heartbeatIntervalMs: 30000,
   },
 });
+
+// Debug helper to check realtime connection
+export const debugRealtimeConnection = () => {
+  const channel = supabase.channel('debug-test');
+  
+  channel
+    .on('system', { event: '*' }, (payload) => {
+      console.log('[Realtime Debug] System event:', payload);
+    })
+    .on('presence', { event: 'sync' }, () => {
+      console.log('[Realtime Debug] Presence sync');
+    })
+    .subscribe((status, err) => {
+      console.log('[Realtime Debug] Channel status:', status);
+      if (err) console.error('[Realtime Debug] Channel error:', err);
+      
+      if (status === 'SUBSCRIBED') {
+        console.log('[Realtime Debug] Successfully connected to realtime!');
+        // Clean up test channel
+        setTimeout(() => {
+          channel.unsubscribe();
+        }, 5000);
+      }
+    });
+};
