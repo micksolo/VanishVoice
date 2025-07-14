@@ -67,11 +67,16 @@ export default function FriendChatScreen({ route, navigation }: any) {
     // Cleanup audio on unmount
     return () => {
       if (sound) {
-        sound.unloadAsync();
+        sound.unloadAsync().catch(err => console.log('Error unloading sound:', err));
       }
       if (recording) {
-        recording.stopAndUnloadAsync();
+        recording.stopAndUnloadAsync().catch(err => console.log('Error stopping recording:', err));
       }
+      if (recordingInterval.current) {
+        clearInterval(recordingInterval.current);
+      }
+      setIsRecording(false);
+      setRecordingDuration(0);
     };
   }, [sound, recording]);
 
@@ -456,6 +461,16 @@ export default function FriendChatScreen({ route, navigation }: any) {
 
   const startRecording = async () => {
     try {
+      // Clean up any existing recording first
+      if (recording) {
+        try {
+          await recording.stopAndUnloadAsync();
+        } catch (err) {
+          console.log('Error cleaning up previous recording:', err);
+        }
+        setRecording(null);
+      }
+
       // Request permissions
       const { status } = await Audio.requestPermissionsAsync();
       if (status !== 'granted') {
@@ -471,11 +486,11 @@ export default function FriendChatScreen({ route, navigation }: any) {
       });
 
       // Start recording
-      const { recording } = await Audio.Recording.createAsync(
+      const { recording: newRecording } = await Audio.Recording.createAsync(
         Audio.RecordingOptionsPresets.HIGH_QUALITY
       );
 
-      setRecording(recording);
+      setRecording(newRecording);
       setIsRecording(true);
       setRecordingDuration(0);
 
@@ -486,6 +501,8 @@ export default function FriendChatScreen({ route, navigation }: any) {
     } catch (error) {
       console.error('Error starting recording:', error);
       Alert.alert('Error', 'Failed to start recording');
+      setIsRecording(false);
+      setRecording(null);
     }
   };
 
