@@ -717,8 +717,13 @@ export default function FriendsListScreen({ navigation }: any) {
           user.id,
           userData?.username || 'Someone'
         );
-      } catch (pushError) {
-        console.log('[FriendsListScreen] Push notification failed:', pushError);
+      } catch (pushError: any) {
+        console.error('[FriendsListScreen] Push notification failed:', pushError);
+        console.error('[FriendsListScreen] Push error details:', {
+          message: pushError?.message,
+          error: pushError?.error,
+          code: pushError?.code
+        });
         // Don't fail the friend request if push fails
       }
 
@@ -733,9 +738,22 @@ export default function FriendsListScreen({ navigation }: any) {
         `Your friend request has been sent to ${targetUser.username}. They'll need to accept it before you can start chatting.`,
         [{ text: 'OK' }]
       );
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error adding friend:', error);
-      Alert.alert('Error', 'Failed to add friend');
+      
+      // Show more specific error message
+      let errorMessage = 'Failed to add friend';
+      
+      // Check for duplicate friend request error
+      if (error?.code === '23505' && error?.message?.includes('friend_requests')) {
+        errorMessage = `You already have a pending friend request with ${targetUser.username}. Please wait for them to respond.`;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      } else if (error?.error) {
+        errorMessage = error.error;
+      }
+      
+      Alert.alert('Friend Request Error', errorMessage);
     } finally {
       setIsSearching(false);
     }
@@ -883,6 +901,16 @@ export default function FriendsListScreen({ navigation }: any) {
           // Don't fail the whole operation, encryption can be retried later
         }
 
+        // Clean up the accepted friend request
+        const { error: cleanupError } = await supabase
+          .from('friend_requests')
+          .delete()
+          .eq('id', requestId);
+        
+        if (cleanupError) {
+          console.error('[handleFriendRequest] Error cleaning up accepted request:', cleanupError);
+        }
+        
         Alert.alert('Success', 'Friend request accepted!');
       } else {
         // Update request status to rejected
