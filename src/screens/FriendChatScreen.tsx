@@ -18,6 +18,7 @@ import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AnonymousAuthContext';
 import { sendMessageNotification } from '../services/pushNotifications';
 import FriendEncryption from '../utils/friendEncryption';
+import { uploadEncryptedAudio, downloadAndDecryptAudio } from '../utils/encryptedAudioStorage';
 
 interface Message {
   id: string;
@@ -37,6 +38,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
   
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
@@ -503,12 +505,12 @@ export default function FriendChatScreen({ route, navigation }: any) {
 
       if (!uri) return;
 
-      // TODO: Upload and encrypt voice message
-      // For now, just add a placeholder
+      // Add optimistic message
+      const tempId = Date.now().toString();
       const voiceMessage: Message = {
-        id: Date.now().toString(),
+        id: tempId,
         type: 'voice',
-        content: uri, // Local URI for now
+        content: uri, // Local URI temporarily
         isMine: true,
         timestamp: new Date(),
         status: 'sending'
@@ -517,7 +519,82 @@ export default function FriendChatScreen({ route, navigation }: any) {
       setMessages(prev => [...prev, voiceMessage]);
       flatListRef.current?.scrollToEnd();
 
-      console.log('[FriendChat] Would upload voice message:', uri);
+      // Upload and encrypt voice message
+      const uploadResult = await uploadEncryptedAudio(uri, user.id);
+      
+      if (!uploadResult) {
+        // Update message status to failed
+        setMessages(prev => 
+          prev.map(msg => 
+            msg.id === tempId 
+              ? { ...msg, status: 'failed' as const }
+              : msg
+          )
+        );
+        Alert.alert('Error', 'Failed to upload voice message');
+        return;
+      }
+
+      // Send to database with encryption info
+      const { data: sentMessage, error } = await supabase
+        .from('messages')
+        .insert({
+          sender_id: user.id,
+          recipient_id: friendId,
+          type: 'voice',
+          media_path: uploadResult.path,
+          encryption_key: uploadResult.encryptionKey,
+          iv: uploadResult.iv,
+          is_encrypted: true,
+          expiry_rule: { type: 'none' }
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[FriendChat] Error sending voice message:', error);
+        setMessages(prev => 
+          prev.map(msg => 
+            msg.id === tempId 
+              ? { ...msg, status: 'failed' as const }
+              : msg
+          )
+        );
+        Alert.alert('Error', 'Failed to send voice message');
+        return;
+      }
+
+      // Update message with real ID and sent status
+      setMessages(prev => 
+        prev.map(msg => 
+          msg.id === tempId 
+            ? { 
+                ...msg, 
+                id: sentMessage.id,
+                content: uploadResult.path, // Update to server path
+                status: 'sent' as const 
+              }
+            : msg
+        )
+      );
+
+      // Send push notification
+      try {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('username')
+          .eq('id', user.id)
+          .single();
+        
+        await sendMessageNotification(
+          friendId,
+          user.id,
+          userData?.username || 'Someone',
+          'voice'
+        );
+      } catch (pushError) {
+        console.log('[FriendChat] Push notification failed:', pushError);
+      }
 
     } catch (error) {
       console.error('Error sending voice message:', error);
@@ -525,14 +602,59 @@ export default function FriendChatScreen({ route, navigation }: any) {
     }
   };
 
-  const playVoiceMessage = async (uri: string) => {
+  const playVoiceMessage = async (messageId: string) => {
     try {
+      setPlayingMessageId(messageId);
+      
       if (sound) {
         await sound.unloadAsync();
       }
 
+      // Find the message to get encryption info
+      const message = messages.find(m => m.id === messageId);
+      if (!message) {
+        throw new Error('Message not found');
+      }
+
+      let audioUri: string;
+
+      // Check if this is a local URI (for messages just sent)
+      if (message.content.startsWith('file://')) {
+        audioUri = message.content;
+      } else {
+        // This is a server path, need to download and decrypt
+        // Get the message details from database to get encryption info
+        const { data: msgData, error } = await supabase
+          .from('messages')
+          .select('media_path, encryption_key, iv')
+          .eq('id', messageId)
+          .single();
+
+        if (error || !msgData) {
+          throw new Error('Failed to get message details');
+        }
+
+        if (!msgData.encryption_key || !msgData.iv) {
+          throw new Error('Missing encryption info');
+        }
+
+        // Download and decrypt the audio
+        const decryptedUri = await downloadAndDecryptAudio(
+          msgData.media_path,
+          msgData.encryption_key,
+          msgData.iv
+        );
+
+        if (!decryptedUri) {
+          throw new Error('Failed to decrypt voice message');
+        }
+
+        audioUri = decryptedUri;
+      }
+
+      // Play the audio
       const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri },
+        { uri: audioUri },
         { shouldPlay: true }
       );
 
@@ -543,11 +665,13 @@ export default function FriendChatScreen({ route, navigation }: any) {
         if ('didJustFinish' in status && status.didJustFinish) {
           newSound.unloadAsync();
           setSound(null);
+          setPlayingMessageId(null);
         }
       });
     } catch (error) {
       console.error('Error playing voice message:', error);
       Alert.alert('Error', 'Failed to play voice message');
+      setPlayingMessageId(null);
     }
   };
 
@@ -560,15 +684,22 @@ export default function FriendChatScreen({ route, navigation }: any) {
           styles.messageBubble,
           item.isMine ? styles.myMessage : styles.theirMessage,
         ]}
-        onPress={isVoice ? () => playVoiceMessage(item.content) : undefined}
+        onPress={isVoice ? () => playVoiceMessage(item.id) : undefined}
         disabled={!isVoice}
       >
         {isVoice ? (
           <View style={styles.voiceMessage}>
-            <Ionicons name="mic" size={20} color={item.isMine ? '#fff' : '#000'} />
+            {playingMessageId === item.id ? (
+              <ActivityIndicator size="small" color={item.isMine ? '#fff' : '#4ECDC4'} />
+            ) : (
+              <Ionicons name="mic" size={20} color={item.isMine ? '#fff' : '#000'} />
+            )}
             <Text style={[styles.messageText, item.isMine && styles.myMessageText]}>
               Voice message
             </Text>
+            {item.status === 'sending' && (
+              <ActivityIndicator size="small" color={item.isMine ? '#fff' : '#666'} style={{ marginLeft: 8 }} />
+            )}
           </View>
         ) : (
           <Text style={[styles.messageText, item.isMine && styles.myMessageText]}>

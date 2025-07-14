@@ -17,7 +17,7 @@
 
 ### Current Priority: Complete Friend Chat Features
 - [ ] **Complete Friend Chat Features** (2-3 days)
-  - [ ] Fix bug where there is no push notification / in app alert that a user has received a friend request.  (this works when the user refreshes the screen)
+  - [x] Fix bug where there is no push notification / in app alert that a user has received a friend request.  (this works when the user refreshes the screen)
   - [ ] Voice message support in friend chat UI
   - [ ] Progress indicators for upload/download
   - [ ] Message history with pagination
