@@ -151,18 +151,32 @@ export default function FriendChatScreen({ route, navigation }: any) {
         
         if (msg.type === 'text') {
           // Check if message is encrypted
-          if (msg.is_encrypted && msg.nonce && msg.ephemeral_public_key) {
+          if (msg.is_encrypted && msg.nonce) {
             try {
               console.log('[FriendChat] Decrypting encrypted message');
+              console.log('[FriendChat] Message ID:', msg.id);
+              console.log('[FriendChat] Is encrypted:', msg.is_encrypted);
+              console.log('[FriendChat] Has nonce:', !!msg.nonce);
+              
               // Decrypt the message
+              // For decryption, we need to use the sender's ID and our ID in the right order
+              const senderId = msg.sender_id;
+              const recipientId = msg.recipient_id;
+              
+              console.log('[FriendChat] Sender ID:', senderId);
+              console.log('[FriendChat] Recipient ID:', recipientId);
+              console.log('[FriendChat] My ID:', user?.id);
+              
               const decrypted = await FriendEncryption.decryptMessage(
                 msg.content,
                 msg.nonce,
-                msg.ephemeral_public_key,
-                friendId,
+                msg.ephemeral_public_key || '',
+                senderId === user?.id ? recipientId : senderId, // friendId
                 user?.id || ''
               );
-              content = decrypted || '[Failed to decrypt]';
+              
+              console.log('[FriendChat] Decryption result:', decrypted);
+              content = decrypted || msg.content; // Fallback to encrypted content if decryption fails
             } catch (error) {
               console.error('[FriendChat] Failed to decrypt message:', error);
               content = '[Failed to decrypt]';
@@ -222,7 +236,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
           let content = '';
           
           if (msg.type === 'text') {
-            if (msg.is_encrypted && msg.nonce && msg.ephemeral_public_key) {
+            if (msg.is_encrypted && msg.nonce) {
               try {
                 const decrypted = await FriendEncryption.decryptMessage(
                   msg.content,
@@ -290,7 +304,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
             let content = '';
             
             if (payload.new.type === 'text') {
-              if (payload.new.is_encrypted && payload.new.nonce && payload.new.ephemeral_public_key) {
+              if (payload.new.is_encrypted && payload.new.nonce) {
                 try {
                   const decrypted = await FriendEncryption.decryptMessage(
                     payload.new.content,

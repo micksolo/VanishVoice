@@ -15,9 +15,13 @@ class SharedSecretEncryption {
    * Both friends will generate the same secret
    */
   static async deriveSharedSecret(userId1: string, userId2: string): Promise<string> {
+    console.log('[SharedSecretEncryption] Deriving shared secret for:', userId1, userId2);
+    
     // Sort IDs to ensure both friends generate the same secret
     const sortedIds = [userId1, userId2].sort();
     const combinedId = sortedIds.join(':');
+    
+    console.log('[SharedSecretEncryption] Combined ID:', combinedId);
     
     // Generate a deterministic key for this friendship
     const sharedKey = await Crypto.digestStringAsync(
@@ -25,6 +29,8 @@ class SharedSecretEncryption {
       `vanishvoice:friendship:${combinedId}:shared_key_v2`,
       { encoding: Crypto.CryptoEncoding.BASE64 }
     );
+    
+    console.log('[SharedSecretEncryption] Shared key (first 10 chars):', sharedKey.substring(0, 10));
     
     return sharedKey;
   }
