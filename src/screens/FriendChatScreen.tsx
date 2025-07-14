@@ -544,7 +544,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
           type: 'voice',
           media_path: uploadResult.path,
           encryption_key: uploadResult.encryptionKey,
-          iv: uploadResult.iv,
+          encryption_iv: uploadResult.iv,
           is_encrypted: true,
           expiry_rule: { type: 'none' }
         })
@@ -626,7 +626,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
         // Get the message details from database to get encryption info
         const { data: msgData, error } = await supabase
           .from('messages')
-          .select('media_path, encryption_key, iv')
+          .select('media_path, encryption_key, encryption_iv')
           .eq('id', messageId)
           .single();
 
@@ -634,7 +634,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
           throw new Error('Failed to get message details');
         }
 
-        if (!msgData.encryption_key || !msgData.iv) {
+        if (!msgData.encryption_key || !msgData.encryption_iv) {
           throw new Error('Missing encryption info');
         }
 
@@ -642,7 +642,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
         const decryptedUri = await downloadAndDecryptAudio(
           msgData.media_path,
           msgData.encryption_key,
-          msgData.iv
+          msgData.encryption_iv
         );
 
         if (!decryptedUri) {
