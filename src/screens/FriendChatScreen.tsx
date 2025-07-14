@@ -17,6 +17,7 @@ import { Audio } from 'expo-av';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AnonymousAuthContext';
 import { sendMessageNotification } from '../services/pushNotifications';
+import FriendEncryption from '../utils/friendEncryption';
 
 interface Message {
   id: string;
@@ -80,6 +81,13 @@ export default function FriendChatScreen({ route, navigation }: any) {
         throw new Error('No user available');
       }
 
+      // Check if encryption is set up
+      const hasKeys = await FriendEncryption.hasEncryptionKeys(friendId);
+      if (!hasKeys) {
+        console.log('[FriendChat] Setting up encryption for new friendship');
+        await FriendEncryption.initializeFriendship(user.id, friendId);
+      }
+
       // Load existing messages
       await loadMessages();
       
@@ -139,15 +147,46 @@ export default function FriendChatScreen({ route, navigation }: any) {
         }
       }
 
-      // Convert to our message format
-      const convertedMessages: Message[] = (data || []).map(msg => ({
-        id: msg.id,
-        type: msg.type || 'voice', // Use the type from database
-        content: msg.type === 'text' ? msg.content : (msg.media_path || ''),
-        isMine: msg.sender_id === user?.id,
-        timestamp: new Date(msg.created_at),
-        status: 'sent'
-      }));
+      // Convert to our message format and decrypt if needed
+      const convertedMessages: Message[] = [];
+      
+      for (const msg of (data || [])) {
+        let content = '';
+        
+        if (msg.type === 'text') {
+          // Check if message is encrypted
+          if (msg.is_encrypted && msg.nonce && msg.ephemeral_public_key) {
+            try {
+              // Decrypt the message
+              const decrypted = await FriendEncryption.decryptMessage(
+                msg.content,
+                msg.nonce,
+                msg.ephemeral_public_key,
+                friendId
+              );
+              content = decrypted || '[Failed to decrypt]';
+            } catch (error) {
+              console.error('[FriendChat] Failed to decrypt message:', error);
+              content = '[Failed to decrypt]';
+            }
+          } else {
+            // Plain text message (legacy)
+            content = msg.content;
+          }
+        } else {
+          // Voice message - media path
+          content = msg.media_path || '';
+        }
+        
+        convertedMessages.push({
+          id: msg.id,
+          type: msg.type || 'voice',
+          content,
+          isMine: msg.sender_id === user?.id,
+          timestamp: new Date(msg.created_at),
+          status: 'sent'
+        });
+      }
 
       setMessages(convertedMessages);
       lastMessageCount.current = convertedMessages.length;
@@ -177,15 +216,42 @@ export default function FriendChatScreen({ route, navigation }: any) {
       if (currentCount > lastMessageCount.current) {
         console.log('[FriendChat] New messages detected via polling!');
         
-        // Convert new messages
-        const convertedMessages: Message[] = (data || []).map(msg => ({
-          id: msg.id,
-          type: msg.type || 'voice',
-          content: msg.type === 'text' ? msg.content : (msg.media_path || ''),
-          isMine: msg.sender_id === user?.id,
-          timestamp: new Date(msg.created_at),
-          status: 'sent'
-        }));
+        // Convert and decrypt new messages
+        const convertedMessages: Message[] = [];
+        
+        for (const msg of (data || [])) {
+          let content = '';
+          
+          if (msg.type === 'text') {
+            if (msg.is_encrypted && msg.nonce && msg.ephemeral_public_key) {
+              try {
+                const decrypted = await FriendEncryption.decryptMessage(
+                  msg.content,
+                  msg.nonce,
+                  msg.ephemeral_public_key,
+                  friendId
+                );
+                content = decrypted || '[Failed to decrypt]';
+              } catch (error) {
+                console.error('[FriendChat] Failed to decrypt message:', error);
+                content = '[Failed to decrypt]';
+              }
+            } else {
+              content = msg.content;
+            }
+          } else {
+            content = msg.media_path || '';
+          }
+          
+          convertedMessages.push({
+            id: msg.id,
+            type: msg.type || 'voice',
+            content,
+            isMine: msg.sender_id === user?.id,
+            timestamp: new Date(msg.created_at),
+            status: 'sent'
+          });
+        }
 
         setMessages(convertedMessages);
         lastMessageCount.current = currentCount;
@@ -220,13 +286,34 @@ export default function FriendChatScreen({ route, navigation }: any) {
           console.log('[FriendChat] New message received:', payload);
           
           if (payload.new.sender_id !== user?.id) {
-            // Message from friend - add to our list
+            // Message from friend - decrypt if needed
+            let content = '';
+            
+            if (payload.new.type === 'text') {
+              if (payload.new.is_encrypted && payload.new.nonce && payload.new.ephemeral_public_key) {
+                try {
+                  const decrypted = await FriendEncryption.decryptMessage(
+                    payload.new.content,
+                    payload.new.nonce,
+                    payload.new.ephemeral_public_key,
+                    friendId
+                  );
+                  content = decrypted || '[Failed to decrypt]';
+                } catch (error) {
+                  console.error('[FriendChat] Failed to decrypt real-time message:', error);
+                  content = '[Failed to decrypt]';
+                }
+              } else {
+                content = payload.new.content;
+              }
+            } else {
+              content = payload.new.media_path || '';
+            }
+            
             const newMessage: Message = {
               id: payload.new.id,
               type: payload.new.type || 'voice',
-              content: payload.new.type === 'text' 
-                ? payload.new.content 
-                : (payload.new.media_path || ''),
+              content,
               isMine: false,
               timestamp: new Date(payload.new.created_at),
               status: 'delivered'
@@ -266,6 +353,17 @@ export default function FriendChatScreen({ route, navigation }: any) {
       setMessages(prev => [...prev, tempMessage]);
       flatListRef.current?.scrollToEnd();
 
+      // Encrypt the message
+      const encrypted = await FriendEncryption.encryptMessage(
+        messageText,
+        friendId,
+        user.id
+      );
+
+      if (!encrypted) {
+        throw new Error('Failed to encrypt message');
+      }
+
       // Send to database
       const { data: sentMessage, error } = await supabase
         .from('messages')
@@ -273,8 +371,10 @@ export default function FriendChatScreen({ route, navigation }: any) {
           sender_id: user.id,
           recipient_id: friendId,
           type: 'text',
-          content: messageText,
-          is_encrypted: false, // TODO: Add encryption for friend messages
+          content: encrypted.encryptedContent,
+          is_encrypted: true,
+          nonce: encrypted.nonce,
+          ephemeral_public_key: encrypted.ephemeralPublicKey,
           expiry_rule: { type: 'none' }
         })
         .select()

@@ -21,6 +21,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import RealtimeDebugger from '../components/RealtimeDebugger';
 import * as Notifications from 'expo-notifications';
 import { MessageNotificationData } from '../services/pushNotifications';
+import FriendEncryption from '../utils/friendEncryption';
 
 interface Friend {
   id: string;
@@ -832,6 +833,17 @@ export default function FriendsListScreen({ navigation }: any) {
           } else {
             console.log(`[handleFriendRequest] Created ${direction} friendship:`, friendData);
           }
+        }
+
+        // Initialize E2E encryption for both users
+        try {
+          console.log('[handleFriendRequest] Initializing E2E encryption for friendship');
+          // Initialize for current user
+          await FriendEncryption.initializeFriendship(user.id, fromUserId);
+          // Note: The other user will initialize their keys when they open the chat
+        } catch (encryptionError) {
+          console.error('[handleFriendRequest] Failed to initialize encryption:', encryptionError);
+          // Don't fail the whole operation, encryption can be retried later
         }
 
         Alert.alert('Success', 'Friend request accepted!');
