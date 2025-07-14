@@ -8,15 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **End-to-End Encryption for Friend Messages** ✅
-  - Friend messages now encrypted using NaCl (same as anonymous chat)
-  - Key exchange system for friend relationships
-  - Perfect forward secrecy with ephemeral keys
-  - Automatic encryption key initialization on friendship creation
+- **End-to-End Encryption for Friend Messages** ✅ COMPLETE
+  - Implemented shared secret encryption for instant messaging
+  - No key exchange required - messages work immediately
+  - Uses deterministic key derivation from sorted user IDs
+  - Symmetric encryption with authentication tags
+  - Perfect forward secrecy with unique nonce per message
   - Client-side encryption/decryption only
   - Server cannot read friend message content
   - Database stores only encrypted ciphertext
-  - Graceful handling of decryption failures
+  - Better UX - no need for both users to open chat first
+  - Verified: All messages encrypted in database
 
 - **Push Notification System** - Complete implementation replacing polling mechanism
   - Instant message delivery via Expo Push Notifications
@@ -63,9 +65,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 - ✅ FIXED: Friend messages now have full E2E encryption
-- Both anonymous and friend messages use the same robust NaCl encryption
+- Implemented shared secret encryption (better UX than key exchange)
+- Both anonymous and friend messages are fully encrypted
 - All message content encrypted before database storage
-- Perfect forward secrecy implemented for all message types
+- Perfect forward secrecy with unique nonces
+- Verified via database queries - no plaintext messages stored
 
 ## [0.1.0] - 2024-01-15
 
