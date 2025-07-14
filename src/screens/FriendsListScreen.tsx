@@ -82,21 +82,9 @@ export default function FriendsListScreen({ navigation }: any) {
       } else if (data.type === 'friend_request' && data.sender_name) {
         console.log('[FriendsListScreen] Friend request notification from:', data.sender_name);
         
-        // Show in-app alert for friend request
-        Alert.alert(
-          'New Friend Request! 👋',
-          `${data.sender_name} wants to be your friend`,
-          [
-            { 
-              text: 'View', 
-              onPress: () => {
-                // Reload pending requests to show the new one
-                loadPendingRequests();
-              }
-            },
-            { text: 'Later', style: 'cancel' }
-          ]
-        );
+        // Just reload pending requests to show the new one
+        // No need for an alert as the push notification already notified the user
+        loadPendingRequests();
       }
     });
 
@@ -661,9 +649,13 @@ export default function FriendsListScreen({ navigation }: any) {
         .select('id, status, from_user_id, to_user_id')
         .or(`and(from_user_id.eq.${user.id},to_user_id.eq.${targetUser.id}),and(from_user_id.eq.${targetUser.id},to_user_id.eq.${user.id})`);
 
+      console.log('[addFriend] Existing requests:', existingRequests);
+
       if (existingRequests && existingRequests.length > 0) {
         // Delete all rejected requests between these users
         const rejectedRequests = existingRequests.filter(req => req.status === 'rejected');
+        console.log('[addFriend] Found rejected requests to delete:', rejectedRequests.length);
+        
         if (rejectedRequests.length > 0) {
           const { error: deleteError } = await supabase
             .from('friend_requests')
@@ -671,7 +663,10 @@ export default function FriendsListScreen({ navigation }: any) {
             .in('id', rejectedRequests.map(req => req.id));
           
           if (deleteError) {
-            console.error('Error deleting rejected requests:', deleteError);
+            console.error('[addFriend] Error deleting rejected requests:', deleteError);
+            throw deleteError; // Throw to prevent duplicate key error
+          } else {
+            console.log('[addFriend] Successfully deleted rejected requests');
           }
         }
         
