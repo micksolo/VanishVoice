@@ -10,6 +10,7 @@ import { supabase } from '../services/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import naclUtil from 'tweetnacl-util';
 import * as Crypto from 'expo-crypto';
+import SharedSecretEncryption from './sharedSecretEncryption';
 
 interface FriendKeys {
   myPublicKey: string;
@@ -127,49 +128,23 @@ class FriendEncryption {
     try {
       console.log('[FriendEncryption] Encrypting message for friend:', friendId);
       
-      // Generate ephemeral keys for this message
-      const ephemeralKeys = await NaClEncryption.generateKeyPair();
+      // Derive the shared secret
+      const sharedSecret = await SharedSecretEncryption.deriveSharedSecret(myUserId, friendId);
       
-      // Create a deterministic shared key based on the friendship
-      const sharedKey = await this.deriveSharedSecret(myUserId, friendId);
-      
-      // Encrypt using the shared secret as the "recipient's public key"
-      const encrypted = await NaClEncryption.encrypt(
-        message,
-        sharedKey,
-        ephemeralKeys.secretKey
-      );
+      // Encrypt using our shared secret encryption
+      const encrypted = await SharedSecretEncryption.encrypt(message, sharedSecret);
       
       console.log('[FriendEncryption] Message encrypted successfully with shared secret');
       
       return {
         encryptedContent: encrypted.encrypted,
         nonce: encrypted.nonce,
-        ephemeralPublicKey: ephemeralKeys.publicKey
+        ephemeralPublicKey: '' // Not used in shared secret encryption
       };
     } catch (error) {
       console.error('[FriendEncryption] Encryption failed:', error instanceof Error ? error.message : String(error));
       return null;
     }
-  }
-
-  /**
-   * Derive a shared secret for a friendship
-   * Both friends can generate the same secret independently
-   */
-  private static async deriveSharedSecret(userId1: string, userId2: string): Promise<string> {
-    // Sort IDs to ensure both friends generate the same secret
-    const sortedIds = [userId1, userId2].sort();
-    const combinedId = sortedIds.join(':');
-    
-    // Generate a deterministic key for this friendship
-    const sharedKey = await Crypto.digestStringAsync(
-      Crypto.CryptoDigestAlgorithm.SHA256,
-      `vanishvoice:friendship:${combinedId}:encryption_key`,
-      { encoding: Crypto.CryptoEncoding.BASE64 }
-    );
-    
-    return sharedKey;
   }
 
   /**
@@ -186,19 +161,15 @@ class FriendEncryption {
     try {
       console.log('[FriendEncryption] Decrypting message from friend:', friendId);
       
-      // Generate the same shared secret
-      const sharedKey = await this.deriveSharedSecret(myUserId, friendId);
+      // Derive the same shared secret
+      const sharedSecret = await SharedSecretEncryption.deriveSharedSecret(myUserId, friendId);
       
-      // Decrypt using the shared secret as our "secret key"
-      const decryptedBytes = await NaClEncryption.decrypt(
+      // Decrypt using our shared secret decryption
+      const decryptedMessage = await SharedSecretEncryption.decrypt(
         encryptedContent,
         nonce,
-        ephemeralPublicKey,
-        sharedKey
+        sharedSecret
       );
-      
-      // Convert bytes to string
-      const decryptedMessage = naclUtil.encodeUTF8(decryptedBytes);
       
       console.log('[FriendEncryption] Message decrypted successfully');
       
