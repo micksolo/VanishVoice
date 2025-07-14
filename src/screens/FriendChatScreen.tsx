@@ -81,12 +81,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
         throw new Error('No user available');
       }
 
-      // Check if encryption is set up
-      const hasKeys = await FriendEncryption.hasEncryptionKeys(friendId);
-      if (!hasKeys) {
-        console.log('[FriendChat] Setting up encryption for new friendship');
-        await FriendEncryption.initializeFriendship(user.id, friendId);
-      }
+      // No need to initialize encryption anymore - shared secret works immediately
 
       // Load existing messages
       await loadMessages();
@@ -106,7 +101,8 @@ export default function FriendChatScreen({ route, navigation }: any) {
         }
       };
     } catch (error) {
-      console.error('Error initializing chat:', error);
+      console.error('Error initializing chat:', error instanceof Error ? error.message : String(error));
+      console.error('Full error details:', JSON.stringify(error, null, 2));
       Alert.alert('Error', 'Failed to initialize chat');
     }
   };
@@ -157,12 +153,14 @@ export default function FriendChatScreen({ route, navigation }: any) {
           // Check if message is encrypted
           if (msg.is_encrypted && msg.nonce && msg.ephemeral_public_key) {
             try {
+              console.log('[FriendChat] Decrypting encrypted message');
               // Decrypt the message
               const decrypted = await FriendEncryption.decryptMessage(
                 msg.content,
                 msg.nonce,
                 msg.ephemeral_public_key,
-                friendId
+                friendId,
+                user?.id || ''
               );
               content = decrypted || '[Failed to decrypt]';
             } catch (error) {
@@ -171,6 +169,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
             }
           } else {
             // Plain text message (legacy)
+            console.log('[FriendChat] Loading plain text message (legacy)');
             content = msg.content;
           }
         } else {
@@ -229,7 +228,8 @@ export default function FriendChatScreen({ route, navigation }: any) {
                   msg.content,
                   msg.nonce,
                   msg.ephemeral_public_key,
-                  friendId
+                  friendId,
+                  user?.id || ''
                 );
                 content = decrypted || '[Failed to decrypt]';
               } catch (error) {
@@ -296,7 +296,8 @@ export default function FriendChatScreen({ route, navigation }: any) {
                     payload.new.content,
                     payload.new.nonce,
                     payload.new.ephemeral_public_key,
-                    friendId
+                    friendId,
+                    user?.id || ''
                   );
                   content = decrypted || '[Failed to decrypt]';
                 } catch (error) {

@@ -838,8 +838,8 @@ export default function FriendsListScreen({ navigation }: any) {
         // Initialize E2E encryption for both users
         try {
           console.log('[handleFriendRequest] Initializing E2E encryption for friendship');
-          // Initialize for current user
-          await FriendEncryption.initializeFriendship(user.id, fromUserId);
+          // Initialize for current user using resilient method
+          await FriendEncryption.initializeOrRepairFriendship(user.id, fromUserId);
           // Note: The other user will initialize their keys when they open the chat
         } catch (encryptionError) {
           console.error('[handleFriendRequest] Failed to initialize encryption:', encryptionError);
