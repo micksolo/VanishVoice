@@ -29,13 +29,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 95% reduction in database queries
   - Scalable to millions of users
 
-- **Unified Friend Chat System** (95% complete)
+- **Unified Friend Chat System** ✅ COMPLETE
   - Renamed "Chats" tab to "Friends" for clarity
   - Created dedicated `FriendChatScreen` with full messaging capabilities
   - Created `FriendsListScreen` with friend request management
-  - Implemented text message support (voice pending)
+  - Implemented text message support with E2E encryption
+  - Implemented voice message support with E2E encryption
   - Added message type system (text/voice/video)
   - Database schema updates for message types and content
+  - Voice recording with tap-to-record UI pattern
+  - Cross-platform audio compatibility (iOS/Android)
+  - Waveform visualization during recording
+  - Secure audio file storage with E2E encryption
 
 - **Enhanced Friend System**
   - Real-time unread message counts
@@ -65,11 +70,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 - ✅ FIXED: Friend messages now have full E2E encryption
+- ✅ FIXED: Voice messages now have proper E2E encryption
 - Implemented shared secret encryption (better UX than key exchange)
 - Both anonymous and friend messages are fully encrypted
 - All message content encrypted before database storage
+- Voice messages use unique encryption keys per message
+- Audio encryption keys are encrypted with recipient's shared secret
+- Server never has access to decryption keys
 - Perfect forward secrecy with unique nonces
-- Verified via database queries - no plaintext messages stored
+- Verified via database queries - no plaintext messages or keys stored
+- Added verification tools to confirm E2E encryption status
+- Migration to remove old plaintext encryption keys from database
 
 ## [0.1.0] - 2024-01-15
 

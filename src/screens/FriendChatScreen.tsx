@@ -11,14 +11,26 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Animated,
+  Pressable,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AnonymousAuthContext';
+import { 
+  LongPressGestureHandler, 
+  State, 
+  HandlerStateChangeEvent,
+  PanGestureHandler,
+  GestureHandlerRootView
+} from 'react-native-gesture-handler';
 import { sendMessageNotification } from '../services/pushNotifications';
 import FriendEncryption from '../utils/friendEncryption';
-import { uploadEncryptedAudio, downloadAndDecryptAudio } from '../utils/encryptedAudioStorage';
+import { uploadE2EEncryptedAudio, downloadAndDecryptE2EAudio } from '../utils/secureE2EAudioStorage';
+import RecordingModal from '../components/RecordingModal';
+import * as FileSystem from 'expo-file-system';
 
 interface Message {
   id: string;
@@ -26,8 +38,11 @@ interface Message {
   content: string;
   isMine: boolean;
   timestamp: Date;
-  status?: 'sending' | 'sent' | 'delivered' | 'read';
+  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+  duration?: number; // Duration in seconds for voice messages
 }
+
+const PAGE_SIZE = 20;
 
 export default function FriendChatScreen({ route, navigation }: any) {
   const { friendId, friendName, friendUsername } = route.params;
@@ -35,17 +50,29 @@ export default function FriendChatScreen({ route, navigation }: any) {
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [showRecordingModal, setShowRecordingModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
+  const [playbackStatus, setPlaybackStatus] = useState<{ [key: string]: { isPlaying: boolean; progress: number; duration: number } }>({});
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [uploadingMessageId, setUploadingMessageId] = useState<string | null>(null);
+  const [downloadingMessageId, setDownloadingMessageId] = useState<string | null>(null);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [messageOffset, setMessageOffset] = useState(0);
+  const [swipeX] = useState(new Animated.Value(0));
+  const [shouldCancel, setShouldCancel] = useState(false);
+  const [micScale] = useState(new Animated.Value(1));
+  const [micPulse] = useState(new Animated.Value(1));
   
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const recordingInterval = useRef<NodeJS.Timeout | null>(null);
   const messagePollingInterval = useRef<NodeJS.Timeout | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const lastMessageCount = useRef<number>(0);
+  const isRecordingRef = useRef<boolean>(false);
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
@@ -69,16 +96,8 @@ export default function FriendChatScreen({ route, navigation }: any) {
       if (sound) {
         sound.unloadAsync().catch(err => console.log('Error unloading sound:', err));
       }
-      if (recording) {
-        recording.stopAndUnloadAsync().catch(err => console.log('Error stopping recording:', err));
-      }
-      if (recordingInterval.current) {
-        clearInterval(recordingInterval.current);
-      }
-      setIsRecording(false);
-      setRecordingDuration(0);
     };
-  }, [sound, recording]);
+  }, [sound]);
 
   const initializeChat = async () => {
     try {
@@ -114,16 +133,28 @@ export default function FriendChatScreen({ route, navigation }: any) {
     }
   };
 
-  const loadMessages = async () => {
+  const loadMessages = async (loadMore = false) => {
     try {
-      console.log('[FriendChat] Loading messages between user and friend:', user?.id, friendId);
+      if (loadMore && loadingMore) return;
       
-      // Load messages from the database
+      if (loadMore) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
+      
+      const currentOffset = loadMore ? messageOffset : 0;
+      
+      console.log('[FriendChat] Loading messages between user and friend:', user?.id, friendId);
+      console.log('[FriendChat] Offset:', currentOffset, 'Limit:', PAGE_SIZE);
+      
+      // Load messages from the database with pagination
       const { data, error } = await supabase
         .from('messages')
         .select('*')
         .or(`and(sender_id.eq.${user?.id},recipient_id.eq.${friendId}),and(sender_id.eq.${friendId},recipient_id.eq.${user?.id})`)
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: false })
+        .range(currentOffset, currentOffset + PAGE_SIZE - 1);
 
       if (error) {
         console.error('[FriendChat] Error loading messages:', error);
@@ -131,10 +162,18 @@ export default function FriendChatScreen({ route, navigation }: any) {
       }
 
       console.log('[FriendChat] Loaded messages:', data?.length || 0);
+      
+      // Check if we have more messages
+      if (data && data.length < PAGE_SIZE) {
+        setHasMoreMessages(false);
+      }
+      
+      // Reverse the messages to show oldest first
+      const reversedData = data ? [...data].reverse() : [];
 
       // Mark all messages from friend as read
-      if (data && data.length > 0) {
-        const unreadMessageIds = data
+      if (reversedData && reversedData.length > 0) {
+        const unreadMessageIds = reversedData
           .filter(msg => msg.sender_id === friendId && !msg.read_at)
           .map(msg => msg.id);
 
@@ -153,7 +192,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
       // Convert to our message format and decrypt if needed
       const convertedMessages: Message[] = [];
       
-      for (const msg of (data || [])) {
+      for (const msg of (reversedData || [])) {
         let content = '';
         
         if (msg.type === 'text') {
@@ -204,14 +243,27 @@ export default function FriendChatScreen({ route, navigation }: any) {
           content,
           isMine: msg.sender_id === user?.id,
           timestamp: new Date(msg.created_at),
-          status: 'sent'
+          status: 'sent',
+          duration: msg.duration
         });
       }
 
-      setMessages(convertedMessages);
+      if (loadMore) {
+        // Prepend older messages
+        setMessages(prev => [...convertedMessages, ...prev]);
+        setMessageOffset(messageOffset + data.length);
+      } else {
+        // Initial load
+        setMessages(convertedMessages);
+        setMessageOffset(data ? data.length : 0);
+      }
+      
       lastMessageCount.current = convertedMessages.length;
     } catch (error) {
       console.error('[FriendChat] Error in loadMessages:', error);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
     }
   };
 
@@ -270,7 +322,8 @@ export default function FriendChatScreen({ route, navigation }: any) {
             content,
             isMine: msg.sender_id === user?.id,
             timestamp: new Date(msg.created_at),
-            status: 'sent'
+            status: 'sent',
+            duration: msg.duration
           });
         }
 
@@ -338,7 +391,8 @@ export default function FriendChatScreen({ route, navigation }: any) {
               content,
               isMine: false,
               timestamp: new Date(payload.new.created_at),
-              status: 'delivered'
+              status: 'delivered',
+              duration: payload.new.duration
             };
             
             setMessages(prev => [...prev, newMessage]);
@@ -461,16 +515,11 @@ export default function FriendChatScreen({ route, navigation }: any) {
 
   const startRecording = async () => {
     try {
-      // Clean up any existing recording first
-      if (recording) {
-        try {
-          await recording.stopAndUnloadAsync();
-        } catch (err) {
-          console.log('Error cleaning up previous recording:', err);
-        }
-        setRecording(null);
-      }
-
+      
+      // Reset swipe position
+      swipeX.setValue(0);
+      setShouldCancel(false);
+      
       // Request permissions
       const { status } = await Audio.requestPermissionsAsync();
       if (status !== 'granted') {
@@ -478,69 +527,183 @@ export default function FriendChatScreen({ route, navigation }: any) {
         return;
       }
 
-      // Configure audio
+      // Configure audio for recording
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
-        playThroughEarpieceAndroid: false,
+        shouldDuckAndroid: true,
+        staysActiveInBackground: false,
       });
 
-      // Start recording
-      const { recording: newRecording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
+      // Use a simpler, more compatible recording preset
+      const recordingOptions = Audio.RecordingOptionsPresets.HIGH_QUALITY;
+
+      const { recording: newRecording } = await Audio.Recording.createAsync(recordingOptions);
 
       setRecording(newRecording);
       setIsRecording(true);
+      isRecordingRef.current = true;
       setRecordingDuration(0);
 
-      // Update duration
+      // Animate mic button
+      Animated.parallel([
+        Animated.spring(micScale, {
+          toValue: 1.5,
+          useNativeDriver: true,
+        }),
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(micPulse, {
+              toValue: 1.1,
+              duration: 1000,
+              useNativeDriver: true,
+            }),
+            Animated.timing(micPulse, {
+              toValue: 1,
+              duration: 1000,
+              useNativeDriver: true,
+            }),
+          ])
+        ),
+      ]).start();
+
+      // Start duration timer
       recordingInterval.current = setInterval(() => {
-        setRecordingDuration((prev) => prev + 1);
+        setRecordingDuration(prev => prev + 1);
       }, 1000);
+
     } catch (error) {
-      console.error('Error starting recording:', error);
+      console.error('Failed to start recording', error);
       Alert.alert('Error', 'Failed to start recording');
-      setIsRecording(false);
-      setRecording(null);
     }
   };
 
+  const cancelRecording = async () => {
+    if (!recording) return;
+    
+    
+    // Clear interval
+    if (recordingInterval.current) {
+      clearInterval(recordingInterval.current);
+    }
+    
+    try {
+      await recording.stopAndUnloadAsync();
+    } catch (error) {
+      console.error('Error stopping recording:', error);
+    }
+    
+    setRecording(null);
+    setIsRecording(false);
+    isRecordingRef.current = false;
+    setRecordingDuration(0);
+    setShouldCancel(false);
+    
+    // Reset animations
+    Animated.parallel([
+      Animated.spring(micScale, {
+        toValue: 1,
+        useNativeDriver: true,
+      }),
+      Animated.timing(swipeX, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    
+    micPulse.stopAnimation();
+    micPulse.setValue(1);
+  };
+
   const stopRecording = async () => {
-    if (!recording || !user) return;
+    if (!recording || !user) {
+      return;
+    }
 
     try {
-      setIsRecording(false);
+      
+      // Clear interval
       if (recordingInterval.current) {
         clearInterval(recordingInterval.current);
+      }
+
+      // Check if user swiped to cancel
+      if (shouldCancel) {
+        await cancelRecording();
+        return;
+      }
+
+      // Minimum recording duration check
+      if (recordingDuration < 1) {
+        await cancelRecording();
+        return;
       }
 
       // Stop recording
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
+      
+      setIsRecording(false);
+      isRecordingRef.current = false;
       setRecording(null);
-
+      
+      // Store duration before resetting
+      const finalDuration = recordingDuration;
+      setRecordingDuration(0);
+      
+      // Reset animations
+      Animated.parallel([
+        Animated.spring(micScale, {
+          toValue: 1,
+          useNativeDriver: true,
+        }),
+        Animated.timing(swipeX, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+      
+      micPulse.stopAnimation();
+      micPulse.setValue(1);
+      
       if (!uri) return;
 
-      // Add optimistic message
+      // Show sending state immediately
       const tempId = Date.now().toString();
-      const voiceMessage: Message = {
+      const sendingMessage: Message = {
         id: tempId,
         type: 'voice',
-        content: uri, // Local URI temporarily
+        content: '',
         isMine: true,
         timestamp: new Date(),
-        status: 'sending'
+        status: 'sending',
+        duration: finalDuration
       };
-
-      setMessages(prev => [...prev, voiceMessage]);
+      
+      setMessages(prev => [...prev, sendingMessage]);
+      setUploadingMessageId(tempId);
       flatListRef.current?.scrollToEnd();
 
-      // Upload and encrypt voice message
-      const uploadResult = await uploadEncryptedAudio(uri, user.id);
+      // Upload the recording with E2E encryption
+      const uploadResult = await uploadE2EEncryptedAudio(uri, user.id, friendId);
       
-      if (!uploadResult) {
-        // Update message status to failed
+      if (uploadResult) {
+        // Remove the temporary message
+        setMessages(prev => prev.filter(msg => msg.id !== tempId));
+        setUploadingMessageId(null);
+        
+        // Send the actual message
+        await handleVoiceSend(
+          uploadResult.path,
+          finalDuration,
+          uploadResult.encryptedKey,
+          uploadResult.nonce,
+          finalDuration
+        );
+      } else {
+        // Update to failed state
         setMessages(prev => 
           prev.map(msg => 
             msg.id === tempId 
@@ -548,22 +711,49 @@ export default function FriendChatScreen({ route, navigation }: any) {
               : msg
           )
         );
+        setUploadingMessageId(null);
         Alert.alert('Error', 'Failed to upload voice message');
-        return;
       }
+    } catch (error) {
+      console.error('Failed to stop recording', error);
+      Alert.alert('Error', 'Failed to send voice message');
+    }
+  };
 
-      // Send to database with encryption info
+  const handleVoiceSend = async (audioPath: string, duration: number, encryptedKey: string, nonce: string, messageDuration?: number) => {
+    if (!user) return;
+
+    try {
+      // Add optimistic message
+      const tempId = Date.now().toString();
+      const voiceMessage: Message = {
+        id: tempId,
+        type: 'voice',
+        content: audioPath,
+        isMine: true,
+        timestamp: new Date(),
+        status: 'sending',
+        duration: messageDuration || duration
+      };
+
+      console.log('[Upload] Setting uploading message ID:', tempId);
+      setMessages(prev => [...prev, voiceMessage]);
+      setUploadingMessageId(tempId);
+      flatListRef.current?.scrollToEnd();
+
+      // Send to database - store encrypted key and nonce for E2E encryption
       const { data: sentMessage, error } = await supabase
         .from('messages')
         .insert({
           sender_id: user.id,
           recipient_id: friendId,
           type: 'voice',
-          media_path: uploadResult.path,
-          encryption_key: uploadResult.encryptionKey,
-          encryption_iv: uploadResult.iv,
+          media_path: audioPath,
+          content: encryptedKey, // Store encrypted key in content field
+          nonce: nonce, // Store nonce
           is_encrypted: true,
-          expiry_rule: { type: 'none' }
+          expiry_rule: { type: 'none' },
+          duration: messageDuration || duration
         })
         .select()
         .single();
@@ -577,23 +767,24 @@ export default function FriendChatScreen({ route, navigation }: any) {
               : msg
           )
         );
+        setUploadingMessageId(null);
         Alert.alert('Error', 'Failed to send voice message');
         return;
       }
 
-      // Update message with real ID and sent status
+      // Update message with real ID
       setMessages(prev => 
         prev.map(msg => 
           msg.id === tempId 
             ? { 
                 ...msg, 
                 id: sentMessage.id,
-                content: uploadResult.path, // Update to server path
                 status: 'sent' as const 
               }
             : msg
         )
       );
+      setUploadingMessageId(null);
 
       // Send push notification
       try {
@@ -613,6 +804,8 @@ export default function FriendChatScreen({ route, navigation }: any) {
         console.log('[FriendChat] Push notification failed:', pushError);
       }
 
+      // Close the modal
+      setShowRecordingModal(false);
     } catch (error) {
       console.error('Error sending voice message:', error);
       Alert.alert('Error', 'Failed to send voice message');
@@ -621,11 +814,45 @@ export default function FriendChatScreen({ route, navigation }: any) {
 
   const playVoiceMessage = async (messageId: string) => {
     try {
+      // Stop current playback if playing another message
+      if (sound && playingMessageId !== messageId) {
+        console.log('[Voice] Stopping previous playback');
+        await sound.unloadAsync();
+        setSound(null);
+        setPlayingMessageId(null);
+      }
+
+      // If already playing this message, pause it
+      if (playingMessageId === messageId && sound) {
+        const status = await sound.getStatusAsync();
+        if ('isLoaded' in status && status.isLoaded) {
+          if (status.isPlaying) {
+            console.log('[Voice] Pausing current playback');
+            await sound.pauseAsync();
+            setPlaybackStatus(prev => ({
+              ...prev,
+              [messageId]: { ...prev[messageId], isPlaying: false }
+            }));
+            return;
+          } else {
+            console.log('[Voice] Resuming playback');
+            await sound.playAsync();
+            setPlaybackStatus(prev => ({
+              ...prev,
+              [messageId]: { ...prev[messageId], isPlaying: true }
+            }));
+            return;
+          }
+        }
+      }
+
       setPlayingMessageId(messageId);
       
-      if (sound) {
-        await sound.unloadAsync();
-      }
+      // Update playback status
+      setPlaybackStatus(prev => ({
+        ...prev,
+        [messageId]: { isPlaying: true, progress: 0, duration: 0 }
+      }));
 
       // Find the message to get encryption info
       const message = messages.find(m => m.id === messageId);
@@ -636,14 +863,17 @@ export default function FriendChatScreen({ route, navigation }: any) {
       let audioUri: string;
 
       // Check if this is a local URI (for messages just sent)
-      if (message.content.startsWith('file://')) {
+      if (message.content.startsWith('file://') || message.content.startsWith('/')) {
         audioUri = message.content;
+        // On iOS, ensure the file:// prefix is present
+        if (Platform.OS === 'ios' && !audioUri.startsWith('file://')) {
+          audioUri = 'file://' + audioUri;
+        }
       } else {
         // This is a server path, need to download and decrypt
-        // Get the message details from database to get encryption info
         const { data: msgData, error } = await supabase
           .from('messages')
-          .select('media_path, encryption_key, encryption_iv')
+          .select('media_path, content, nonce, sender_id')
           .eq('id', messageId)
           .single();
 
@@ -651,16 +881,26 @@ export default function FriendChatScreen({ route, navigation }: any) {
           throw new Error('Failed to get message details');
         }
 
-        if (!msgData.encryption_key || !msgData.encryption_iv) {
+        // For E2E encrypted messages, content contains the encrypted key
+        if (!msgData.content || !msgData.nonce) {
           throw new Error('Missing encryption info');
         }
 
-        // Download and decrypt the audio
-        const decryptedUri = await downloadAndDecryptAudio(
+        // Set downloading state
+        console.log('[Download] Setting downloading message ID:', messageId);
+        setDownloadingMessageId(messageId);
+
+        // Download and decrypt the audio using E2E encryption
+        const decryptedUri = await downloadAndDecryptE2EAudio(
           msgData.media_path,
-          msgData.encryption_key,
-          msgData.encryption_iv
+          msgData.content, // encrypted key
+          msgData.nonce,
+          msgData.sender_id,
+          user?.id || ''
         );
+
+        console.log('[Download] Clearing downloading state');
+        setDownloadingMessageId(null);
 
         if (!decryptedUri) {
           throw new Error('Failed to decrypt voice message');
@@ -669,53 +909,231 @@ export default function FriendChatScreen({ route, navigation }: any) {
         audioUri = decryptedUri;
       }
 
-      // Play the audio
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: audioUri },
-        { shouldPlay: true }
-      );
+      console.log('[Voice] Playing audio from:', audioUri);
+      
+      // Verify the file exists
+      try {
+        const fileInfo = await FileSystem.getInfoAsync(audioUri);
+        console.log('[Voice] File info:', fileInfo);
+        if (!fileInfo.exists) {
+          throw new Error('Audio file does not exist at path: ' + audioUri);
+        }
+      } catch (err) {
+        console.error('[Voice] File check error:', err);
+      }
+
+      // Configure audio mode for playback
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        playThroughEarpieceAndroid: false,
+        shouldDuckAndroid: true,
+        staysActiveInBackground: false,
+      });
+
+      // Try to create and play the audio with error handling
+      let newSound: Audio.Sound;
+      
+      try {
+        const { sound } = await Audio.Sound.createAsync(
+          { uri: audioUri },
+          { 
+            shouldPlay: true,
+            isLooping: false,
+            volume: 1.0
+          }
+        );
+        newSound = sound;
+      } catch (error) {
+        console.error('[Voice] Failed to create sound:', error);
+        
+        // Try alternative approach for Android
+        if (Platform.OS === 'android') {
+          console.log('[Voice] Trying alternative loading method...');
+          const sound = new Audio.Sound();
+          await sound.loadAsync(
+            { uri: audioUri },
+            { shouldPlay: false }
+          );
+          
+          // Set audio mode again
+          await Audio.setAudioModeAsync({
+            playsInSilentModeIOS: true,
+            allowsRecordingIOS: false,
+            staysActiveInBackground: false,
+            shouldDuckAndroid: false,
+          });
+          
+          await sound.playAsync();
+          newSound = sound;
+        } else {
+          throw error;
+        }
+      }
 
       setSound(newSound);
 
-      // Unload when finished
+      // Set up status updates for progress tracking
+      let hasStartedPlaying = false;
       newSound.setOnPlaybackStatusUpdate((status) => {
-        if ('didJustFinish' in status && status.didJustFinish) {
-          newSound.unloadAsync();
-          setSound(null);
-          setPlayingMessageId(null);
+        try {
+          if ('isLoaded' in status && status.isLoaded) {
+            const progress = status.positionMillis || 0;
+            const duration = status.durationMillis || 0;
+            const isPlaying = status.isPlaying || false;
+            
+            // Android workaround: ensure playback starts
+            if (!hasStartedPlaying && !isPlaying && Platform.OS === 'android' && duration > 0) {
+              hasStartedPlaying = true;
+              console.log('[Voice] Android playback not started, starting now...');
+              newSound.playAsync().catch(err => console.error('[Voice] Error starting playback:', err));
+            }
+            
+            setPlaybackStatus(prev => ({
+              ...prev,
+              [messageId]: { isPlaying, progress, duration }
+            }));
+
+            if ('didJustFinish' in status && status.didJustFinish) {
+              newSound.unloadAsync().catch(err => console.log('[Voice] Error unloading:', err));
+              setSound(null);
+              setPlayingMessageId(null);
+              setPlaybackStatus(prev => ({
+                ...prev,
+                [messageId]: { isPlaying: false, progress: 0, duration: duration }
+              }));
+            }
+          } else if ('error' in status) {
+            console.error('[Voice] Playback error:', status.error);
+            setPlayingMessageId(null);
+            setSound(null);
+            setDownloadingMessageId(null);
+            // Clean up the status
+            setPlaybackStatus(prev => {
+              const newStatus = { ...prev };
+              delete newStatus[messageId];
+              return newStatus;
+            });
+          }
+        } catch (err) {
+          console.error('[Voice] Status update error:', err);
         }
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error playing voice message:', error);
-      Alert.alert('Error', 'Failed to play voice message');
       setPlayingMessageId(null);
+      setDownloadingMessageId(null);
+      
+      // Clean up any existing sound
+      if (sound) {
+        await sound.unloadAsync().catch(() => {});
+        setSound(null);
+      }
+      
+      // Show user-friendly error
+      if (error.message?.includes('Failed to load audio')) {
+        Alert.alert('Playback Error', 'Unable to play this voice message. The file may be corrupted.');
+      } else {
+        Alert.alert('Error', 'Failed to play voice message. Please try again.');
+      }
+      
+      setPlaybackStatus(prev => {
+        const newStatus = { ...prev };
+        delete newStatus[messageId];
+        return newStatus;
+      });
     }
   };
 
+  const formatDuration = (milliseconds: number) => {
+    const seconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+
   const renderMessage = ({ item }: { item: Message }) => {
     const isVoice = item.type === 'voice';
+    const status = playbackStatus[item.id];
+    const isCurrentlyPlaying = playingMessageId === item.id && status?.isPlaying;
+    const hasProgress = status && status.duration > 0;
+    const isUploading = uploadingMessageId === item.id;
+    const isDownloading = downloadingMessageId === item.id;
+    
+    if (isVoice && (isUploading || isDownloading)) {
+      console.log('[Render] Message', item.id, 'isUploading:', isUploading, 'isDownloading:', isDownloading);
+    }
 
     return (
       <TouchableOpacity
         style={[
           styles.messageBubble,
           item.isMine ? styles.myMessage : styles.theirMessage,
+          isVoice && styles.voiceMessageBubble,
         ]}
         onPress={isVoice ? () => playVoiceMessage(item.id) : undefined}
-        disabled={!isVoice}
+        disabled={!isVoice || item.status === 'sending'}
+        activeOpacity={isVoice ? 0.7 : 1}
       >
         {isVoice ? (
           <View style={styles.voiceMessage}>
-            {playingMessageId === item.id ? (
-              <ActivityIndicator size="small" color={item.isMine ? '#fff' : '#4ECDC4'} />
-            ) : (
-              <Ionicons name="mic" size={20} color={item.isMine ? '#fff' : '#000'} />
-            )}
-            <Text style={[styles.messageText, item.isMine && styles.myMessageText]}>
-              Voice message
-            </Text>
+            <View style={styles.voiceMessageLeft}>
+              <View style={[
+                styles.playButton,
+                item.isMine ? styles.playButtonMine : styles.playButtonTheirs
+              ]}>
+                {isUploading || item.status === 'sending' ? (
+                  <ActivityIndicator size="small" color={item.isMine ? '#fff' : '#4ECDC4'} />
+                ) : isDownloading ? (
+                  <ActivityIndicator size="small" color={item.isMine ? '#fff' : '#4ECDC4'} />
+                ) : isCurrentlyPlaying ? (
+                  <Ionicons name="pause" size={16} color={item.isMine ? '#fff' : '#4ECDC4'} />
+                ) : (
+                  <Ionicons name="play" size={16} color={item.isMine ? '#fff' : '#4ECDC4'} />
+                )}
+              </View>
+              
+              <View style={styles.voiceMessageContent}>
+                <View style={styles.waveformContainer}>
+                  {/* Simplified waveform visualization */}
+                  {[1, 0.7, 1, 0.5, 0.8, 1, 0.6, 0.9, 0.4, 1, 0.7, 0.8].map((height, index) => (
+                    <View
+                      key={index}
+                      style={[
+                        styles.waveformBar,
+                        {
+                          height: 20 * height,
+                          backgroundColor: item.isMine 
+                            ? (isCurrentlyPlaying ? '#fff' : 'rgba(255, 255, 255, 0.7)')
+                            : (isCurrentlyPlaying ? '#4ECDC4' : 'rgba(0, 0, 0, 0.4)'),
+                          opacity: hasProgress && index < (status.progress / status.duration) * 12 ? 1 : 0.3
+                        }
+                      ]}
+                    />
+                  ))}
+                </View>
+                
+                <Text style={[
+                  styles.voiceDuration,
+                  item.isMine ? styles.voiceDurationMine : styles.voiceDurationTheirs
+                ]}>
+                  {isUploading 
+                    ? 'Uploading...'
+                    : isDownloading
+                      ? 'Downloading...'
+                      : hasProgress && status.duration > 0
+                        ? formatDuration(isCurrentlyPlaying ? status.progress : status.duration)
+                        : item.duration 
+                          ? formatDuration(item.duration * 1000)
+                          : 'Voice message'
+                  }
+                </Text>
+              </View>
+            </View>
+            
             {item.status === 'sending' && (
-              <ActivityIndicator size="small" color={item.isMine ? '#fff' : '#666'} style={{ marginLeft: 8 }} />
+              <ActivityIndicator size="small" color={item.isMine ? '#fff' : '#666'} style={styles.sendingIndicator} />
             )}
           </View>
         ) : (
@@ -724,7 +1142,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
           </Text>
         )}
         
-        {item.status === 'sending' && (
+        {item.status === 'sending' && !isVoice && (
           <ActivityIndicator size="small" color={item.isMine ? '#fff' : '#666'} style={styles.statusIndicator} />
         )}
       </TouchableOpacity>
@@ -741,6 +1159,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
 
   return (
     <SafeAreaView style={styles.container}>
+      
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -770,38 +1189,132 @@ export default function FriendChatScreen({ route, navigation }: any) {
           renderItem={renderMessage}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.messagesList}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
+          onContentSizeChange={() => {
+            if (!loadingMore) {
+              flatListRef.current?.scrollToEnd();
+            }
+          }}
+          onEndReachedThreshold={0.1}
+          ListHeaderComponent={
+            hasMoreMessages ? (
+              <TouchableOpacity
+                style={styles.loadMoreButton}
+                onPress={() => loadMessages(true)}
+                disabled={loadingMore}
+              >
+                {loadingMore ? (
+                  <ActivityIndicator size="small" color="#4ECDC4" />
+                ) : (
+                  <Text style={styles.loadMoreText}>Load earlier messages</Text>
+                )}
+              </TouchableOpacity>
+            ) : messages.length > 0 ? (
+              <View style={styles.noMoreMessages}>
+                <Text style={styles.noMoreText}>Beginning of conversation</Text>
+              </View>
+            ) : null
+          }
         />
 
         {/* Input */}
         <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.textInput}
-            value={inputText}
-            onChangeText={setInputText}
-            placeholder="Type a message..."
-            multiline
-            maxLength={500}
-          />
-          
-          {inputText.trim() ? (
-            <TouchableOpacity onPress={sendTextMessage} style={styles.sendButton}>
-              <Ionicons name="send" size={24} color="#4ECDC4" />
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              onPressIn={startRecording}
-              onPressOut={stopRecording}
-              style={[styles.micButton, isRecording && styles.micButtonRecording]}
-            >
-              <Ionicons name="mic" size={24} color={isRecording ? '#fff' : '#4ECDC4'} />
-              {isRecording && (
-                <Text style={styles.recordingDuration}>{recordingDuration}s</Text>
+          {!isRecording ? (
+            <>
+              <TextInput
+                style={styles.textInput}
+                value={inputText}
+                onChangeText={setInputText}
+                placeholder="Type a message..."
+                multiline
+                maxLength={500}
+              />
+              
+              {inputText.trim() ? (
+                <TouchableOpacity onPress={sendTextMessage} style={styles.sendButton}>
+                  <Ionicons name="send" size={24} color="#4ECDC4" />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  onPress={startRecording}
+                  style={styles.micButton}
+                >
+                  <Ionicons name="mic" size={24} color="#4ECDC4" />
+                </TouchableOpacity>
               )}
-            </TouchableOpacity>
+            </>
+          ) : (
+            <View style={styles.recordingContainer}>
+              {/* Cancel button */}
+              <TouchableOpacity
+                onPress={cancelRecording}
+                style={styles.cancelRecordingButton}
+              >
+                <Ionicons name="trash-outline" size={20} color="#FF3B30" />
+              </TouchableOpacity>
+
+              {/* Recording info */}
+              <View style={styles.recordingInfo}>
+                <View style={styles.recordingHeader}>
+                  <Animated.View 
+                    style={[
+                      styles.recordingDot,
+                      {
+                        opacity: recordingDuration % 2 ? 1 : 0.3,
+                      }
+                    ]} 
+                  />
+                  <Text style={styles.recordingTime}>
+                    {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
+                  </Text>
+                </View>
+                
+                {/* Waveform visualization */}
+                <View style={styles.waveformContainer}>
+                  {[...Array(15)].map((_, i) => (
+                    <View
+                      key={i}
+                      style={[
+                        styles.waveformBar,
+                        {
+                          height: Math.random() * 15 + 10,
+                          opacity: recordingDuration > 0 ? 0.8 : 0.3,
+                        }
+                      ]}
+                    />
+                  ))}
+                </View>
+                
+                <Text style={styles.recordingHint}>Tap send when ready</Text>
+              </View>
+
+              {/* Send button */}
+              <TouchableOpacity
+                onPress={stopRecording}
+                style={styles.sendVoiceButton}
+                activeOpacity={0.8}
+              >
+                <Animated.View
+                  style={{
+                    transform: [{ scale: micScale }]
+                  }}
+                >
+                  <Ionicons name="send" size={24} color="#fff" />
+                </Animated.View>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
       </KeyboardAvoidingView>
+
+      {/* Recording Modal */}
+      <RecordingModal
+        visible={showRecordingModal}
+        recipientName={friendName}
+        recipientId={friendId}
+        userId={user?.id || ''}
+        onClose={() => setShowRecordingModal(false)}
+        onSend={handleVoiceSend}
+      />
     </SafeAreaView>
   );
 }
@@ -864,22 +1377,76 @@ const styles = StyleSheet.create({
   myMessageText: {
     color: '#fff',
   },
+  voiceMessageBubble: {
+    minWidth: 200,
+    maxWidth: '85%',
+  },
   voiceMessage: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
     flex: 1,
+  },
+  voiceMessageLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  voiceMessageContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  playButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  playButtonMine: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  playButtonTheirs: {
+    backgroundColor: 'rgba(78, 205, 196, 0.2)',
+  },
+  waveformContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 30,
+    gap: 3,
+    marginBottom: 4,
+  },
+  waveformBar: {
+    width: 3,
+    borderRadius: 1.5,
+    backgroundColor: '#4ECDC4',
+  },
+  voiceDuration: {
+    fontSize: 12,
+    opacity: 0.8,
+  },
+  voiceDurationMine: {
+    color: '#fff',
+  },
+  voiceDurationTheirs: {
+    color: '#666',
+  },
+  sendingIndicator: {
+    marginLeft: 8,
   },
   statusIndicator: {
     marginLeft: 8,
   },
   inputContainer: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    padding: 16,
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: '#E0E0E0',
+    minHeight: 68,
   },
   textInput: {
     flex: 1,
@@ -897,18 +1464,135 @@ const styles = StyleSheet.create({
   },
   micButton: {
     marginLeft: 8,
-    padding: 8,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: '#F5F5F5',
     borderRadius: 20,
   },
-  micButtonRecording: {
+  micButtonPressed: {
+    backgroundColor: '#4ECDC4',
+    transform: [{ scale: 0.95 }],
+  },
+  recordingBar: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+  },
+  recordingContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cancelButton: {
+    padding: 4,
+  },
+  cancelButtonCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 59, 48, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  recordingStatus: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  recordingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: '#FF3B30',
   },
-  recordingDuration: {
-    position: 'absolute',
-    top: -20,
-    alignSelf: 'center',
+  recordingTime: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+    minWidth: 45,
+  },
+  recordingHint: {
     fontSize: 12,
-    color: '#FF3B30',
+    color: '#999',
+    marginTop: 4,
+  },
+  slideToCancel: {
+    fontSize: 14,
+    color: '#999',
+    marginLeft: 16,
+  },
+  recordingContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+  },
+  recordingMicButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#4ECDC4',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 16,
+  },
+  cancelRecordingButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFF3F3',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  recordingInfo: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 12,
+  },
+  recordingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  sendVoiceButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#4ECDC4',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  loadMoreButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 20,
+    marginVertical: 10,
+    alignSelf: 'center',
+  },
+  loadMoreText: {
+    color: '#4ECDC4',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  noMoreMessages: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  noMoreText: {
+    color: '#999',
+    fontSize: 14,
   },
 });

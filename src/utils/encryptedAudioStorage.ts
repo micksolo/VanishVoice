@@ -3,6 +3,7 @@ import * as FileSystem from 'expo-file-system';
 import { encryptAudio, decryptAudio, generateEncryptionKey, deriveSharedSecret } from './encryption';
 import { encryptForRecipient, decryptFromSender } from './e2eEncryption';
 import { Buffer } from 'buffer';
+import { Platform } from 'react-native';
 
 export interface EncryptedUploadResult {
   path: string;
@@ -10,10 +11,17 @@ export interface EncryptedUploadResult {
   iv: string;
 }
 
+export interface UploadProgress {
+  loaded: number;
+  total: number;
+  percentage: number;
+}
+
 export const uploadEncryptedAudio = async (
   localUri: string, 
   userId: string,
-  recipientPublicKey?: string
+  recipientPublicKey?: string,
+  onProgress?: (progress: UploadProgress) => void
 ): Promise<EncryptedUploadResult | null> => {
   try {
     // Create a unique filename
@@ -68,7 +76,8 @@ export const uploadEncryptedAudio = async (
 export const downloadAndDecryptAudio = async (
   path: string,
   encryptionKey: string,
-  iv: string
+  iv: string,
+  onProgress?: (progress: UploadProgress) => void
 ): Promise<string | null> => {
   try {
     // Download the encrypted file
@@ -98,11 +107,28 @@ export const downloadAndDecryptAudio = async (
     // Decrypt the audio
     const decryptedBase64 = await decryptAudio(encryptedBase64, encryptionKey, iv);
     
-    // Save decrypted audio to cache
-    const localUri = `${FileSystem.cacheDirectory}voice_${Date.now()}.mp3`;
+    // Save decrypted audio to cache with proper extension
+    // Use .mp4 extension which might have better Android compatibility
+    const filename = `voice_${Date.now()}.mp4`;
+    const localUri = `${FileSystem.cacheDirectory}${filename}`;
+    
+    // Write the file
     await FileSystem.writeAsStringAsync(localUri, decryptedBase64, {
       encoding: FileSystem.EncodingType.Base64,
     });
+    
+    // Verify the file was written correctly
+    const fileInfo = await FileSystem.getInfoAsync(localUri);
+    console.log('[Audio] Decrypted file saved:', {
+      uri: localUri,
+      size: fileInfo.size,
+      exists: fileInfo.exists
+    });
+    
+    // Ensure proper file:// prefix for iOS
+    if (Platform.OS === 'ios' && !localUri.startsWith('file://')) {
+      return 'file://' + localUri;
+    }
     
     return localUri;
   } catch (error) {

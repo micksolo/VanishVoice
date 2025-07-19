@@ -35,6 +35,13 @@ interface Friend {
   };
   mutual?: boolean;
   unreadCount?: number;
+  lastMessage?: {
+    id: string;
+    type: 'text' | 'voice';
+    content: string;
+    created_at: string;
+    is_mine: boolean;
+  };
 }
 
 export default function FriendsListScreen({ navigation }: any) {
@@ -412,13 +419,12 @@ export default function FriendsListScreen({ navigation }: any) {
           }
         )
         .subscribe((status) => {
-          console.log('[FriendsListScreen] Messages subscription status:', status);
           if (status === 'SUBSCRIBED') {
             console.log('[FriendsListScreen] Successfully subscribed to new messages channel');
-          } else if (status === 'CHANNEL_ERROR') {
-            console.error('[FriendsListScreen] Channel subscription error');
-          } else if (status === 'TIMED_OUT') {
-            console.error('[FriendsListScreen] Channel subscription timed out');
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            // Silently handle errors - realtime subscriptions can fail temporarily
+            // The polling mechanism will still update the UI
+            console.log('[FriendsListScreen] Channel subscription failed, falling back to polling');
           }
         });
 
@@ -524,13 +530,78 @@ export default function FriendsListScreen({ navigation }: any) {
         unreadCounts[msg.sender_id] = (unreadCounts[msg.sender_id] || 0) + 1;
       });
       
-      // Merge unread counts with friends data
-      const friendsWithUnreadCount = (friendsData || []).map(friend => ({
-        ...friend,
-        unreadCount: unreadCounts[friend.friend_id] || 0
-      }));
+      // Get last message for each friend
+      const friendsWithDetails = await Promise.all(
+        (friendsData || []).map(async (friend: Friend) => {
+          try {
+            // Get the last message between this user and friend
+            const { data: lastMessageData } = await supabase
+              .from('messages')
+              .select('*')
+              .or(`and(sender_id.eq.${user.id},recipient_id.eq.${friend.friend_id}),and(sender_id.eq.${friend.friend_id},recipient_id.eq.${user.id})`)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .single();
 
-      setFriends(friendsWithUnreadCount);
+            let lastMessagePreview = null;
+            
+            if (lastMessageData) {
+              let content = '';
+              
+              if (lastMessageData.type === 'text' && lastMessageData.is_encrypted && lastMessageData.nonce) {
+                // Decrypt the message for preview
+                try {
+                  const decrypted = await FriendEncryption.decryptMessage(
+                    lastMessageData.content,
+                    lastMessageData.nonce,
+                    lastMessageData.ephemeral_public_key || '',
+                    friend.friend_id,
+                    user.id
+                  );
+                  content = decrypted || '[Encrypted message]';
+                } catch (e) {
+                  content = '[Encrypted message]';
+                }
+              } else if (lastMessageData.type === 'text') {
+                content = lastMessageData.content;
+              } else if (lastMessageData.type === 'voice') {
+                content = '🎤 Voice message';
+              }
+
+              lastMessagePreview = {
+                id: lastMessageData.id,
+                type: lastMessageData.type,
+                content: content.substring(0, 50) + (content.length > 50 ? '...' : ''),
+                created_at: lastMessageData.created_at,
+                is_mine: lastMessageData.sender_id === user.id
+              };
+            }
+
+            return {
+              ...friend,
+              unreadCount: unreadCounts[friend.friend_id] || 0,
+              lastMessage: lastMessagePreview
+            };
+          } catch (error) {
+            console.error('Error loading last message for friend:', friend.friend_id, error);
+            return {
+              ...friend,
+              unreadCount: unreadCounts[friend.friend_id] || 0,
+              lastMessage: null
+            };
+          }
+        })
+      );
+
+      // Sort friends by last message time (most recent first)
+      const sortedFriends = friendsWithDetails.sort((a, b) => {
+        if (!a.lastMessage && !b.lastMessage) return 0;
+        if (!a.lastMessage) return 1;
+        if (!b.lastMessage) return -1;
+        return new Date(b.lastMessage.created_at).getTime() - new Date(a.lastMessage.created_at).getTime();
+      });
+
+      setFriends(sortedFriends);
     } catch (error) {
       console.error('Error loading friends:', error);
       Alert.alert('Error', 'Failed to load friends');
@@ -928,6 +999,22 @@ export default function FriendsListScreen({ navigation }: any) {
     }
   };
 
+  const formatTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 1) return 'now';
+    if (diffMins < 60) return `${diffMins}m`;
+    if (diffHours < 24) return `${diffHours}h`;
+    if (diffDays < 7) return `${diffDays}d`;
+    
+    return date.toLocaleDateString();
+  };
+
   const renderFriend = ({ item }: { item: Friend }) => {
     const friendName = item.friend?.username || item.nickname || 'Anonymous User';
     const displayName = friendName.startsWith('User ') ? 'Anonymous User' : friendName;
@@ -969,11 +1056,21 @@ export default function FriendsListScreen({ navigation }: any) {
               )}
             </View>
             
-            {item.friend?.username && (
+            {item.lastMessage ? (
+              <View style={styles.lastMessageContainer}>
+                <Text style={styles.lastMessageText} numberOfLines={1}>
+                  {item.lastMessage.is_mine && <Text style={styles.youPrefix}>You: </Text>}
+                  {item.lastMessage.content}
+                </Text>
+                <Text style={styles.lastMessageTime}>
+                  {formatTime(item.lastMessage.created_at)}
+                </Text>
+              </View>
+            ) : item.friend?.username ? (
               <Text style={styles.friendUsername}>
                 @{item.friend.username}
               </Text>
-            )}
+            ) : null}
           </View>
           
           {item.unreadCount && item.unreadCount > 0 ? (
@@ -1221,6 +1318,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#666',
     marginTop: 2,
+  },
+  lastMessageContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  lastMessageText: {
+    fontSize: 14,
+    color: '#666',
+    flex: 1,
+    marginRight: 8,
+  },
+  youPrefix: {
+    fontWeight: '600',
+  },
+  lastMessageTime: {
+    fontSize: 12,
+    color: '#999',
   },
   emptyContainer: {
     flex: 1,

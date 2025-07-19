@@ -43,9 +43,11 @@ export async function sendMessageNotification(
     });
 
     if (error) {
-      console.error('Error sending push notification:', error);
+      console.error('[Push] Error sending notification:', error);
+      console.error('[Push] Error details:', error.message);
     } else {
       console.log('[Push] Notification sent successfully to:', recipientId);
+      console.log('[Push] Response:', data);
     }
   } catch (error) {
     console.error('Failed to send push notification:', error);
@@ -201,3 +203,6 @@ export default {
   sendFriendRequestNotification,
   updateBadgeCount,
 };
+
+// Export the register function directly for easier access
+export { registerForPushNotifications };

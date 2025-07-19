@@ -15,25 +15,15 @@
 
 ## Phase 2: Account Recovery + Remaining Features (1-2 weeks)
 
-### Current Priority: Complete Friend Chat Features
-- [ ] **Complete Friend Chat Features** (2-3 days)
-  - [x] Fix bug where there is no push notification / in app alert that a user has received a friend request.  (this works when the user refreshes the screen)
-  - [ ] Voice message support in friend chat UI
-  - [ ] Progress indicators for upload/download
-  - [ ] Message history with pagination
-  - [ ] Last message preview in friends list (encrypted)
+### Current Priority: Account Recovery System
+*Friend Chat Features completed - see CHANGELOG.md*
 
 ### Implementation Priority Order:
-1. **Complete Friend Chat Features** (2-3 days) 
-   - Voice message encryption integration
-   - Message history with proper decryption
-   - Last message previews (encrypted)
-
-2. **Account Recovery System** (3-4 days) 
+1. **Account Recovery System** (3-4 days) ✅ NEXT
    - Critical for user retention
    - Must have before launch
    
-3. **Remaining Features** (2-3 days)
+2. **Remaining Features** (2-3 days)
    - Video messages
    - Screenshot prevention
    - Premium features
@@ -51,14 +41,15 @@
   - [ ] Add read receipts (optional)
 
 ### ✅ SECURITY STATUS UPDATE
-**Friend Messages**: ✅ Now have E2E encryption via NaCl
-**Anonymous Chat**: ✅ Already has proper E2E encryption via NaCl
+**Text Messages**: ✅ E2E encrypted via SharedSecretEncryption
+**Voice Messages**: ✅ E2E encrypted via secureE2EAudioStorage
+**Anonymous Chat**: ✅ E2E encrypted via NaCl
 
-Both chat types now use the same robust encryption system:
-- NaCl box encryption with ephemeral keys
-- Perfect forward secrecy
-- Server cannot read message content
-- All messages encrypted before storage
+All message types now have proper E2E encryption:
+- Text: Shared secret encryption with authentication
+- Voice: Unique key per message, encrypted with recipient's key
+- Anonymous: NaCl box encryption with ephemeral keys
+- Server cannot decrypt any message content or audio
 
 
 ### Account Recovery System (Priority: HIGH 🔥)

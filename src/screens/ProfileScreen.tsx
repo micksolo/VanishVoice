@@ -384,6 +384,20 @@ export default function ProfileScreen() {
             <Text style={styles.settingText}>Test Push Notification</Text>
             <Ionicons name="chevron-forward" size={20} color="#999" />
           </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.settingItem}
+            onPress={async () => {
+              const { verifyE2EEncryption } = await import('../utils/verifyE2EEncryption');
+              await verifyE2EEncryption(true);
+            }}
+          >
+            <View style={[styles.settingIcon, { backgroundColor: '#ECFDF5' }]}>
+              <Ionicons name="shield-checkmark-outline" size={20} color="#10B981" />
+            </View>
+            <Text style={styles.settingText}>Verify Voice E2E Encryption</Text>
+            <Ionicons name="chevron-forward" size={20} color="#999" />
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
