@@ -18,6 +18,7 @@
       "bundleIdentifier": "com.generictech.vanishvoice",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "VanishVoice needs access to your microphone to record voice messages.",
+        "NSCameraUsageDescription": "VanishVoice needs access to your camera to record video messages.",
         "ITSAppUsesNonExemptEncryption": false
       },
       "entitlements": {
@@ -32,9 +33,9 @@
       "edgeToEdgeEnabled": true,
       "package": "com.generictech.vanishvoice",
       "permissions": [
-        "RECORD_AUDIO"
+        "RECORD_AUDIO",
+        "CAMERA"
       ],
-      "googleServicesFile": "./google-services.json"
     },
     "notification": {
       "icon": "./assets/icon.png",

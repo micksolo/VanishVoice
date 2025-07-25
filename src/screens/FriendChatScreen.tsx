@@ -29,17 +29,22 @@ import {
 import { sendMessageNotification } from '../services/pushNotifications';
 import FriendEncryption from '../utils/friendEncryption';
 import { uploadE2EEncryptedAudio, downloadAndDecryptE2EAudio } from '../utils/secureE2EAudioStorage';
+import { SecureE2EVideoStorageFastAndroid } from '../utils/secureE2EVideoStorageFastAndroid';
 import RecordingModal from '../components/RecordingModal';
+import VideoRecordingModal from '../components/VideoRecordingModalNew';
+import VideoPlayerModal from '../components/VideoPlayerModal';
 import * as FileSystem from 'expo-file-system';
+import { Video, ResizeMode } from 'expo-av';
 
 interface Message {
   id: string;
-  type: 'text' | 'voice';
+  type: 'text' | 'voice' | 'video';
   content: string;
   isMine: boolean;
   timestamp: Date;
   status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
-  duration?: number; // Duration in seconds for voice messages
+  duration?: number; // Duration in seconds for voice/video messages
+  uploadProgress?: number; // Upload progress percentage
 }
 
 const PAGE_SIZE = 20;
@@ -51,6 +56,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [showRecordingModal, setShowRecordingModal] = useState(false);
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  const [showVideoPlayer, setShowVideoPlayer] = useState(false);
+  const [currentVideoUri, setCurrentVideoUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
   const [playbackStatus, setPlaybackStatus] = useState<{ [key: string]: { isPlaying: boolean; progress: number; duration: number } }>({});
@@ -232,9 +240,12 @@ export default function FriendChatScreen({ route, navigation }: any) {
             console.log('[FriendChat] Loading plain text message (legacy)');
             content = msg.content;
           }
-        } else {
-          // Voice message - media path
+        } else if (msg.type === 'voice' || msg.type === 'video') {
+          // Voice/Video message - media path
           content = msg.media_path || '';
+        } else {
+          // Unknown type
+          content = '';
         }
         
         convertedMessages.push({
@@ -312,8 +323,10 @@ export default function FriendChatScreen({ route, navigation }: any) {
             } else {
               content = msg.content;
             }
-          } else {
+          } else if (msg.type === 'voice' || msg.type === 'video') {
             content = msg.media_path || '';
+          } else {
+            content = '';
           }
           
           convertedMessages.push({
@@ -381,8 +394,10 @@ export default function FriendChatScreen({ route, navigation }: any) {
               } else {
                 content = payload.new.content;
               }
-            } else {
+            } else if (payload.new.type === 'voice' || payload.new.type === 'video') {
               content = payload.new.media_path || '';
+            } else {
+              content = '';
             }
             
             const newMessage: Message = {
@@ -812,6 +827,173 @@ export default function FriendChatScreen({ route, navigation }: any) {
     }
   };
 
+  const handleVideoSend = async (videoPath: string, duration: number, encryptedKey: string, nonce: string) => {
+    if (!user) return;
+
+    try {
+      // Add optimistic message
+      const tempId = Date.now().toString();
+      const videoMessage: Message = {
+        id: tempId,
+        type: 'video',
+        content: videoPath,
+        isMine: true,
+        timestamp: new Date(),
+        status: 'sending',
+        duration: duration
+      };
+
+      console.log('[Upload] Setting uploading message ID:', tempId);
+      setMessages(prev => [...prev, videoMessage]);
+      setUploadingMessageId(tempId);
+      flatListRef.current?.scrollToEnd();
+
+      // Send to database - store encrypted key and nonce for E2E encryption
+      const { data: sentMessage, error } = await supabase
+        .from('messages')
+        .insert({
+          sender_id: user.id,
+          recipient_id: friendId,
+          type: 'video',
+          media_path: videoPath,
+          content: encryptedKey, // Store encrypted key in content field
+          nonce: nonce, // Store nonce
+          is_encrypted: true,
+          expiry_rule: { type: 'none' },
+          duration: duration
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[FriendChat] Error sending video message:', error);
+        setMessages(prev => 
+          prev.map(msg => 
+            msg.id === tempId 
+              ? { ...msg, status: 'failed' as const }
+              : msg
+          )
+        );
+        setUploadingMessageId(null);
+        Alert.alert('Error', 'Failed to send video message');
+        return;
+      }
+
+      // Update message with real ID
+      setMessages(prev => 
+        prev.map(msg => 
+          msg.id === tempId 
+            ? { 
+                ...msg, 
+                id: sentMessage.id,
+                status: 'sent' as const 
+              }
+            : msg
+        )
+      );
+      setUploadingMessageId(null);
+
+      // Send push notification
+      try {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('username')
+          .eq('id', user.id)
+          .single();
+        
+        await sendMessageNotification(
+          friendId,
+          user.id,
+          userData?.username || 'Someone',
+          '📹 Video message'
+        );
+      } catch (notifError) {
+        console.log('[FriendChat] Error sending notification:', notifError);
+      }
+    } catch (error) {
+      console.error('[FriendChat] Error sending video message:', error);
+      Alert.alert('Error', 'Failed to send video message');
+    }
+  };
+
+  const handleVideoRecorded = async (videoUri: string) => {
+    if (!user) return;
+
+    // Add immediate visual feedback
+    const tempId = Date.now().toString();
+    const tempVideoMessage: Message = {
+      id: tempId,
+      type: 'video',
+      content: videoUri, // Local URI for now
+      isMine: true,
+      timestamp: new Date(),
+      status: 'sending',
+      duration: 0
+    };
+
+    setMessages(prev => [...prev, tempVideoMessage]);
+    setUploadingMessageId(tempId);
+    flatListRef.current?.scrollToEnd();
+
+    try {
+      // Upload the video with E2E encryption using chunked approach for better reliability
+      // Uses the same pattern as voice messages - deriving shared secret from user IDs
+      const uploadResult = await SecureE2EVideoStorageFastAndroid.encryptAndUploadVideo(
+        videoUri,
+        user.id,
+        friendId,
+        (progress) => {
+          // Update the temp message with progress
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === tempId 
+                ? { ...msg, uploadProgress: progress * 100 }
+                : msg
+            )
+          );
+        }
+      );
+      
+      if (uploadResult) {
+        // Remove temporary message
+        setMessages(prev => prev.filter(msg => msg.id !== tempId));
+        
+        // Send the actual message with encrypted data
+        await handleVideoSend(
+          uploadResult.videoId, // Use videoId as the path
+          30, // Default 30 second duration
+          uploadResult.encryptedKey,
+          uploadResult.keyNonce
+        );
+      } else {
+        // Update temp message to failed
+        setMessages(prev => 
+          prev.map(msg => 
+            msg.id === tempId 
+              ? { ...msg, status: 'failed' as const }
+              : msg
+          )
+        );
+        setUploadingMessageId(null);
+        Alert.alert('Error', 'Failed to upload video');
+      }
+    } catch (error: any) {
+      console.error('Failed to send video:', error);
+      // Update temp message to failed
+      setMessages(prev => 
+        prev.map(msg => 
+          msg.id === tempId 
+            ? { ...msg, status: 'failed' as const }
+            : msg
+        )
+      );
+      setUploadingMessageId(null);
+      
+      // Generic error message - don't expose technical details
+      Alert.alert('Error', 'Failed to send video message. Please try again.');
+    }
+  };
+
   const playVoiceMessage = async (messageId: string) => {
     try {
       // Stop current playback if playing another message
@@ -1045,6 +1227,119 @@ export default function FriendChatScreen({ route, navigation }: any) {
     }
   };
 
+  const playVideoMessage = async (messageId: string) => {
+    try {
+      // Set downloading state
+      setDownloadingMessageId(messageId);
+
+      // Find the message to get encryption info
+      const message = messages.find(m => m.id === messageId);
+      if (!message) {
+        throw new Error('Message not found');
+      }
+
+      let videoUri: string;
+
+      // Check if this is a local URI (for messages just sent)
+      if (message.content.startsWith('file://') || message.content.startsWith('/')) {
+        videoUri = message.content;
+        // On iOS, ensure the file:// prefix is present
+        if (Platform.OS === 'ios' && !videoUri.startsWith('file://')) {
+          videoUri = 'file://' + videoUri;
+        }
+      } else {
+        // This is a server path, need to download and decrypt
+        const { data: msgData, error } = await supabase
+          .from('messages')
+          .select('media_path, content, nonce, sender_id')
+          .eq('id', messageId)
+          .single();
+
+        if (error || !msgData) {
+          throw new Error('Failed to get message details');
+        }
+
+        // For E2E encrypted messages, content contains the encrypted key
+        if (!msgData.content || !msgData.nonce) {
+          throw new Error('Missing encryption info');
+        }
+
+        // Download and decrypt the video using the same pattern as voice messages
+        // Always pass sender_id first, then recipient_id (current user)
+        console.log('[Video] Starting download with params:', {
+          videoId: msgData.media_path,
+          hasEncryptedKey: !!msgData.content,
+          hasNonce: !!msgData.nonce,
+          senderId: msgData.sender_id,
+          recipientId: user?.id
+        });
+        
+        const decryptedUri = await SecureE2EVideoStorageFastAndroid.downloadAndDecryptVideo(
+          msgData.media_path, // This is now the videoId
+          msgData.content,    // encrypted key
+          msgData.nonce,      // key nonce
+          msgData.sender_id,  // sender is always the person who sent the message
+          user?.id || '',     // recipient is always the current user when downloading
+          (progress) => {
+            // Could update UI with download progress here if needed
+            console.log(`[Video] Download progress: ${Math.round(progress * 100)}%`);
+          }
+        );
+
+        setDownloadingMessageId(null);
+
+        if (!decryptedUri) {
+          throw new Error('Failed to decrypt video message');
+        }
+
+        videoUri = decryptedUri;
+      }
+
+      console.log('[Video] Playing video from:', videoUri);
+      
+      // Verify the file exists before playing
+      const fileInfo = await FileSystem.getInfoAsync(videoUri);
+      console.log('[Video] File info:', {
+        exists: fileInfo.exists,
+        size: fileInfo.size ? `${(fileInfo.size / 1024 / 1024).toFixed(2)}MB` : 'unknown',
+        uri: fileInfo.uri,
+        isDirectory: fileInfo.isDirectory
+      });
+      
+      if (!fileInfo.exists) {
+        console.error('[Video] File does not exist!');
+        Alert.alert('Error', 'Video file not found');
+        return;
+      }
+      
+      // On Android, test with a known good video first
+      if (Platform.OS === 'android' && false) { // Set to true to test
+        console.log('[Video] Testing with known good video first...');
+        const { AndroidVideoFix } = await import('../utils/androidVideoFix');
+        const testVideoUri = await AndroidVideoFix.createTestVideo();
+        console.log('[Video] Playing test video:', testVideoUri);
+        setCurrentVideoUri(testVideoUri);
+        setShowVideoPlayer(true);
+        return;
+      }
+      
+      // Open video player modal
+      setCurrentVideoUri(videoUri);
+      setShowVideoPlayer(true);
+      
+    } catch (error: any) {
+      console.error('[Video Download] Failed:', error);
+      console.error('[Video Download] Error details:', {
+        message: error?.message,
+        stack: error?.stack,
+        name: error?.name,
+        isTrusted: error?.isTrusted
+      });
+      setDownloadingMessageId(null);
+      Alert.alert('Error', error?.message || 'Failed to play video message');
+    }
+  };
+
   const formatDuration = (milliseconds: number) => {
     const seconds = Math.floor(milliseconds / 1000);
     const minutes = Math.floor(seconds / 60);
@@ -1055,14 +1350,15 @@ export default function FriendChatScreen({ route, navigation }: any) {
 
   const renderMessage = ({ item }: { item: Message }) => {
     const isVoice = item.type === 'voice';
+    const isVideo = item.type === 'video';
+    const isMedia = isVoice || isVideo;
     const status = playbackStatus[item.id];
     const isCurrentlyPlaying = playingMessageId === item.id && status?.isPlaying;
     const hasProgress = status && status.duration > 0;
     const isUploading = uploadingMessageId === item.id;
     const isDownloading = downloadingMessageId === item.id;
     
-    if (isVoice && (isUploading || isDownloading)) {
-      console.log('[Render] Message', item.id, 'isUploading:', isUploading, 'isDownloading:', isDownloading);
+    if (isMedia && (isUploading || isDownloading)) {
     }
 
     return (
@@ -1071,12 +1367,52 @@ export default function FriendChatScreen({ route, navigation }: any) {
           styles.messageBubble,
           item.isMine ? styles.myMessage : styles.theirMessage,
           isVoice && styles.voiceMessageBubble,
+          isVideo && styles.voiceMessageBubble,
         ]}
-        onPress={isVoice ? () => playVoiceMessage(item.id) : undefined}
-        disabled={!isVoice || item.status === 'sending'}
-        activeOpacity={isVoice ? 0.7 : 1}
+        onPress={isVoice ? () => playVoiceMessage(item.id) : isVideo ? () => playVideoMessage(item.id) : undefined}
+        disabled={(!isVoice && !isVideo) || item.status === 'sending'}
+        activeOpacity={isMedia ? 0.7 : 1}
       >
-        {isVoice ? (
+        {isVideo ? (
+          <View style={styles.videoMessage}>
+            {/* Video thumbnail or placeholder */}
+            <View style={styles.videoThumbnailContainer}>
+              {isUploading || item.status === 'sending' ? (
+                <View style={styles.videoUploadingContainer}>
+                  <ActivityIndicator size="large" color={item.isMine ? '#fff' : '#4ECDC4'} />
+                  <Text style={[styles.uploadingText, item.isMine && styles.uploadingTextMine]}>
+                    {item.uploadProgress !== undefined 
+                      ? `Uploading: ${Math.round(item.uploadProgress)}%` 
+                      : 'Uploading video...'}
+                  </Text>
+                </View>
+              ) : isDownloading ? (
+                <View style={styles.videoUploadingContainer}>
+                  <ActivityIndicator size="large" color={item.isMine ? '#fff' : '#4ECDC4'} />
+                  <Text style={[styles.uploadingText, item.isMine && styles.uploadingTextMine]}>
+                    Downloading...
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  <View style={styles.videoPlaceholder}>
+                    <Ionicons name="videocam" size={50} color={item.isMine ? '#fff' : '#4ECDC4'} />
+                  </View>
+                  <View style={styles.playOverlay}>
+                    <View style={styles.playCircle}>
+                      <Ionicons name="play" size={30} color="white" />
+                    </View>
+                  </View>
+                </>
+              )}
+            </View>
+            <View style={styles.videoDurationContainer}>
+              <Text style={[styles.videoDuration, item.isMine && styles.videoDurationMine]}>
+                {item.duration ? formatDuration(item.duration * 1000) : 'Video'}
+              </Text>
+            </View>
+          </View>
+        ) : isVoice ? (
           <View style={styles.voiceMessage}>
             <View style={styles.voiceMessageLeft}>
               <View style={[
@@ -1142,7 +1478,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
           </Text>
         )}
         
-        {item.status === 'sending' && !isVoice && (
+        {item.status === 'sending' && !isVoice && !isVideo && (
           <ActivityIndicator size="small" color={item.isMine ? '#fff' : '#666'} style={styles.statusIndicator} />
         )}
       </TouchableOpacity>
@@ -1158,11 +1494,12 @@ export default function FriendChatScreen({ route, navigation }: any) {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaView style={styles.container}>
+        
+        <KeyboardAvoidingView
+          style={styles.container}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         {/* Header */}
         <View style={styles.header}>
@@ -1234,12 +1571,20 @@ export default function FriendChatScreen({ route, navigation }: any) {
                   <Ionicons name="send" size={24} color="#4ECDC4" />
                 </TouchableOpacity>
               ) : (
-                <TouchableOpacity
-                  onPress={startRecording}
-                  style={styles.micButton}
-                >
-                  <Ionicons name="mic" size={24} color="#4ECDC4" />
-                </TouchableOpacity>
+                <View style={styles.mediaButtons}>
+                  <TouchableOpacity
+                    onPress={() => setShowVideoModal(true)}
+                    style={styles.videoButton}
+                  >
+                    <Ionicons name="videocam" size={24} color="#4ECDC4" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={startRecording}
+                    style={styles.micButton}
+                  >
+                    <Ionicons name="mic" size={24} color="#4ECDC4" />
+                  </TouchableOpacity>
+                </View>
               )}
             </>
           ) : (
@@ -1315,7 +1660,30 @@ export default function FriendChatScreen({ route, navigation }: any) {
         onClose={() => setShowRecordingModal(false)}
         onSend={handleVoiceSend}
       />
+
+      {/* Video Recording Modal */}
+      {showVideoModal && (
+        <VideoRecordingModal
+          visible={showVideoModal}
+          onClose={() => setShowVideoModal(false)}
+          onVideoRecorded={handleVideoRecorded}
+          maxDuration={30}
+        />
+      )}
+
+      {/* Video Player Modal */}
+      {showVideoPlayer && currentVideoUri && (
+        <VideoPlayerModal
+          visible={showVideoPlayer}
+          videoUri={currentVideoUri}
+          onClose={() => {
+            setShowVideoPlayer(false);
+            setCurrentVideoUri(null);
+          }}
+        />
+      )}
     </SafeAreaView>
+    </GestureHandlerRootView>
   );
 }
 
@@ -1380,6 +1748,69 @@ const styles = StyleSheet.create({
   voiceMessageBubble: {
     minWidth: 200,
     maxWidth: '85%',
+  },
+  videoMessage: {
+    width: 200,
+    height: 150,
+  },
+  videoThumbnailContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+    borderRadius: 8,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  videoUploadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadingText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#666',
+  },
+  uploadingTextMine: {
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  videoPlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  playOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playCircle: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  videoDurationContainer: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  videoDuration: {
+    fontSize: 11,
+    color: 'white',
+  },
+  videoDurationMine: {
+    // Already white
   },
   voiceMessage: {
     flexDirection: 'row',
@@ -1461,6 +1892,19 @@ const styles = StyleSheet.create({
   sendButton: {
     marginLeft: 8,
     padding: 8,
+  },
+  mediaButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  videoButton: {
+    marginLeft: 8,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+    borderRadius: 20,
   },
   micButton: {
     marginLeft: 8,

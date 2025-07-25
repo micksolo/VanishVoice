@@ -10,29 +10,53 @@
 - Fun, young adult-focused branding
 - Mobile-only (iOS and Android) - no web version
 
+## Development Philosophy
+**Core Features First**: Complete the essential user experience before adding account management. Users can't miss features they haven't experienced yet, but they will immediately notice missing core functionality.
+
 ## Phase 1: MVP - Anonymous Chat ✅ COMPLETED
 *All features documented in CHANGELOG.md*
 
-## Phase 2: Account Recovery + Remaining Features (1-2 weeks)
+## Phase 2: Core Features Completion (1-2 weeks)
 
-### Current Priority: Account Recovery System
+### Current Priority: Complete Core Messaging Features
 *Friend Chat Features completed - see CHANGELOG.md*
 
 ### Implementation Priority Order:
-1. **Account Recovery System** (3-4 days) ✅ NEXT
-   - Critical for user retention
-   - Must have before launch
+1. **Video Messages** (2-3 days) ✅ COMPLETED
+   - Complete the core messaging triad (text/voice/video)
+   - Essential for competitive parity
+   - 30-second limit for both anonymous and friend chat
+   - E2E encrypted like voice messages
    
-2. **Remaining Features** (2-3 days)
-   - Video messages
-   - Screenshot prevention
-   - Premium features
+2. **Ephemeral Message System** (1-2 days)
+   - Core feature: "disappear after viewing"
+   - Auto-deletion after first view
+   - Time-based expiry options
+   - Visual indicators for ephemeral status
+   
+3. **Screenshot Prevention** (1 day)
+   - Critical for ephemeral messaging trust
+   - Android: actual prevention
+   - iOS: detection and notification
+   
+4. **Account Recovery System** (3-4 days)
+   - Important for retention but not blocking core UX
+   - Users need complete experience first
 
-### Remaining Phase 1 Features
-- [ ] **Complete Anonymous Chat**
-  - [ ] Video message recording (30s limit)
-  - [ ] Screenshot prevention (Android) / detection (iOS)
-  - [ ] Screen recording blocking
+### Video Messages Implementation Details ✅ COMPLETED
+*All video message features have been implemented - see CHANGELOG.md for details*
+
+### Remaining Core Features
+- [ ] **Ephemeral Messaging**
+  - [ ] Auto-delete after viewing
+  - [ ] "Opened" status tracking
+  - [ ] Countdown timers
+  - [ ] Screenshot detection/prevention
+  
+- [ ] **Anonymous Chat Enhancements**
+  - [ ] Better stranger matching
+  - [ ] Skip/Next functionality
+  - [ ] Report/Block system
 
 ### Remaining Technical Tasks
 - [ ] **UX Enhancements**
@@ -43,18 +67,20 @@
 ### ✅ SECURITY STATUS UPDATE
 **Text Messages**: ✅ E2E encrypted via SharedSecretEncryption
 **Voice Messages**: ✅ E2E encrypted via secureE2EAudioStorage
+**Video Messages**: ✅ E2E encrypted via secureE2EVideoStorageFastAndroid
 **Anonymous Chat**: ✅ E2E encrypted via NaCl
 
 All message types now have proper E2E encryption:
 - Text: Shared secret encryption with authentication
 - Voice: Unique key per message, encrypted with recipient's key
+- Video: XOR encryption with unique keys, encrypted with shared secret
 - Anonymous: NaCl box encryption with ephemeral keys
-- Server cannot decrypt any message content or audio
+- Server cannot decrypt any message content, audio, or video
 
 
-### Account Recovery System (Priority: HIGH 🔥)
-**Why Priority**: Users losing accounts = bad retention, must fix before launch
-**Implementation Order**: After unified friend chat completion
+### Account Recovery System (Priority: MEDIUM)
+**Why Important**: Users losing accounts = bad retention
+**When to Implement**: After core features are complete and polished
 
 - [ ] **Username + Password Recovery**
   - [ ] Add password_hash field to users table (nullable)

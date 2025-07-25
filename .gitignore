@@ -73,3 +73,9 @@ android/
 # MCP config (contains sensitive info)
 .mcp.json
 CLAUDE.md
+
+# Archive directories
+**/archive/
+docs/archive/
+src/components/archive/
+src/utils/archive/

@@ -42,6 +42,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Waveform visualization during recording
   - Secure audio file storage with E2E encryption
 
+- **Video Messages** ✅ COMPLETE
+  - 30-second video recording with countdown timer
+  - Front/back camera toggle
+  - E2E encrypted video messages (same pattern as voice)
+  - Unique encryption key per video
+  - XOR encryption for fast performance
+  - Video playback modal with controls
+  - Progress indicators for upload/download
+  - Cross-platform compatibility (iOS/Android)
+  - Integrated into friend chat system
+  - Database schema for video metadata
+  - Storage bucket configuration (100MB limit)
+  - Note: Video compression limited by Expo camera API
+    - iOS records ~50MB for 30s despite bitrate settings
+    - Upload takes ~30s, download ~4s
+    - Server-side compression needed for optimization
+
 - **Enhanced Friend System**
   - Real-time unread message counts
   - Friend request accept/decline flow
@@ -71,11 +88,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - ✅ FIXED: Friend messages now have full E2E encryption
 - ✅ FIXED: Voice messages now have proper E2E encryption
+- ✅ ADDED: Video messages have full E2E encryption
 - Implemented shared secret encryption (better UX than key exchange)
-- Both anonymous and friend messages are fully encrypted
+- All message types (text/voice/video) are fully encrypted
 - All message content encrypted before database storage
-- Voice messages use unique encryption keys per message
-- Audio encryption keys are encrypted with recipient's shared secret
+- Voice/video messages use unique encryption keys per message
+- Media encryption keys are encrypted with recipient's shared secret
 - Server never has access to decryption keys
 - Perfect forward secrecy with unique nonces
 - Verified via database queries - no plaintext messages or keys stored
