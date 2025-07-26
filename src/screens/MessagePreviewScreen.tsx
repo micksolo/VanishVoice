@@ -12,6 +12,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AnonymousAuthContext';
+import { useAppTheme } from '../contexts/ThemeContext';
+import { Theme } from '../theme';
 
 interface MessagePreviewScreenProps {
   route: {
@@ -30,6 +32,7 @@ type ExpiryType = 'time' | 'location' | 'playback';
 export default function MessagePreviewScreen({ route, navigation }: MessagePreviewScreenProps) {
   const { audioUri, duration, recipientId, recipientName } = route.params;
   const { user } = useAuth();
+  const theme = useAppTheme();
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [sending, setSending] = useState(false);
@@ -108,11 +111,13 @@ export default function MessagePreviewScreen({ route, navigation }: MessagePrevi
     };
   }, [sound]);
 
+  const styles = getStyles(theme);
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#000" />
+          <Ionicons name="arrow-back" size={24} color={theme.colors.text.primary} />
         </TouchableOpacity>
         <Text style={styles.title}>Preview Message</Text>
         <View style={{ width: 24 }} />
@@ -132,7 +137,7 @@ export default function MessagePreviewScreen({ route, navigation }: MessagePrevi
             <Ionicons
               name={isPlaying ? 'pause' : 'play'}
               size={32}
-              color="#fff"
+              color={theme.colors.text.inverse}
             />
           </TouchableOpacity>
           <View style={styles.audioInfo}>
@@ -150,7 +155,7 @@ export default function MessagePreviewScreen({ route, navigation }: MessagePrevi
             style={[styles.expiryOption, expiryType === 'time' && styles.selectedOption]}
             onPress={() => setExpiryType('time')}
           >
-            <Ionicons name="time-outline" size={24} color={expiryType === 'time' ? '#4ECDC4' : '#666'} />
+            <Ionicons name="time-outline" size={24} color={expiryType === 'time' ? theme.colors.accent.teal : theme.colors.text.secondary} />
             <View style={styles.optionContent}>
               <Text style={[styles.optionTitle, expiryType === 'time' && styles.selectedText]}>
                 After Time
@@ -160,7 +165,7 @@ export default function MessagePreviewScreen({ route, navigation }: MessagePrevi
               </Text>
             </View>
             {expiryType === 'time' && (
-              <Ionicons name="checkmark-circle" size={24} color="#4ECDC4" />
+              <Ionicons name="checkmark-circle" size={24} color={theme.colors.accent.teal} />
             )}
           </TouchableOpacity>
 
@@ -168,7 +173,7 @@ export default function MessagePreviewScreen({ route, navigation }: MessagePrevi
             style={[styles.expiryOption, expiryType === 'playback' && styles.selectedOption]}
             onPress={() => setExpiryType('playback')}
           >
-            <Ionicons name="headset-outline" size={24} color={expiryType === 'playback' ? '#4ECDC4' : '#666'} />
+            <Ionicons name="headset-outline" size={24} color={expiryType === 'playback' ? theme.colors.accent.teal : theme.colors.text.secondary} />
             <View style={styles.optionContent}>
               <Text style={[styles.optionTitle, expiryType === 'playback' && styles.selectedText]}>
                 After Playback
@@ -178,7 +183,7 @@ export default function MessagePreviewScreen({ route, navigation }: MessagePrevi
               </Text>
             </View>
             {expiryType === 'playback' && (
-              <Ionicons name="checkmark-circle" size={24} color="#4ECDC4" />
+              <Ionicons name="checkmark-circle" size={24} color={theme.colors.accent.teal} />
             )}
           </TouchableOpacity>
         </View>
@@ -201,7 +206,7 @@ export default function MessagePreviewScreen({ route, navigation }: MessagePrevi
             <Text style={styles.sendText}>Sending...</Text>
           ) : (
             <>
-              <Ionicons name="send" size={20} color="#fff" />
+              <Ionicons name="send" size={20} color={theme.colors.text.inverse} />
               <Text style={styles.sendText}>Send</Text>
             </>
           )}
@@ -211,143 +216,143 @@ export default function MessagePreviewScreen({ route, navigation }: MessagePrevi
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: Theme) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.surface.primary,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 20,
+    padding: theme.spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: theme.colors.border.light,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...theme.typography.heading.h4,
+    color: theme.colors.text.primary,
   },
   content: {
     flex: 1,
-    padding: 20,
+    padding: theme.spacing.lg,
   },
   recipientCard: {
-    backgroundColor: '#f8f8f8',
-    padding: 20,
-    borderRadius: 12,
-    marginBottom: 20,
+    backgroundColor: theme.colors.surface.tertiary,
+    padding: theme.spacing.lg,
+    borderRadius: theme.borderRadius.md,
+    marginBottom: theme.spacing.lg,
   },
   label: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 5,
+    ...theme.typography.body.small,
+    color: theme.colors.text.secondary,
+    marginBottom: theme.spacing.xs,
   },
   recipientName: {
-    fontSize: 20,
-    fontWeight: '600',
+    ...theme.typography.heading.h3,
+    color: theme.colors.text.primary,
   },
   audioCard: {
-    backgroundColor: '#000',
-    padding: 20,
-    borderRadius: 12,
+    backgroundColor: theme.colors.primary.main,
+    padding: theme.spacing.lg,
+    borderRadius: theme.borderRadius.md,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: theme.spacing.xl,
+    ...theme.shadows.medium,
   },
   playButton: {
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#4ECDC4',
+    backgroundColor: theme.colors.accent.teal,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 15,
+    marginRight: theme.spacing.md,
   },
   audioInfo: {
     flex: 1,
   },
   duration: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
+    ...theme.typography.heading.h2,
+    color: theme.colors.text.inverse,
   },
   audioLabel: {
-    fontSize: 14,
-    color: '#ccc',
-    marginTop: 2,
+    ...theme.typography.body.small,
+    color: theme.colors.text.muted,
+    marginTop: theme.spacing.xs,
   },
   expirySection: {
-    marginTop: 10,
+    marginTop: theme.spacing.sm,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 15,
+    ...theme.typography.heading.h4,
+    color: theme.colors.text.primary,
+    marginBottom: theme.spacing.md,
   },
   expiryOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#f8f8f8',
-    borderRadius: 12,
-    marginBottom: 10,
+    padding: theme.spacing.lg,
+    backgroundColor: theme.colors.surface.tertiary,
+    borderRadius: theme.borderRadius.md,
+    marginBottom: theme.spacing.sm,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   selectedOption: {
-    backgroundColor: '#e8fffe',
-    borderColor: '#4ECDC4',
-    borderWidth: 1,
+    backgroundColor: theme.colors.accent.light,
+    borderColor: theme.colors.accent.teal,
   },
   optionContent: {
     flex: 1,
-    marginLeft: 15,
+    marginLeft: theme.spacing.md,
   },
   optionTitle: {
-    fontSize: 16,
+    ...theme.typography.body.medium,
+    color: theme.colors.text.primary,
     fontWeight: '600',
-    color: '#333',
   },
   selectedText: {
-    color: '#4ECDC4',
+    color: theme.colors.accent.teal,
   },
   optionDescription: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 2,
+    ...theme.typography.body.small,
+    color: theme.colors.text.secondary,
+    marginTop: theme.spacing.xs,
   },
   footer: {
     flexDirection: 'row',
-    padding: 20,
-    gap: 15,
+    padding: theme.spacing.lg,
+    gap: theme.spacing.md,
   },
   cancelButton: {
     flex: 1,
-    paddingVertical: 15,
-    borderRadius: 12,
-    backgroundColor: '#f0f0f0',
+    paddingVertical: theme.spacing.md,
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.surface.tertiary,
     alignItems: 'center',
   },
   cancelText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#666',
+    ...theme.typography.button.medium,
+    color: theme.colors.text.secondary,
   },
   sendButton: {
     flex: 2,
-    paddingVertical: 15,
-    borderRadius: 12,
-    backgroundColor: '#000',
+    paddingVertical: theme.spacing.md,
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.primary.main,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: theme.spacing.xs,
+    ...theme.shadows.small,
   },
   sendingButton: {
     opacity: 0.7,
   },
   sendText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
+    ...theme.typography.button.medium,
+    color: theme.colors.text.inverse,
   },
 });

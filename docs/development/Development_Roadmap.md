@@ -47,10 +47,11 @@
 *All video message features have been implemented - see CHANGELOG.md for details*
 
 ### Remaining Core Features
-- [ ] **Ephemeral Messaging**
-  - [ ] Auto-delete after viewing
-  - [ ] "Opened" status tracking
-  - [ ] Countdown timers
+- [ ] **Ephemeral Messaging** - PARTIAL IMPLEMENTATION
+  - [x] Database schema for ephemeral messages ✅
+  - [x] mark_message_viewed function ✅  
+  - [x] UI components (CountdownTimer, EphemeralIndicator) ✅
+  - [ ] Auto-delete after viewing (backend job needed)
   - [ ] Screenshot detection/prevention
   
 - [ ] **Anonymous Chat Enhancements**
@@ -59,7 +60,37 @@
   - [ ] Report/Block system
 
 ### Remaining Technical Tasks
-- [ ] **UX Enhancements**
+- [ ] **Comprehensive UX/UI Redesign** (Priority: HIGH - 8 weeks)
+  - [x] **Phase 1: Foundation (Weeks 1-2)** ✅ COMPLETED
+    - [x] Set up theme system with light/dark mode support ✅
+    - [x] Create base UI component library (buttons, inputs, cards) ✅
+    - [x] Fix critical UX issues (touch targets, loading states) ✅
+    - [x] Implement color system with semantic tokens ✅
+  - [ ] **Phase 2: Core Components (Weeks 3-4)** IN PROGRESS
+    - [x] Migrate all screens to use theme system (FriendsListScreen completed ✅)
+    - [x] Redesign message bubbles with proper status indicators ✅
+    - [ ] Improve recording interface (tap-to-start, visual feedback)
+    - [x] Create empty state components ✅
+    - [x] Implement consistent spacing system (4px grid) ✅
+  - [ ] **Phase 3: Visual Polish (Weeks 5-6)**
+    - [ ] Add animations and micro-interactions
+    - [ ] Implement haptic feedback
+    - [ ] Create custom icon system
+    - [ ] Polish platform-specific enhancements
+  - [ ] **Phase 4: Accessibility (Weeks 7-8)**
+    - [ ] Add screen reader support
+    - [ ] Ensure WCAG AA color contrast
+    - [ ] Support reduced motion preferences
+    - [ ] Test with accessibility tools
+  - [ ] **Key Improvements** PARTIALLY COMPLETE
+    - [x] Modern color palette (Purple accent: #6C63FF) ✅
+    - [x] Standardized typography system ✅
+    - [x] Reusable component patterns ✅
+    - [ ] Consistent animation guidelines
+    - [ ] Improved ephemeral indicators
+    - [ ] Better error handling and feedback
+
+- [ ] **Additional UX Enhancements**
   - [ ] Add typing indicators
   - [ ] Handle offline message queue
   - [ ] Add read receipts (optional)
@@ -147,10 +178,10 @@ All message types now have proper E2E encryption:
   - [ ] Message queueing
   - [ ] Connection indicators
   - [ ] Error handling
-- [ ] Dark/Light mode
-  - [ ] System preference detection
-  - [ ] Manual toggle in settings
-  - [ ] Persist user preference
+- [x] Dark/Light mode ✅ COMPLETED
+  - [x] System preference detection ✅
+  - [x] Manual toggle in settings ✅
+  - [x] Persist user preference ✅
 - [ ] Analytics setup
   - [ ] Anonymous usage metrics
   - [ ] Conversion tracking

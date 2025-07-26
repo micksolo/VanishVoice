@@ -80,39 +80,66 @@ async function encryptAudioData(
 }
 
 /**
- * Decrypt audio data
+ * Decrypt audio data - Optimized version
  */
 async function decryptAudioData(
   encryptedBase64: string,
   key: string,
   nonce: string
 ): Promise<string> {
-  // Create decryption key
-  const decryptionKey = await Crypto.digestStringAsync(
+  // Create base decryption key
+  const baseKey = await Crypto.digestStringAsync(
     Crypto.CryptoDigestAlgorithm.SHA256,
     key + nonce,
     { encoding: Crypto.CryptoEncoding.HEX }
   );
   
   const encryptedBuffer = Buffer.from(encryptedBase64, 'base64');
-  const keyBuffer = Buffer.from(decryptionKey, 'hex');
+  const baseKeyBuffer = Buffer.from(baseKey, 'hex');
   
-  // Stream cipher decryption
+  // Stream cipher decryption with optimized key generation
   const decrypted = Buffer.alloc(encryptedBuffer.length);
   
-  // Use counter mode
-  for (let i = 0; i < encryptedBuffer.length; i += keyBuffer.length) {
-    // Create unique key for this block
-    const blockKey = await Crypto.digestStringAsync(
-      Crypto.CryptoDigestAlgorithm.SHA256,
-      decryptionKey + i.toString(),
-      { encoding: Crypto.CryptoEncoding.HEX }
-    );
-    const blockKeyBuffer = Buffer.from(blockKey, 'hex');
+  // Pre-compute block keys for better performance (trade memory for speed)
+  const blockSize = baseKeyBuffer.length;
+  const numBlocks = Math.ceil(encryptedBuffer.length / blockSize);
+  const maxPrecomputedBlocks = Math.min(numBlocks, 50); // Limit memory usage
+  
+  if (numBlocks <= maxPrecomputedBlocks) {
+    // Small files: pre-compute all block keys for maximum speed
+    const blockKeys: Buffer[] = [];
+    for (let blockIndex = 0; blockIndex < numBlocks; blockIndex++) {
+      const blockKey = await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA256,
+        baseKey + (blockIndex * blockSize).toString(),
+        { encoding: Crypto.CryptoEncoding.HEX }
+      );
+      blockKeys.push(Buffer.from(blockKey, 'hex'));
+    }
     
-    // XOR this block
-    for (let j = 0; j < keyBuffer.length && (i + j) < encryptedBuffer.length; j++) {
-      decrypted[i + j] = encryptedBuffer[i + j] ^ blockKeyBuffer[j];
+    // Decrypt all blocks
+    for (let blockIndex = 0; blockIndex < numBlocks; blockIndex++) {
+      const blockKeyBuffer = blockKeys[blockIndex];
+      const startOffset = blockIndex * blockSize;
+      
+      for (let j = 0; j < blockSize && (startOffset + j) < encryptedBuffer.length; j++) {
+        decrypted[startOffset + j] = encryptedBuffer[startOffset + j] ^ blockKeyBuffer[j];
+      }
+    }
+  } else {
+    // Large files: compute keys on-demand to limit memory usage
+    for (let i = 0; i < encryptedBuffer.length; i += blockSize) {
+      const blockKey = await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA256,
+        baseKey + i.toString(),
+        { encoding: Crypto.CryptoEncoding.HEX }
+      );
+      const blockKeyBuffer = Buffer.from(blockKey, 'hex');
+      
+      // XOR this block
+      for (let j = 0; j < blockSize && (i + j) < encryptedBuffer.length; j++) {
+        decrypted[i + j] = encryptedBuffer[i + j] ^ blockKeyBuffer[j];
+      }
     }
   }
   
@@ -196,42 +223,61 @@ export const downloadAndDecryptE2EAudio = async (
   myUserId: string,
   onProgress?: (progress: UploadProgress) => void
 ): Promise<string | null> => {
+  const startTime = Date.now();
   try {
+    console.log('[E2EAudio] Starting download and decrypt...');
+    
     // Download the encrypted file
+    const downloadStart = Date.now();
     const { data, error } = await supabase.storage
       .from('voice-messages')
       .download(path);
     
+    console.log(`[E2EAudio] Download completed in ${Date.now() - downloadStart}ms`);
+    
     if (error) throw error;
     
-    // Convert blob to base64
-    const reader = new FileReader();
-    const base64Promise = new Promise<string>((resolve, reject) => {
-      reader.onloadend = () => {
-        if (reader.result) {
-          const base64 = (reader.result as string).split(',')[1];
-          resolve(base64);
-        } else {
-          reject(new Error('Failed to read blob'));
-        }
-      };
-      reader.onerror = reject;
-    });
+    // Convert blob to base64 - optimized approach with React Native compatibility
+    let encryptedData: Uint8Array;
     
-    reader.readAsDataURL(data);
-    const encryptedBase64 = await base64Promise;
+    // Check if we have arrayBuffer method (web) or need to use FileReader (React Native)
+    if (data.arrayBuffer) {
+      const arrayBuffer = await data.arrayBuffer();
+      encryptedData = new Uint8Array(arrayBuffer);
+    } else {
+      // React Native path - use FileReader
+      const reader = new FileReader();
+      const arrayBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+        reader.onload = () => {
+          if (reader.result instanceof ArrayBuffer) {
+            resolve(reader.result);
+          } else {
+            reject(new Error('Failed to read blob as ArrayBuffer'));
+          }
+        };
+        reader.onerror = () => reject(new Error('FileReader error: ' + reader.error?.message));
+        reader.readAsArrayBuffer(data);
+      });
+      encryptedData = new Uint8Array(arrayBuffer);
+    }
+    
+    const encryptedBase64 = Buffer.from(encryptedData).toString('base64');
     
     // Parse nonces
     const { audioNonce, keyNonce } = JSON.parse(nonce);
     
     // Derive shared secret
+    const keyDecryptStart = Date.now();
     const sharedSecret = await SharedSecretEncryption.deriveSharedSecret(myUserId, senderId);
     
     // Decrypt the audio key
     const audioKey = await SharedSecretEncryption.decrypt(encryptedKey, keyNonce, sharedSecret);
+    console.log(`[E2EAudio] Key decryption completed in ${Date.now() - keyDecryptStart}ms`);
     
     // Decrypt the audio
+    const audioDecryptStart = Date.now();
     const decryptedBase64 = await decryptAudioData(encryptedBase64, audioKey, audioNonce);
+    console.log(`[E2EAudio] Audio decryption completed in ${Date.now() - audioDecryptStart}ms`);
     
     // Save decrypted audio to cache
     const filename = `voice_${Date.now()}.mp4`;
@@ -248,6 +294,8 @@ export const downloadAndDecryptE2EAudio = async (
       size: fileInfo.size,
       exists: fileInfo.exists
     });
+    
+    console.log(`[E2EAudio] Total process completed in ${Date.now() - startTime}ms`);
     
     // Ensure proper file:// prefix for iOS
     if (Platform.OS === 'ios' && !localUri.startsWith('file://')) {

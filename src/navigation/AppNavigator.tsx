@@ -1,10 +1,11 @@
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AnonymousAuthContext';
-import { ActivityIndicator, View } from 'react-native';
+import { useAppTheme } from '../contexts/ThemeContext';
+import { Loading } from '../components/ui';
 
 import EphemeralInboxScreen from '../screens/EphemeralInboxScreen';
 import FriendsListScreen from '../screens/FriendsListScreen';
@@ -13,13 +14,28 @@ import ProfileScreen from '../screens/ProfileScreen';
 import AuthScreen from '../screens/AuthScreen';
 import AnonymousLobbyScreen from '../screens/AnonymousLobbyScreen';
 import AnonymousChatScreen from '../screens/AnonymousChatScreen';
+import ThemeDemo from '../screens/ThemeDemo';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
 function FriendsStack() {
+  const theme = useAppTheme();
+  
   return (
-    <Stack.Navigator>
+    <Stack.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: theme.colors.background.primary,
+          elevation: 0,
+          shadowOpacity: 0,
+          borderBottomWidth: 1,
+          borderBottomColor: theme.colors.border.subtle,
+        },
+        headerTintColor: theme.colors.text.primary,
+        headerTitleStyle: theme.typography.headlineMedium,
+      }}
+    >
       <Stack.Screen 
         name="FriendsList" 
         component={FriendsListScreen}
@@ -51,7 +67,40 @@ function FriendsStack() {
   );
 }
 
+function ProfileStack() {
+  const theme = useAppTheme();
+  
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: theme.colors.background.primary,
+          elevation: 0,
+          shadowOpacity: 0,
+          borderBottomWidth: 1,
+          borderBottomColor: theme.colors.border.subtle,
+        },
+        headerTintColor: theme.colors.text.primary,
+        headerTitleStyle: theme.typography.headlineMedium,
+      }}
+    >
+      <Stack.Screen 
+        name="ProfileMain" 
+        component={ProfileScreen}
+        options={{ title: 'Profile' }}
+      />
+      <Stack.Screen 
+        name="ThemeDemo" 
+        component={ThemeDemo}
+        options={{ title: 'Theme Demo' }}
+      />
+    </Stack.Navigator>
+  );
+}
+
 function TabNavigator() {
+  const theme = useAppTheme();
+  
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -68,15 +117,25 @@ function TabNavigator() {
 
           return <Ionicons name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: '#000',
-        tabBarInactiveTintColor: 'gray',
+        tabBarActiveTintColor: theme.colors.text.accent,
+        tabBarInactiveTintColor: theme.colors.text.tertiary,
+        tabBarStyle: {
+          backgroundColor: theme.colors.background.primary,
+          borderTopColor: theme.colors.border.subtle,
+          minHeight: theme.touchTargets.large,
+          paddingBottom: theme.spacing.sm,
+          paddingTop: theme.spacing.sm,
+        },
+        tabBarLabelStyle: theme.typography.labelMedium,
         headerStyle: {
-          backgroundColor: '#f8f8f8',
+          backgroundColor: theme.colors.background.primary,
+          elevation: 0,
+          shadowOpacity: 0,
+          borderBottomWidth: 1,
+          borderBottomColor: theme.colors.border.subtle,
         },
-        headerTintColor: '#000',
-        headerTitleStyle: {
-          fontWeight: 'bold',
-        },
+        headerTintColor: theme.colors.text.primary,
+        headerTitleStyle: theme.typography.headlineMedium,
       })}
     >
       <Tab.Screen 
@@ -86,8 +145,8 @@ function TabNavigator() {
       />
       <Tab.Screen 
         name="Profile" 
-        component={ProfileScreen}
-        options={{ title: 'Profile' }}
+        component={ProfileStack}
+        options={{ title: 'Profile', headerShown: false }}
       />
     </Tab.Navigator>
   );
@@ -95,17 +154,41 @@ function TabNavigator() {
 
 export default function AppNavigator() {
   const { user, loading } = useAuth();
+  const theme = useAppTheme();
 
   if (loading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#000" />
-      </View>
-    );
+    return <Loading fullScreen text="Loading..." />;
   }
 
+  // Create navigation theme based on app theme
+  const navigationTheme = theme.isDark
+    ? {
+        ...DarkTheme,
+        colors: {
+          ...DarkTheme.colors,
+          primary: theme.colors.button.primary.background,
+          background: theme.colors.background.primary,
+          card: theme.colors.background.primary,
+          text: theme.colors.text.primary,
+          border: theme.colors.border.subtle,
+          notification: theme.colors.status.error,
+        },
+      }
+    : {
+        ...DefaultTheme,
+        colors: {
+          ...DefaultTheme.colors,
+          primary: theme.colors.button.primary.background,
+          background: theme.colors.background.primary,
+          card: theme.colors.background.primary,
+          text: theme.colors.text.primary,
+          border: theme.colors.border.subtle,
+          notification: theme.colors.status.error,
+        },
+      };
+
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={navigationTheme}>
       {user ? <TabNavigator /> : <AuthScreen />}
     </NavigationContainer>
   );

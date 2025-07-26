@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   FlatList,
   RefreshControl,
   Alert,
@@ -15,6 +14,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AnonymousAuthContext';
+import { useAppTheme } from '../contexts/ThemeContext';
+import { Theme } from '../theme';
 import { supabase, debugRealtimeConnection } from '../services/supabase';
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFocusEffect } from '@react-navigation/native';
@@ -22,6 +23,7 @@ import RealtimeDebugger from '../components/RealtimeDebugger';
 import * as Notifications from 'expo-notifications';
 import { MessageNotificationData, sendFriendRequestNotification } from '../services/pushNotifications';
 import FriendEncryption from '../utils/friendEncryption';
+import { SafeAreaView, Button, Card, IconButton, Input, Loading, EmptyState } from '../components/ui';
 
 interface Friend {
   id: string;
@@ -46,6 +48,7 @@ interface Friend {
 
 export default function FriendsListScreen({ navigation }: any) {
   const { user } = useAuth();
+  const theme = useAppTheme();
   const [friends, setFriends] = useState<Friend[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1052,7 +1055,7 @@ export default function FriendsListScreen({ navigation }: any) {
             <View style={styles.friendHeader}>
               <Text style={styles.friendName}>{displayName}</Text>
               {item.mutual && (
-                <Ionicons name="people" size={16} color="#4ECDC4" />
+                <Ionicons name="people" size={16} color={theme.colors.text.accent} />
               )}
             </View>
             
@@ -1085,29 +1088,16 @@ export default function FriendsListScreen({ navigation }: any) {
     );
   };
 
-  const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <Ionicons name="people-outline" size={64} color="#ccc" />
-      <Text style={styles.emptyTitle}>No Friends Yet</Text>
-      <Text style={styles.emptySubtitle}>
-        Add friends to start chatting!
-      </Text>
-      <TouchableOpacity
-        style={styles.addFirstFriendButton}
-        onPress={() => setAddFriendModalVisible(true)}
-      >
-        <Text style={styles.addFirstFriendText}>Add Your First Friend</Text>
-      </TouchableOpacity>
-    </View>
-  );
+
+  const styles = getStyles(theme);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={{ flex: 1 }}>
         {/* Header */}
         <View style={styles.header}>
         <View style={styles.titleContainer}>
-          <Text style={styles.title}>Friends</Text>
+          <Text style={[theme.typography.displaySmall, { color: theme.colors.text.primary }]}>Friends</Text>
           {pendingRequests.length > 0 && (
             <View style={styles.requestBadge}>
               <Text style={styles.requestBadgeText}>{pendingRequests.length}</Text>
@@ -1115,18 +1105,18 @@ export default function FriendsListScreen({ navigation }: any) {
           )}
         </View>
         <View style={styles.headerActions}>
-          <TouchableOpacity
-            style={styles.headerButton}
+          <IconButton
+            icon={<Ionicons name="shuffle-outline" size={24} color={theme.colors.text.secondary} />}
             onPress={() => navigation.navigate('AnonymousLobby')}
-          >
-            <Ionicons name="shuffle-outline" size={24} color="#666" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.headerButton}
+            size="medium"
+            variant="ghost"
+          />
+          <IconButton
+            icon={<Ionicons name="person-add" size={24} color={theme.colors.text.accent} />}
             onPress={() => setAddFriendModalVisible(true)}
-          >
-            <Ionicons name="person-add" size={24} color="#4ECDC4" />
-          </TouchableOpacity>
+            size="medium"
+            variant="ghost"
+          />
         </View>
       </View>
 
@@ -1171,7 +1161,14 @@ export default function FriendsListScreen({ navigation }: any) {
             </View>
           ) : null
         }
-        ListEmptyComponent={renderEmpty}
+        ListEmptyComponent={() => (
+          <EmptyState
+            icon="people-outline"
+            title="No Friends Yet"
+            subtitle="Add friends to start chatting!"
+            action={{ label: "Add Your First Friend", onPress: () => setAddFriendModalVisible(true) }}
+          />
+        )}
         contentContainerStyle={friends.length === 0 && pendingRequests.length === 0 ? styles.emptyList : undefined}
         showsVerticalScrollIndicator={false}
       />
@@ -1182,32 +1179,32 @@ export default function FriendsListScreen({ navigation }: any) {
         animationType="slide"
         presentationStyle="pageSheet"
       >
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity
+        <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background.primary }}>
+          <View style={[styles.modalHeader, { backgroundColor: theme.colors.background.primary, borderBottomColor: theme.colors.border.subtle }]}>
+            <Button
+              variant="ghost"
               onPress={() => {
                 setAddFriendModalVisible(false);
                 setSearchUsername('');
                 setSearchError('');
               }}
             >
-              <Text style={styles.cancelButton}>Cancel</Text>
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>Add Friend</Text>
-            <TouchableOpacity onPress={addFriend} disabled={!searchUsername.trim() || isSearching}>
-              <Text style={[
-                styles.addButton,
-                (!searchUsername.trim() || isSearching) && styles.addButtonDisabled
-              ]}>
-                {isSearching ? 'Searching...' : 'Add'}
-              </Text>
-            </TouchableOpacity>
+              Cancel
+            </Button>
+            <Text style={[theme.typography.headlineMedium, { color: theme.colors.text.primary }]}>Add Friend</Text>
+            <Button
+              variant="ghost"
+              onPress={addFriend}
+              disabled={!searchUsername.trim() || isSearching}
+              loading={isSearching}
+            >
+              Add
+            </Button>
           </View>
 
-          <View style={styles.modalContent}>
-            <Text style={styles.inputLabel}>Username</Text>
-            <TextInput
-              style={[styles.usernameInput, searchError ? styles.inputError : null]}
+          <View style={[styles.modalContent, { padding: theme.spacing.lg }]}>
+            <Input
+              label="Username"
               value={searchUsername}
               onChangeText={(text) => {
                 setSearchUsername(text);
@@ -1217,23 +1214,19 @@ export default function FriendsListScreen({ navigation }: any) {
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="off"
+              error={searchError}
+              helperText={!searchError ? "Search for friends by their username" : undefined}
             />
             
-            {searchError ? (
-              <Text style={styles.errorText}>{searchError}</Text>
-            ) : (
-              <Text style={styles.helpText}>
-                Search for friends by their username
-              </Text>
-            )}
-            
             {user && !user.username && (
-              <View style={styles.warningContainer}>
-                <Ionicons name="information-circle" size={20} color="#FF9500" />
-                <Text style={styles.warningText}>
-                  Set your username in Profile to let friends find you
-                </Text>
-              </View>
+              <Card style={[{ backgroundColor: theme.colors.status.warning + '20', marginTop: theme.spacing.md }]} elevation="none">
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
+                  <Ionicons name="information-circle" size={20} color={theme.colors.status.warning} />
+                  <Text style={[theme.typography.bodySmall, { color: theme.colors.text.primary, flex: 1 }]}>
+                    Set your username in Profile to let friends find you
+                  </Text>
+                </View>
+              </Card>
             )}
           </View>
         </SafeAreaView>
@@ -1241,7 +1234,7 @@ export default function FriendsListScreen({ navigation }: any) {
       
       {/* Push/Polling Status Indicator */}
       <View style={styles.statusIndicator}>
-        <View style={[styles.statusDot, { backgroundColor: '#4ECDC4' }]} />
+        <View style={[styles.statusDot, { backgroundColor: theme.colors.status.success }]} />
         <Text style={styles.statusText}>Push Notifications Active</Text>
       </View>
       
@@ -1252,54 +1245,42 @@ export default function FriendsListScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FAFAFA',
-  },
+const getStyles = (theme: Theme) => StyleSheet.create({
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#fff',
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+    backgroundColor: theme.colors.background.primary,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1A1A1A',
+    borderBottomColor: theme.colors.border.subtle,
   },
   headerActions: {
     flexDirection: 'row',
-    gap: 8,
-  },
-  headerButton: {
-    padding: 8,
+    gap: theme.spacing.xs,
   },
   friendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#fff',
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.background.primary,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: theme.colors.border.subtle,
+    minHeight: theme.touchTargets.large,
   },
   avatar: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#4ECDC4',
+    backgroundColor: theme.colors.text.accent,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: theme.spacing.md,
   },
   avatarText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
+    ...theme.typography.headlineMedium,
+    color: theme.colors.text.inverse,
   },
   friendInfo: {
     flex: 1,
@@ -1310,13 +1291,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   friendName: {
-    fontSize: 16,
+    ...theme.typography.bodyLarge,
     fontWeight: '600',
-    color: '#1A1A1A',
+    color: theme.colors.text.primary,
   },
   friendUsername: {
-    fontSize: 13,
-    color: '#666',
+    ...theme.typography.bodySmall,
+    color: theme.colors.text.secondary,
     marginTop: 2,
   },
   lastMessageContainer: {
@@ -1325,109 +1306,31 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   lastMessageText: {
-    fontSize: 14,
-    color: '#666',
+    ...theme.typography.bodyMedium,
+    color: theme.colors.text.secondary,
     flex: 1,
-    marginRight: 8,
+    marginRight: theme.spacing.xs,
   },
   youPrefix: {
     fontWeight: '600',
   },
   lastMessageTime: {
-    fontSize: 12,
-    color: '#999',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
+    ...theme.typography.labelSmall,
+    color: theme.colors.text.tertiary,
   },
   emptyList: {
     flexGrow: 1,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#1A1A1A',
-    marginTop: 16,
-  },
-  emptySubtitle: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  addFirstFriendButton: {
-    backgroundColor: '#4ECDC4',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 24,
-    marginTop: 24,
-  },
-  addFirstFriendText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#FAFAFA',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#fff',
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-  },
-  cancelButton: {
-    fontSize: 16,
-    color: '#666',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1A1A1A',
-  },
-  addButtonDisabled: {
-    color: '#ccc',
   },
   modalContent: {
-    padding: 20,
-  },
-  inputLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1A1A1A',
-    marginBottom: 8,
-  },
-  usernameInput: {
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    backgroundColor: '#fff',
-  },
-  inputError: {
-    borderColor: '#FF3B30',
-  },
-  errorText: {
-    fontSize: 12,
-    color: '#FF3B30',
-    marginTop: 4,
-  },
-  helpText: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    marginTop: 12,
-    lineHeight: 20,
+    flex: 1,
   },
   yourCodeContainer: {
     backgroundColor: '#F8F8F8',
@@ -1463,57 +1366,57 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   deleteButton: {
-    backgroundColor: '#FF3B30',
+    backgroundColor: theme.colors.status.error,
     justifyContent: 'center',
     alignItems: 'center',
     width: 100,
     height: '100%',
     flexDirection: 'column',
-    paddingHorizontal: 20,
+    paddingHorizontal: theme.spacing.lg,
   },
   deleteButtonText: {
-    color: '#fff',
-    fontSize: 12,
-    marginTop: 4,
+    color: theme.colors.text.inverse,
+    ...theme.typography.labelSmall,
+    marginTop: theme.spacing.xs,
     fontWeight: '600',
   },
   requestsSection: {
-    backgroundColor: '#FFF8E1',
-    padding: 16,
+    backgroundColor: theme.colors.status.warning + '20',
+    padding: theme.spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#FFE082',
+    borderBottomColor: theme.colors.status.warning + '40',
   },
   requestsTitle: {
-    fontSize: 16,
+    ...theme.typography.headlineSmall,
     fontWeight: '600',
-    color: '#F57C00',
-    marginBottom: 12,
+    color: theme.colors.status.warning,
+    marginBottom: theme.spacing.sm,
   },
   requestItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
+    backgroundColor: theme.colors.background.primary,
+    padding: theme.spacing.sm,
+    borderRadius: theme.borderRadius.medium,
+    marginBottom: theme.spacing.xs,
   },
   requestInfo: {
     flex: 1,
   },
   requestUsername: {
-    fontSize: 16,
+    ...theme.typography.bodyLarge,
     fontWeight: '600',
-    color: '#1A1A1A',
+    color: theme.colors.text.primary,
   },
   requestTime: {
-    fontSize: 12,
-    color: '#666',
+    ...theme.typography.labelSmall,
+    color: theme.colors.text.secondary,
     marginTop: 2,
   },
   requestActions: {
     flexDirection: 'row',
-    gap: 8,
+    gap: theme.spacing.xs,
   },
   requestButton: {
     width: 36,
@@ -1523,10 +1426,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   declineButton: {
-    backgroundColor: '#F5F5F5',
+    backgroundColor: theme.colors.background.secondary,
   },
   acceptButton: {
-    backgroundColor: '#4ECDC4',
+    backgroundColor: theme.colors.text.accent,
   },
   titleContainer: {
     flexDirection: 'row',
@@ -1534,30 +1437,30 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   requestBadge: {
-    backgroundColor: '#FF9800',
+    backgroundColor: theme.colors.status.warning,
     borderRadius: 12,
-    paddingHorizontal: 8,
+    paddingHorizontal: theme.spacing.xs,
     paddingVertical: 2,
     minWidth: 24,
     alignItems: 'center',
   },
   requestBadgeText: {
-    color: '#fff',
-    fontSize: 12,
+    color: theme.colors.text.inverse,
+    ...theme.typography.labelSmall,
     fontWeight: '600',
   },
   unreadBadge: {
-    backgroundColor: '#4ECDC4',
+    backgroundColor: theme.colors.text.accent,
     borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs / 2,
     minWidth: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
   unreadBadgeText: {
-    color: '#fff',
-    fontSize: 12,
+    color: theme.colors.text.inverse,
+    ...theme.typography.labelSmall,
     fontWeight: 'bold',
   },
   statusIndicator: {
@@ -1567,10 +1470,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
     borderRadius: 20,
-    gap: 8,
+    gap: theme.spacing.xs,
   },
   statusDot: {
     width: 8,
@@ -1578,8 +1481,8 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   statusText: {
-    color: '#fff',
-    fontSize: 12,
+    color: theme.colors.text.inverse,
+    ...theme.typography.labelSmall,
     fontWeight: '600',
   },
 });

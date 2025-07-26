@@ -11,19 +11,44 @@ export interface Message {
   id: string;
   sender_id: string;
   recipient_id: string;
-  media_path: string;
+  type: 'text' | 'voice' | 'video';
+  content: string; // Encrypted content or key
+  media_path?: string;
+  nonce?: string; // Encryption nonce
   expiry_rule: ExpiryRule;
   created_at: string;
-  listened_at?: string;
+  viewed_at?: string; // When message was first viewed
+  listened_at?: string; // When voice/video was first played
+  read_at?: string; // When text message was read
   expired: boolean;
-  encryption_key?: string; // Store encrypted key
+  is_encrypted: boolean;
+  duration?: number; // For voice/video messages
 }
 
-export type ExpiryType = 'time' | 'location' | 'event';
+export type ExpiryType = 'none' | 'view' | 'time' | 'location' | 'event' | 'playback' | 'read';
+
+export interface NoExpiryRule {
+  type: 'none';
+}
+
+export interface ViewExpiryRule {
+  type: 'view';
+  disappear_after_view: boolean;
+}
 
 export interface TimeExpiryRule {
   type: 'time';
   duration_sec: number;
+}
+
+export interface PlaybackExpiryRule {
+  type: 'playback';
+  // Expires immediately after first playback (for voice/video)
+}
+
+export interface ReadExpiryRule {
+  type: 'read';
+  // Expires immediately after first read (for text)
 }
 
 export interface LocationExpiryRule {
@@ -38,7 +63,14 @@ export interface EventExpiryRule {
   event_id: string;
 }
 
-export type ExpiryRule = TimeExpiryRule | LocationExpiryRule | EventExpiryRule;
+export type ExpiryRule = 
+  | NoExpiryRule 
+  | ViewExpiryRule 
+  | TimeExpiryRule 
+  | PlaybackExpiryRule 
+  | ReadExpiryRule
+  | LocationExpiryRule 
+  | EventExpiryRule;
 
 export interface Friend {
   id: string;

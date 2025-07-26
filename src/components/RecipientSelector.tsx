@@ -11,6 +11,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AnonymousAuthContext';
+import { useAppTheme } from '../contexts/ThemeContext';
+import { Card, IconButton, Loading } from './ui';
 
 interface Friend {
   id: string;
@@ -29,6 +31,7 @@ interface RecipientSelectorProps {
 
 export default function RecipientSelector({ selectedRecipient, onSelectRecipient }: RecipientSelectorProps) {
   const { user } = useAuth();
+  const theme = useAppTheme();
   const [modalVisible, setModalVisible] = useState(false);
   const [friends, setFriends] = useState<Friend[]>([]);
   const [loading, setLoading] = useState(false);
@@ -83,20 +86,20 @@ export default function RecipientSelector({ selectedRecipient, onSelectRecipient
       onPress={() => selectRecipient(item)}
     >
       <View style={[styles.avatar, { backgroundColor: getAvatarColor(item.friend?.avatar_seed) }]}>
-        <Text style={styles.avatarText}>
+        <Text style={[styles.avatarText, { color: theme.colors.text.inverse }]}>
           {(item.nickname || item.friend?.friend_code || '?')[0].toUpperCase()}
         </Text>
       </View>
       <View style={styles.friendInfo}>
-        <Text style={styles.friendName}>
+        <Text style={[styles.friendName, theme.typography.bodyLarge, { color: theme.colors.text.primary }]}>
           {item.nickname || item.friend?.friend_code || 'Unknown'}
         </Text>
         {item.nickname && (
-          <Text style={styles.friendCode}>{item.friend?.friend_code}</Text>
+          <Text style={[styles.friendCode, theme.typography.bodySmall, { color: theme.colors.text.secondary }]}>{item.friend?.friend_code}</Text>
         )}
       </View>
       {selectedFriend?.id === item.id && (
-        <Ionicons name="checkmark-circle" size={24} color="#4ECDC4" />
+        <Ionicons name="checkmark-circle" size={24} color={theme.colors.text.accent} />
       )}
     </TouchableOpacity>
   );
@@ -107,16 +110,18 @@ export default function RecipientSelector({ selectedRecipient, onSelectRecipient
 
   return (
     <>
-      <TouchableOpacity
-        style={styles.selector}
+      <Card
+        pressable
         onPress={() => setModalVisible(true)}
+        style={styles.selector}
+        elevation="small"
       >
         <View style={styles.selectorContent}>
-          <Text style={styles.label}>Send to:</Text>
-          <Text style={styles.recipient}>{recipientDisplay}</Text>
+          <Text style={[styles.label, theme.typography.labelSmall, { color: theme.colors.text.secondary }]}>Send to:</Text>
+          <Text style={[styles.recipient, theme.typography.headlineSmall, { color: theme.colors.text.primary }]}>{recipientDisplay}</Text>
         </View>
-        <Ionicons name="chevron-down" size={24} color="#666" />
-      </TouchableOpacity>
+        <Ionicons name="chevron-down" size={24} color={theme.colors.text.tertiary} />
+      </Card>
 
       <Modal
         animationType="slide"
@@ -124,30 +129,33 @@ export default function RecipientSelector({ selectedRecipient, onSelectRecipient
         visible={modalVisible}
         onRequestClose={() => setModalVisible(false)}
       >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Recipient</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Ionicons name="close" size={24} color="#000" />
-              </TouchableOpacity>
+        <View style={[styles.modalContainer, { backgroundColor: theme.colors.background.overlay }]}>
+          <View style={[styles.modalContent, { backgroundColor: theme.colors.background.primary }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: theme.colors.border.subtle }]}>
+              <Text style={[styles.modalTitle, theme.typography.headlineMedium, { color: theme.colors.text.primary }]}>Select Recipient</Text>
+              <IconButton
+                icon={<Ionicons name="close" size={24} color={theme.colors.text.primary} />}
+                onPress={() => setModalVisible(false)}
+                size="medium"
+                variant="ghost"
+              />
             </View>
 
             <TouchableOpacity
-              style={[styles.friendItem, styles.randomOption]}
+              style={[styles.friendItem, styles.randomOption, { backgroundColor: theme.colors.background.secondary }]}
               onPress={() => selectRecipient(null)}
             >
-              <View style={[styles.avatar, { backgroundColor: '#000' }]}>
-                <Ionicons name="shuffle" size={24} color="#fff" />
+              <View style={[styles.avatar, { backgroundColor: theme.colors.text.primary }]}>
+                <Ionicons name="shuffle" size={24} color={theme.colors.text.inverse} />
               </View>
               <View style={styles.friendInfo}>
-                <Text style={styles.friendName}>Random Connect</Text>
-                <Text style={styles.friendCode}>Send to a random VanishVoice user</Text>
+                <Text style={[styles.friendName, theme.typography.bodyLarge, { color: theme.colors.text.primary }]}>Random Connect</Text>
+                <Text style={[styles.friendCode, theme.typography.bodySmall, { color: theme.colors.text.secondary }]}>Send to a random VanishVoice user</Text>
               </View>
             </TouchableOpacity>
 
             {loading ? (
-              <ActivityIndicator style={styles.loader} />
+              <Loading size="large" style={styles.loader} />
             ) : (
               <FlatList
                 data={friends}
@@ -155,7 +163,7 @@ export default function RecipientSelector({ selectedRecipient, onSelectRecipient
                 keyExtractor={(item) => item.id}
                 style={styles.friendsList}
                 ListEmptyComponent={
-                  <Text style={styles.emptyText}>
+                  <Text style={[styles.emptyText, theme.typography.bodyMedium, { color: theme.colors.text.secondary }]}>
                     No friends yet. Add friends to send them messages!
                   </Text>
                 }
@@ -172,31 +180,22 @@ const styles = StyleSheet.create({
   selector: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8f8f8',
-    padding: 15,
-    borderRadius: 12,
     marginBottom: 20,
   },
   selectorContent: {
     flex: 1,
   },
   label: {
-    fontSize: 12,
-    color: '#666',
     marginBottom: 2,
   },
   recipient: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#000',
+    // Using theme typography
   },
   modalContainer: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   modalContent: {
-    backgroundColor: '#fff',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '80%',
@@ -207,11 +206,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    // Using theme typography
   },
   friendsList: {
     padding: 10,
@@ -222,9 +219,9 @@ const styles = StyleSheet.create({
     padding: 15,
     borderRadius: 12,
     marginVertical: 5,
+    minHeight: 60, // Ensure minimum touch target
   },
   randomOption: {
-    backgroundColor: '#f8f8f8',
     marginHorizontal: 20,
     marginTop: 10,
   },
@@ -239,19 +236,14 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#fff',
   },
   friendInfo: {
     flex: 1,
   },
   friendName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
+    // Using theme typography
   },
   friendCode: {
-    fontSize: 14,
-    color: '#666',
     marginTop: 2,
   },
   loader: {
@@ -259,8 +251,6 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     textAlign: 'center',
-    color: '#666',
     padding: 50,
-    fontSize: 16,
   },
 });

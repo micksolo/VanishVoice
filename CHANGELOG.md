@@ -8,6 +8,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Theme System Implementation** ✅ COMPLETE
+  - Full light/dark/system mode support with smooth transitions
+  - ThemeContext provider with AsyncStorage persistence
+  - Semantic color tokens for consistent theming
+  - Purple accent color (#6C63FF) across all themes
+  - Complete UI component library with theme support:
+    - Button with primary/secondary/tertiary/danger/ghost variants
+    - IconButton with consistent styling
+    - TextField with theme-aware styling
+    - Card, Badge, SafeAreaView components
+  - Empty state components with themed illustrations
+  - Theme selector component in Settings screen
+  - Fixed theme-related crashes and undefined property errors
+
+- **UI/UX Improvements** ✅ COMPLETE
+  - Migrated FriendsListScreen to new theme system
+  - Redesigned MessageBubble with proper theme integration
+  - Implemented 4px grid spacing system
+  - Standardized typography with theme-aware text styles
+  - Fixed "Anonymous" display bug in friend messages
+  - Improved empty state design with call-to-action buttons
+  - Cross-platform SafeAreaView implementation
+
+- **Ephemeral Messaging Foundation** ✅ PARTIAL
+  - Database schema for ephemeral messages (viewed_at tracking)
+  - mark_message_viewed() database function
+  - UI components ready (CountdownTimer, EphemeralIndicator)
+  - ExpiryRuleSelector for message expiry options
+  - Message expiry types: time-based, location-based, event-based
+
 - **End-to-End Encryption for Friend Messages** ✅ COMPLETE
   - Implemented shared secret encryption for instant messaging
   - No key exchange required - messages work immediately
@@ -84,6 +114,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unread message counts update in real-time
 - Friend requests create bidirectional relationships
 - Message delivery works reliably across all devices
+- Voice message arrayBuffer compatibility for React Native
+- Video recording codec error (changed h264 to avc1)
+- MessageBubble theme property references (chat.sent/received)
+- Button component ghost variant missing from theme
+- EmptyState component export issue causing app crashes
+- Theme provider race condition during initialization
 
 ### Security
 - ✅ FIXED: Friend messages now have full E2E encryption

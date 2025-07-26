@@ -21,6 +21,8 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { Audio } from 'expo-av';
 import Constants from 'expo-constants';
 import { useAuth } from '../contexts/AnonymousAuthContext';
+import { useAppTheme } from '../contexts/ThemeContext';
+import { Theme } from '../theme';
 import { supabase } from '../services/supabase';
 import RecordingModal from '../components/RecordingModal';
 import { useFocusEffect } from '@react-navigation/native';
@@ -62,6 +64,7 @@ interface Friend {
 
 export default function EphemeralInboxScreen({ navigation }: any) {
   const { user, userKeys } = useAuth();
+  const theme = useAppTheme();
   const [newMessageCount, setNewMessageCount] = useState(0);
   const [messages, setMessages] = useState<Message[]>([]);
   const [friends, setFriends] = useState<Friend[]>([]);
@@ -443,7 +446,14 @@ export default function EphemeralInboxScreen({ navigation }: any) {
   };
 
   const getAvatarColor = (seed: string = '') => {
-    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#FF9FF3'];
+    const colors = [
+      theme.colors.accent.red,
+      theme.colors.accent.teal,
+      theme.colors.accent.blue,
+      theme.colors.accent.green,
+      theme.colors.accent.orange,
+      theme.colors.accent.pink
+    ];
     const index = seed.charCodeAt(0) % colors.length;
     return colors[index];
   };
@@ -500,14 +510,14 @@ export default function EphemeralInboxScreen({ navigation }: any) {
           style={[styles.swipeAction, styles.blockAction]}
           onPress={() => blockUser(friendId)}
         >
-          <Ionicons name="ban" size={24} color="#fff" />
+          <Ionicons name="ban" size={24} color={theme.colors.text.inverse} />
           <Text style={styles.swipeActionText}>Block</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.swipeAction, styles.deleteAction]}
           onPress={() => deleteFriend(friendId)}
         >
-          <Ionicons name="trash" size={24} color="#fff" />
+          <Ionicons name="trash" size={24} color={theme.colors.text.inverse} />
           <Text style={styles.swipeActionText}>Delete</Text>
         </TouchableOpacity>
       </View>
@@ -532,9 +542,9 @@ export default function EphemeralInboxScreen({ navigation }: any) {
         </Text>
       </View>
       {playingMessage === item.id ? (
-        <Ionicons name="volume-high" size={24} color="#4ECDC4" />
+        <Ionicons name="volume-high" size={24} color={theme.colors.accent.teal} />
       ) : (
-        <Ionicons name="play-circle" size={32} color="#000" />
+        <Ionicons name="play-circle" size={32} color={theme.colors.text.primary} />
       )}
     </TouchableOpacity>
   );
@@ -580,17 +590,19 @@ export default function EphemeralInboxScreen({ navigation }: any) {
             setRecordingModalVisible(true);
           }}
         >
-          <Ionicons name="mic" size={24} color="#4ECDC4" />
+          <Ionicons name="mic" size={24} color={theme.colors.accent.teal} />
         </TouchableOpacity>
       </TouchableOpacity>
     </Swipeable>
   );
 
+  const styles = getStyles(theme);
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centerContent}>
-          <Text>Loading...</Text>
+          <Text style={styles.loadingText}>Loading...</Text>
         </View>
       </SafeAreaView>
     );
@@ -624,7 +636,7 @@ export default function EphemeralInboxScreen({ navigation }: any) {
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>New Messages</Text>
                 <TouchableOpacity onPress={() => setShowMessages(false)}>
-                  <Ionicons name="close" size={24} color="#666" />
+                  <Ionicons name="close" size={24} color={theme.colors.text.secondary} />
                 </TouchableOpacity>
               </View>
               <FlatList
@@ -656,7 +668,7 @@ export default function EphemeralInboxScreen({ navigation }: any) {
                 style={styles.addFriendPrompt}
                 onPress={() => setAddFriendModalVisible(true)}
               >
-                <Ionicons name="person-add-outline" size={32} color="#4ECDC4" />
+                <Ionicons name="person-add-outline" size={32} color={theme.colors.accent.teal} />
                 <Text style={styles.addFriendText}>Add your first friend</Text>
                 <Text style={styles.addFriendSubtext}>Share friend codes to connect</Text>
               </TouchableOpacity>
@@ -683,7 +695,7 @@ export default function EphemeralInboxScreen({ navigation }: any) {
                   ]}
                 >
                   <View style={styles.ghostContainer}>
-                    <Ionicons name="chatbubble-outline" size={60} color="#E0E0E0" />
+                    <Ionicons name="chatbubble-outline" size={60} color={theme.colors.text.tertiary} />
                     <View style={styles.ghostEyes}>
                       <View style={styles.ghostEye} />
                       <View style={styles.ghostEye} />
@@ -721,7 +733,7 @@ export default function EphemeralInboxScreen({ navigation }: any) {
         style={styles.fab}
         onPress={() => setActionModalVisible(true)}
       >
-        <Ionicons name="add" size={32} color="#fff" />
+        <Ionicons name="add" size={32} color={theme.colors.text.inverse} />
       </TouchableOpacity>
 
       {/* Action Modal */}
@@ -744,7 +756,7 @@ export default function EphemeralInboxScreen({ navigation }: any) {
                 setAddFriendModalVisible(true);
               }}
             >
-              <Ionicons name="person-add-outline" size={24} color="#000" />
+              <Ionicons name="person-add-outline" size={24} color={theme.colors.text.primary} />
               <Text style={styles.actionText}>Add Friend</Text>
             </TouchableOpacity>
 
@@ -752,7 +764,7 @@ export default function EphemeralInboxScreen({ navigation }: any) {
               style={styles.actionItem}
               onPress={randomConnect}
             >
-              <Ionicons name="shuffle-outline" size={24} color="#000" />
+              <Ionicons name="shuffle-outline" size={24} color={theme.colors.text.primary} />
               <Text style={styles.actionText}>Random Connect</Text>
             </TouchableOpacity>
           </View>
@@ -816,10 +828,10 @@ export default function EphemeralInboxScreen({ navigation }: any) {
 
 const { width } = Dimensions.get('window');
 
-const styles = StyleSheet.create({
+const getStyles = (theme: Theme) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: theme.colors.surface.primary,
   },
   content: {
     flex: 1,
@@ -829,53 +841,50 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  loadingText: {
+    ...theme.typography.body.medium,
+    color: theme.colors.text.primary,
+  },
   messageCounter: {
-    backgroundColor: '#1A1A1A',
-    padding: 24,
-    borderRadius: 20,
+    backgroundColor: theme.colors.primary.main,
+    padding: theme.spacing.xl,
+    borderRadius: theme.borderRadius.lg,
     alignItems: 'center',
-    marginHorizontal: 20,
-    marginTop: 20,
-    marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 6,
+    marginHorizontal: theme.spacing.lg,
+    marginTop: theme.spacing.lg,
+    marginBottom: theme.spacing.xl,
+    ...theme.shadows.large,
   },
   counterDot: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#4ECDC4',
-    marginBottom: 15,
+    backgroundColor: theme.colors.accent.teal,
+    marginBottom: theme.spacing.md,
   },
   counterText: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#fff',
-    marginBottom: 8,
+    ...theme.typography.heading.h1,
+    color: theme.colors.text.inverse,
+    marginBottom: theme.spacing.xs,
   },
   tapToReveal: {
-    fontSize: 15,
-    color: '#999',
-    fontWeight: '500',
+    ...theme.typography.body.medium,
+    color: theme.colors.text.muted,
   },
   messagesSection: {
-    marginBottom: 20,
-    paddingHorizontal: 20,
+    marginBottom: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.lg,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-    paddingHorizontal: 20,
+    marginBottom: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1A1A1A',
+    ...theme.typography.heading.h3,
+    color: theme.colors.text.primary,
   },
   messagesList: {
     maxHeight: 300,
@@ -883,36 +892,33 @@ const styles = StyleSheet.create({
   messageItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 15,
-    borderRadius: 12,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    backgroundColor: theme.colors.surface.secondary,
+    padding: theme.spacing.md,
+    borderRadius: theme.borderRadius.md,
+    marginBottom: theme.spacing.sm,
+    ...theme.shadows.small,
   },
   messageContent: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: theme.spacing.sm,
   },
   senderName: {
-    fontSize: 16,
+    ...theme.typography.body.medium,
+    color: theme.colors.text.primary,
     fontWeight: '600',
   },
   messageTime: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 2,
+    ...theme.typography.body.small,
+    color: theme.colors.text.secondary,
+    marginTop: theme.spacing.xs,
   },
   friendsSection: {
     flex: 1,
-    marginTop: 24,
+    marginTop: theme.spacing.xl,
   },
   friendsCount: {
-    fontSize: 14,
-    color: '#999',
+    ...theme.typography.body.small,
+    color: theme.colors.text.tertiary,
     fontWeight: '500',
   },
   friendCard: {

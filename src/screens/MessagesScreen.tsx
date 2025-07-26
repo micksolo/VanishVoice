@@ -14,6 +14,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AnonymousAuthContext';
+import { useAppTheme } from '../contexts/ThemeContext';
+import { Theme } from '../theme';
 import { supabase } from '../services/supabase';
 import { Audio } from 'expo-av';
 import RecordingModal from '../components/RecordingModal';
@@ -49,6 +51,7 @@ type ConversationItem = {
 
 export default function MessagesScreen({ navigation }: any) {
   const { user } = useAuth();
+  const theme = useAppTheme();
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -128,7 +131,14 @@ export default function MessagesScreen({ navigation }: any) {
   };
 
   const getAvatarColor = (seed: string = '') => {
-    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#FF9FF3'];
+    const colors = [
+      theme.colors.accent.red,
+      theme.colors.accent.teal,
+      theme.colors.accent.blue,
+      theme.colors.accent.green,
+      theme.colors.accent.orange,
+      theme.colors.accent.pink
+    ];
     const index = seed.charCodeAt(0) % colors.length;
     return colors[index];
   };
@@ -345,6 +355,8 @@ export default function MessagesScreen({ navigation }: any) {
     }
   };
 
+  const styles = getStyles(theme);
+
   const renderConversation = ({ item }: { item: ConversationItem }) => {
     const name = getDisplayName(item);
     const avatarSeed = item.type === 'friend' 
@@ -370,7 +382,7 @@ export default function MessagesScreen({ navigation }: any) {
         </View>
         {item.unread && <View style={styles.unreadDot} />}
         {item.type === 'friend' && (
-          <Ionicons name="mic-outline" size={24} color="#666" />
+          <Ionicons name="mic-outline" size={24} color={theme.colors.text.secondary} />
         )}
       </TouchableOpacity>
     );
@@ -378,7 +390,7 @@ export default function MessagesScreen({ navigation }: any) {
 
   const EmptyState = () => (
     <View style={styles.emptyState}>
-      <Ionicons name="chatbubbles-outline" size={80} color="#ddd" />
+      <Ionicons name="chatbubbles-outline" size={80} color={theme.colors.text.tertiary} />
       <Text style={styles.emptyText}>No conversations yet</Text>
       <Text style={styles.emptySubtext}>
         Add friends or try random connect to start chatting
@@ -411,7 +423,7 @@ export default function MessagesScreen({ navigation }: any) {
         style={styles.fab}
         onPress={() => setActionModalVisible(true)}
       >
-        <Ionicons name="add" size={32} color="#fff" />
+        <Ionicons name="add" size={32} color={theme.colors.text.inverse} />
       </TouchableOpacity>
 
       {/* Action Modal */}
@@ -434,7 +446,7 @@ export default function MessagesScreen({ navigation }: any) {
                 setModalVisible(true);
               }}
             >
-              <Ionicons name="person-add-outline" size={24} color="#000" />
+              <Ionicons name="person-add-outline" size={24} color={theme.colors.text.primary} />
               <Text style={styles.actionText}>Add Friend</Text>
             </TouchableOpacity>
 
@@ -442,7 +454,7 @@ export default function MessagesScreen({ navigation }: any) {
               style={styles.actionItem}
               onPress={randomConnect}
             >
-              <Ionicons name="shuffle-outline" size={24} color="#000" />
+              <Ionicons name="shuffle-outline" size={24} color={theme.colors.text.primary} />
               <Text style={styles.actionText}>Random Connect</Text>
             </TouchableOpacity>
           </View>
@@ -505,10 +517,10 @@ export default function MessagesScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: Theme) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: theme.colors.surface.primary,
   },
   emptyContainer: {
     flex: 1,
@@ -516,16 +528,12 @@ const styles = StyleSheet.create({
   conversationItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 15,
-    marginHorizontal: 10,
-    marginVertical: 5,
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    backgroundColor: theme.colors.surface.secondary,
+    padding: theme.spacing.md,
+    marginHorizontal: theme.spacing.sm,
+    marginVertical: theme.spacing.xs,
+    borderRadius: theme.borderRadius.md,
+    ...theme.shadows.small,
   },
   avatar: {
     width: 50,
@@ -533,130 +541,120 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 15,
+    marginRight: theme.spacing.md,
   },
   avatarText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
+    ...theme.typography.heading.h3,
+    color: theme.colors.text.inverse,
   },
   conversationContent: {
     flex: 1,
   },
   conversationName: {
-    fontSize: 16,
+    ...theme.typography.body.medium,
+    color: theme.colors.text.primary,
     fontWeight: '600',
   },
   conversationMessage: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 2,
+    ...theme.typography.body.small,
+    color: theme.colors.text.secondary,
+    marginTop: theme.spacing.xs,
   },
   unreadMessage: {
-    color: '#000',
+    color: theme.colors.text.primary,
     fontWeight: '500',
   },
   unreadDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#4ECDC4',
-    marginRight: 10,
+    backgroundColor: theme.colors.accent.teal,
+    marginRight: theme.spacing.sm,
   },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
+    paddingHorizontal: theme.spacing.xl,
   },
   emptyText: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginTop: 20,
-    color: '#333',
+    ...theme.typography.heading.h3,
+    color: theme.colors.text.primary,
+    marginTop: theme.spacing.lg,
   },
   emptySubtext: {
-    fontSize: 16,
-    color: '#666',
-    marginTop: 10,
+    ...theme.typography.body.medium,
+    color: theme.colors.text.secondary,
+    marginTop: theme.spacing.sm,
     textAlign: 'center',
   },
   fab: {
     position: 'absolute',
-    bottom: 20,
-    right: 20,
+    bottom: theme.spacing.lg,
+    right: theme.spacing.lg,
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#000',
+    backgroundColor: theme.colors.primary.main,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    ...theme.shadows.large,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: theme.colors.overlay.dark,
     justifyContent: 'flex-end',
     alignItems: 'flex-end',
-    paddingRight: 20,
+    paddingRight: theme.spacing.lg,
     paddingBottom: 90,
   },
   actionModal: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    backgroundColor: theme.colors.surface.secondary,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.sm,
+    ...theme.shadows.large,
   },
   actionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 15,
+    padding: theme.spacing.md,
     minWidth: 180,
   },
   actionText: {
-    marginLeft: 15,
-    fontSize: 16,
+    marginLeft: theme.spacing.md,
+    ...theme.typography.body.medium,
+    color: theme.colors.text.primary,
     fontWeight: '500',
   },
   modalContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: theme.colors.overlay.dark,
   },
   modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 30,
+    backgroundColor: theme.colors.surface.secondary,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.xl,
     width: '80%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    ...theme.shadows.large,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 20,
+    ...theme.typography.heading.h3,
+    color: theme.colors.text.primary,
+    marginBottom: theme.spacing.lg,
     textAlign: 'center',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    fontSize: 16,
-    marginBottom: 20,
+    borderColor: theme.colors.border.light,
+    borderRadius: theme.borderRadius.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    ...theme.typography.body.medium,
+    color: theme.colors.text.primary,
+    backgroundColor: theme.colors.surface.primary,
+    marginBottom: theme.spacing.lg,
   },
   modalButtons: {
     flexDirection: 'row',
@@ -664,26 +662,24 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.borderRadius.md,
     alignItems: 'center',
   },
   cancelButton: {
-    backgroundColor: '#f0f0f0',
-    marginRight: 10,
+    backgroundColor: theme.colors.surface.tertiary,
+    marginRight: theme.spacing.sm,
   },
   addButton: {
-    backgroundColor: '#000',
-    marginLeft: 10,
+    backgroundColor: theme.colors.primary.main,
+    marginLeft: theme.spacing.sm,
   },
   cancelButtonText: {
-    color: '#000',
-    fontSize: 16,
-    fontWeight: '600',
+    color: theme.colors.text.primary,
+    ...theme.typography.button.medium,
   },
   addButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    color: theme.colors.text.inverse,
+    ...theme.typography.button.medium,
   },
 });

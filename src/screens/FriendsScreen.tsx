@@ -12,6 +12,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AnonymousAuthContext';
+import { useAppTheme } from '../contexts/ThemeContext';
+import { Theme } from '../theme';
 import { supabase } from '../services/supabase';
 
 interface Friend {
@@ -25,6 +27,7 @@ interface Friend {
 
 export default function FriendsScreen() {
   const { user } = useAuth();
+  const theme = useAppTheme();
   const [friends, setFriends] = useState<Friend[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
@@ -131,10 +134,12 @@ export default function FriendsScreen() {
     );
   };
 
+  const styles = getStyles(theme);
+
   const renderFriend = ({ item }: { item: Friend }) => (
     <View style={styles.friendItem}>
       <View style={styles.friendIcon}>
-        <Ionicons name="person-circle-outline" size={40} color="#000" />
+        <Ionicons name="person-circle-outline" size={40} color={theme.colors.text.primary} />
       </View>
       <View style={styles.friendInfo}>
         <Text style={styles.friendCode}>{item.friend?.friend_code}</Text>
@@ -146,14 +151,14 @@ export default function FriendsScreen() {
         onPress={() => removeFriend(item.friend_id)}
         style={styles.removeButton}
       >
-        <Ionicons name="trash-outline" size={20} color="#ff3b30" />
+        <Ionicons name="trash-outline" size={20} color={theme.colors.feedback.error} />
       </TouchableOpacity>
     </View>
   );
 
   const EmptyState = () => (
     <View style={styles.emptyState}>
-      <Ionicons name="people-outline" size={80} color="#ddd" />
+      <Ionicons name="people-outline" size={80} color={theme.colors.text.tertiary} />
       <Text style={styles.emptyText}>No friends yet</Text>
       <Text style={styles.emptySubtext}>
         Add friends using their friend code
@@ -175,7 +180,7 @@ export default function FriendsScreen() {
         style={styles.fab}
         onPress={() => setModalVisible(true)}
       >
-        <Ionicons name="person-add" size={24} color="#fff" />
+        <Ionicons name="person-add" size={24} color={theme.colors.text.inverse} />
       </TouchableOpacity>
 
       <Modal
@@ -222,10 +227,10 @@ export default function FriendsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: Theme) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: theme.colors.surface.primary,
   },
   emptyContainer: {
     flex: 1,
@@ -233,100 +238,90 @@ const styles = StyleSheet.create({
   friendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 15,
-    marginHorizontal: 10,
-    marginVertical: 5,
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    backgroundColor: theme.colors.surface.secondary,
+    padding: theme.spacing.md,
+    marginHorizontal: theme.spacing.sm,
+    marginVertical: theme.spacing.xs,
+    borderRadius: theme.borderRadius.md,
+    ...theme.shadows.small,
   },
   friendIcon: {
-    marginRight: 15,
+    marginRight: theme.spacing.md,
   },
   friendInfo: {
     flex: 1,
   },
   friendCode: {
-    fontSize: 16,
+    ...theme.typography.body.medium,
+    color: theme.colors.text.primary,
     fontWeight: '600',
   },
   friendDate: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 2,
+    ...theme.typography.body.small,
+    color: theme.colors.text.secondary,
+    marginTop: theme.spacing.xs,
   },
   removeButton: {
-    padding: 10,
+    padding: theme.spacing.sm,
   },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
+    paddingHorizontal: theme.spacing.xl,
   },
   emptyText: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginTop: 20,
-    color: '#333',
+    ...theme.typography.heading.h3,
+    color: theme.colors.text.primary,
+    marginTop: theme.spacing.lg,
   },
   emptySubtext: {
-    fontSize: 16,
-    color: '#666',
-    marginTop: 10,
+    ...theme.typography.body.medium,
+    color: theme.colors.text.secondary,
+    marginTop: theme.spacing.sm,
     textAlign: 'center',
   },
   fab: {
     position: 'absolute',
-    bottom: 20,
-    right: 20,
+    bottom: theme.spacing.lg,
+    right: theme.spacing.lg,
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#000',
+    backgroundColor: theme.colors.primary.main,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    ...theme.shadows.large,
   },
   modalContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: theme.colors.overlay.dark,
   },
   modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 30,
+    backgroundColor: theme.colors.surface.secondary,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.xl,
     width: '80%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    ...theme.shadows.large,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 20,
+    ...theme.typography.heading.h3,
+    color: theme.colors.text.primary,
+    marginBottom: theme.spacing.lg,
     textAlign: 'center',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    fontSize: 16,
-    marginBottom: 20,
+    borderColor: theme.colors.border.light,
+    borderRadius: theme.borderRadius.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    ...theme.typography.body.medium,
+    color: theme.colors.text.primary,
+    backgroundColor: theme.colors.surface.primary,
+    marginBottom: theme.spacing.lg,
   },
   modalButtons: {
     flexDirection: 'row',
@@ -334,26 +329,24 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.borderRadius.md,
     alignItems: 'center',
   },
   cancelButton: {
-    backgroundColor: '#f0f0f0',
-    marginRight: 10,
+    backgroundColor: theme.colors.surface.tertiary,
+    marginRight: theme.spacing.sm,
   },
   addButton: {
-    backgroundColor: '#000',
-    marginLeft: 10,
+    backgroundColor: theme.colors.primary.main,
+    marginLeft: theme.spacing.sm,
   },
   cancelButtonText: {
-    color: '#000',
-    fontSize: 16,
-    fontWeight: '600',
+    color: theme.colors.text.primary,
+    ...theme.typography.button.medium,
   },
   addButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    color: theme.colors.text.inverse,
+    ...theme.typography.button.medium,
   },
 });

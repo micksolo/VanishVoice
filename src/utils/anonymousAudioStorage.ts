@@ -76,9 +76,29 @@ class AnonymousAudioStorage {
         return null;
       }
       
-      // Convert blob to array buffer then to Uint8Array
-      const arrayBuffer = await data.arrayBuffer();
-      const encryptedData = new Uint8Array(arrayBuffer);
+      // Convert blob to array buffer then to Uint8Array - React Native compatible
+      let encryptedData: Uint8Array;
+      
+      // Check if we have arrayBuffer method (web) or need to use FileReader (React Native)
+      if (data.arrayBuffer) {
+        const arrayBuffer = await data.arrayBuffer();
+        encryptedData = new Uint8Array(arrayBuffer);
+      } else {
+        // React Native path - use FileReader
+        const reader = new FileReader();
+        const arrayBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+          reader.onload = () => {
+            if (reader.result instanceof ArrayBuffer) {
+              resolve(reader.result);
+            } else {
+              reject(new Error('Failed to read blob as ArrayBuffer'));
+            }
+          };
+          reader.onerror = () => reject(new Error('FileReader error: ' + reader.error?.message));
+          reader.readAsArrayBuffer(data);
+        });
+        encryptedData = new Uint8Array(arrayBuffer);
+      }
       
       // Use provided nonce or throw error
       if (!nonce) {

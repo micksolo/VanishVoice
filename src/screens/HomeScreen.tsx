@@ -11,10 +11,13 @@ import {
 import { Audio } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AnonymousAuthContext';
+import { useAppTheme } from '../contexts/ThemeContext';
 import RecipientSelector from '../components/RecipientSelector';
+import { Button } from '../components/ui';
 
 export default function HomeScreen({ navigation }: any) {
   const { user } = useAuth();
+  const theme = useAppTheme();
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
@@ -134,11 +137,11 @@ export default function HomeScreen({ navigation }: any) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
       <View style={styles.header}>
-        <Text style={styles.welcomeText}>WYD</Text>
-        <Text style={styles.subtitle}>What You Doing?</Text>
-        <Text style={styles.friendCode}>
+        <Text style={[styles.welcomeText, theme.typography.displayMedium, { color: theme.colors.text.primary }]}>WYD</Text>
+        <Text style={[styles.subtitle, theme.typography.bodyLarge, { color: theme.colors.text.secondary }]}>What You Doing?</Text>
+        <Text style={[styles.friendCode, theme.typography.bodySmall, { color: theme.colors.text.secondary }]}>
           Friend Code: {user?.friend_code || 'Loading...'}
         </Text>
       </View>
@@ -160,46 +163,52 @@ export default function HomeScreen({ navigation }: any) {
           <Animated.View
             style={[
               styles.recordButtonInner,
-              isRecording && styles.recordingActive,
-              { transform: [{ scale: pulseAnim }] },
+              isRecording && [styles.recordingActive, { backgroundColor: theme.colors.recording.active }],
+              { 
+                transform: [{ scale: pulseAnim }],
+                backgroundColor: isRecording ? theme.colors.recording.active : theme.colors.background.elevated,
+                ...theme.shadows.medium,
+              },
             ]}
           >
             <Ionicons 
               name="mic" 
               size={60} 
-              color={isRecording ? '#fff' : '#000'} 
+              color={isRecording ? theme.colors.text.inverse : theme.colors.text.primary} 
             />
           </Animated.View>
         </TouchableOpacity>
 
         {isRecording && (
           <View style={styles.recordingInfo}>
-            <View style={styles.recordingDot} />
-            <Text style={styles.recordingText}>Recording...</Text>
-            <Text style={styles.durationText}>{formatDuration(recordingDuration)}</Text>
+            <View style={[styles.recordingDot, { backgroundColor: theme.colors.recording.active }]} />
+            <Text style={[styles.recordingText, theme.typography.bodyMedium, { color: theme.colors.recording.active }]}>Recording...</Text>
+            <Text style={[styles.durationText, theme.typography.headlineSmall, { color: theme.colors.text.primary }]}>{formatDuration(recordingDuration)}</Text>
           </View>
         )}
 
-        <Text style={styles.instructions}>
+        <Text style={[styles.instructions, theme.typography.bodyMedium, { color: theme.colors.text.secondary }]}>
           Hold to record a voice message{'\n'}(60 seconds max)
         </Text>
 
         <View style={styles.quickActions}>
-          <TouchableOpacity 
-            style={styles.actionButton}
+          <Button
+            variant="secondary"
             onPress={() => navigation.navigate('AnonymousLobby')}
-          >
-            <Ionicons name="shuffle-outline" size={24} color="#000" />
-            <Text style={styles.actionText}>Random Connect</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
+            icon={<Ionicons name="shuffle-outline" size={24} color={theme.colors.text.primary} />}
             style={styles.actionButton}
-            onPress={() => navigation.navigate('Friends')}
           >
-            <Ionicons name="person-add-outline" size={24} color="#000" />
-            <Text style={styles.actionText}>Add Friend</Text>
-          </TouchableOpacity>
+            Random Connect
+          </Button>
+          
+          <Button
+            variant="secondary"
+            onPress={() => navigation.navigate('Friends')}
+            icon={<Ionicons name="person-add-outline" size={24} color={theme.colors.text.primary} />}
+            style={styles.actionButton}
+          >
+            Add Friend
+          </Button>
         </View>
       </View>
     </SafeAreaView>
@@ -209,25 +218,18 @@ export default function HomeScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
   },
   header: {
     paddingHorizontal: 20,
     paddingVertical: 10,
   },
   welcomeText: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#1A1A1A',
+    // Using theme typography
   },
   subtitle: {
-    fontSize: 16,
-    color: '#666',
     marginTop: 4,
   },
   friendCode: {
-    fontSize: 14,
-    color: '#666',
     marginTop: 5,
   },
   content: {
@@ -240,7 +242,6 @@ const styles = StyleSheet.create({
     width: 150,
     height: 150,
     borderRadius: 75,
-    backgroundColor: '#f0f0f0',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 30,
@@ -249,17 +250,11 @@ const styles = StyleSheet.create({
     width: 140,
     height: 140,
     borderRadius: 70,
-    backgroundColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
   recordingActive: {
-    backgroundColor: '#ff3b30',
+    // Color handled in component
   },
   recordingInfo: {
     flexDirection: 'row',
@@ -270,36 +265,26 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#ff3b30',
     marginRight: 8,
   },
   recordingText: {
-    fontSize: 16,
-    color: '#ff3b30',
     marginRight: 8,
   },
   durationText: {
-    fontSize: 16,
-    fontWeight: '600',
+    // Using theme typography
   },
   instructions: {
     textAlign: 'center',
-    color: '#666',
-    fontSize: 16,
     marginBottom: 40,
   },
   quickActions: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     width: '100%',
+    gap: 16,
+    paddingHorizontal: 20,
   },
   actionButton: {
-    alignItems: 'center',
-    padding: 15,
-  },
-  actionText: {
-    marginTop: 5,
-    fontSize: 14,
-    color: '#000',
+    flex: 1,
   },
 });

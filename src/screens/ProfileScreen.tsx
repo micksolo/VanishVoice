@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   Share,
   Alert,
   ScrollView,
@@ -17,6 +16,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AnonymousAuthContext';
+import { useAppTheme } from '../contexts/ThemeContext';
 import * as Clipboard from 'expo-clipboard';
 import { supabase } from '../services/supabase';
 import { testE2EEncryption } from '../utils/testE2E';
@@ -25,9 +25,14 @@ import pushNotifications from '../services/pushNotifications';
 import * as Notifications from 'expo-notifications';
 import { Linking } from 'react-native';
 import { generateRecoveryCode, saveRecoveryCode, getStoredRecoveryCode } from '../utils/recoveryCode';
+import { SafeAreaView, Button, Card, IconButton, Input } from '../components/ui';
+import { ThemeSelector } from '../components/ThemeSelector';
+import { useNavigation } from '@react-navigation/native';
 
 export default function ProfileScreen() {
+  const navigation = useNavigation();
   const { user, signOut, refreshUser } = useAuth();
+  const theme = useAppTheme();
   const [blockedCount, setBlockedCount] = useState(0);
   const [showUsernameModal, setShowUsernameModal] = useState(false);
   const [newUsername, setNewUsername] = useState('');
@@ -228,147 +233,161 @@ export default function ProfileScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.profileHeader}>
+    <SafeAreaView style={{ flex: 1 }}>
+      <ScrollView 
+        showsVerticalScrollIndicator={false}
+        style={{ backgroundColor: theme.colors.background.secondary }}
+      >
+        <View style={[styles.profileHeader, { backgroundColor: theme.colors.background.primary }]}>
           <View style={[styles.avatar, { backgroundColor: getAvatarColor() }]}>
-            <Text style={styles.avatarText}>
+            <Text style={[styles.avatarText, { color: theme.colors.text.inverse }]}>
               {(displayUsername || user?.friend_code || '?')[0].toUpperCase()}
             </Text>
           </View>
           <View style={styles.usernameContainer}>
-            <Text style={styles.username}>{displayUsername || 'Anonymous'}</Text>
-            <TouchableOpacity
-              style={styles.editButton}
+            <Text style={[styles.username, theme.typography.displaySmall, { color: theme.colors.text.primary }]}>{displayUsername || 'Anonymous'}</Text>
+            <IconButton
+              icon={<Ionicons name="pencil" size={16} color={theme.colors.text.accent} />}
+              size="small"
+              variant="ghost"
               onPress={() => {
                 setNewUsername(displayUsername || '');
                 setShowUsernameModal(true);
               }}
-            >
-              <Ionicons name="pencil" size={16} color="#4ECDC4" />
-            </TouchableOpacity>
+            />
           </View>
-          <Text style={styles.userCode}>{user?.friend_code}</Text>
+          <Text style={[styles.userCode, theme.typography.bodyMedium, { color: theme.colors.text.secondary, fontFamily: 'monospace' }]}>{user?.friend_code}</Text>
         </View>
 
         {!displayUsername && (
-          <View style={styles.usernamePromptContainer}>
-            <Ionicons name="information-circle" size={16} color="#FF9500" />
-            <Text style={styles.usernamePromptText}>
+          <Card 
+            style={[styles.usernamePromptContainer, { backgroundColor: theme.colors.status.warning + '20' }]}
+            elevation="none"
+          >
+            <Ionicons name="information-circle" size={16} color={theme.colors.status.warning} />
+            <Text style={[styles.usernamePromptText, theme.typography.bodySmall, { color: theme.colors.text.primary }]}>
               Set a username so friends can find you easily
             </Text>
-          </View>
+          </Card>
         )}
 
-        <View style={styles.friendCodeContainer}>
+        <Card style={[styles.friendCodeContainer, { marginTop: theme.spacing.md }]} elevation="small">
           <View style={styles.friendCodeHeader}>
-            <Text style={styles.friendCodeLabel}>Friend Code</Text>
+            <Text style={[styles.friendCodeLabel, theme.typography.headlineSmall, { color: theme.colors.text.primary }]}>Friend Code</Text>
             <View style={styles.codeActions}>
-              <TouchableOpacity onPress={copyFriendCode} style={styles.codeAction}>
-                <Ionicons name="copy-outline" size={20} color="#4ECDC4" />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={shareFriendCode} style={styles.codeAction}>
-                <Ionicons name="share-outline" size={20} color="#4ECDC4" />
-              </TouchableOpacity>
+              <IconButton
+                icon={<Ionicons name="copy-outline" size={20} color={theme.colors.text.accent} />}
+                onPress={copyFriendCode}
+                size="small"
+                variant="ghost"
+              />
+              <IconButton
+                icon={<Ionicons name="share-outline" size={20} color={theme.colors.text.accent} />}
+                onPress={shareFriendCode}
+                size="small"
+                variant="ghost"
+              />
             </View>
           </View>
-          <Text style={styles.friendCodeHint}>
+          <Text style={[styles.friendCodeHint, theme.typography.bodyMedium, { color: theme.colors.text.secondary }]}>
             Share this code with friends to connect on VanishVoice
           </Text>
-        </View>
+        </Card>
 
-        <View style={styles.settingsSection}>
-          <Text style={styles.sectionTitle}>Settings</Text>
+        <ThemeSelector />
+        
+        <Card style={styles.settingsSection} elevation="small">
+          <Text style={[styles.sectionTitle, theme.typography.overline, { color: theme.colors.text.tertiary }]}>Settings</Text>
           
-          <TouchableOpacity style={styles.settingItem} onPress={handleNotificationToggle}>
-            <View style={[styles.settingIcon, { backgroundColor: '#F0F9FF' }]}>
-              <Ionicons name="notifications-outline" size={20} color="#3B82F6" />
+          <TouchableOpacity style={[styles.settingItem, { minHeight: theme.touchTargets.medium }]} onPress={handleNotificationToggle}>
+            <View style={[styles.settingIcon, { backgroundColor: theme.colors.status.info + '20' }]}>
+              <Ionicons name="notifications-outline" size={20} color={theme.colors.status.info} />
             </View>
-            <Text style={styles.settingText}>Notifications</Text>
+            <Text style={[styles.settingText, theme.typography.bodyLarge, { color: theme.colors.text.primary }]}>Notifications</Text>
             <View style={styles.notificationStatus}>
-              <Text style={styles.notificationStatusText}>
+              <Text style={[styles.notificationStatusText, theme.typography.bodyMedium, { color: theme.colors.text.secondary }]}>
                 {notificationStatus === 'granted' ? 'On' : 'Off'}
               </Text>
-              <Ionicons name="chevron-forward" size={20} color="#999" />
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.text.tertiary} />
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.settingItem}>
-            <View style={[styles.settingIcon, { backgroundColor: '#FFF7ED' }]}>
-              <Ionicons name="ban-outline" size={20} color="#F97316" />
+          <TouchableOpacity style={[styles.settingItem, { minHeight: theme.touchTargets.medium }]}>
+            <View style={[styles.settingIcon, { backgroundColor: theme.colors.status.warning + '20' }]}>
+              <Ionicons name="ban-outline" size={20} color={theme.colors.status.warning} />
             </View>
             <View style={styles.settingContent}>
-              <Text style={styles.settingText}>Blocked Users</Text>
+              <Text style={[styles.settingText, theme.typography.bodyLarge, { color: theme.colors.text.primary }]}>Blocked Users</Text>
               {blockedCount > 0 && (
-                <Text style={styles.settingBadge}>{blockedCount}</Text>
+                <Text style={[styles.settingBadge, theme.typography.labelSmall, { backgroundColor: theme.colors.status.error, color: theme.colors.text.inverse }]}>{blockedCount}</Text>
               )}
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#999" />
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.text.tertiary} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.settingItem}>
-            <View style={[styles.settingIcon, { backgroundColor: '#F0FDF4' }]}>
-              <Ionicons name="shield-checkmark-outline" size={20} color="#22C55E" />
+          <TouchableOpacity style={[styles.settingItem, { minHeight: theme.touchTargets.medium }]}>
+            <View style={[styles.settingIcon, { backgroundColor: theme.colors.status.success + '20' }]}>
+              <Ionicons name="shield-checkmark-outline" size={20} color={theme.colors.status.success} />
             </View>
-            <Text style={styles.settingText}>Privacy</Text>
-            <Ionicons name="chevron-forward" size={20} color="#999" />
+            <Text style={[styles.settingText, theme.typography.bodyLarge, { color: theme.colors.text.primary }]}>Privacy</Text>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.text.tertiary} />
           </TouchableOpacity>
-        </View>
+        </Card>
 
-        <View style={styles.settingsSection}>
-          <Text style={styles.sectionTitle}>Support</Text>
+        <Card style={styles.settingsSection} elevation="small">
+          <Text style={[styles.sectionTitle, theme.typography.overline, { color: theme.colors.text.tertiary }]}>Support</Text>
           
-          <TouchableOpacity style={styles.settingItem}>
-            <View style={[styles.settingIcon, { backgroundColor: '#EFF6FF' }]}>
-              <Ionicons name="help-circle-outline" size={20} color="#6366F1" />
+          <TouchableOpacity style={[styles.settingItem, { minHeight: theme.touchTargets.medium }]}>
+            <View style={[styles.settingIcon, { backgroundColor: theme.colors.button.primary.background + '20' }]}>
+              <Ionicons name="help-circle-outline" size={20} color={theme.colors.button.primary.background} />
             </View>
-            <Text style={styles.settingText}>Help Center</Text>
-            <Ionicons name="chevron-forward" size={20} color="#999" />
+            <Text style={[styles.settingText, theme.typography.bodyLarge, { color: theme.colors.text.primary }]}>Help Center</Text>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.text.tertiary} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.settingItem}>
-            <View style={[styles.settingIcon, { backgroundColor: '#F5F3FF' }]}>
-              <Ionicons name="information-circle-outline" size={20} color="#8B5CF6" />
+          <TouchableOpacity style={[styles.settingItem, { minHeight: theme.touchTargets.medium }]}>
+            <View style={[styles.settingIcon, { backgroundColor: theme.colors.text.accent + '20' }]}>
+              <Ionicons name="information-circle-outline" size={20} color={theme.colors.text.accent} />
             </View>
-            <Text style={styles.settingText}>About</Text>
-            <Ionicons name="chevron-forward" size={20} color="#999" />
+            <Text style={[styles.settingText, theme.typography.bodyLarge, { color: theme.colors.text.primary }]}>About</Text>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.text.tertiary} />
           </TouchableOpacity>
-        </View>
+        </Card>
 
         {/* Debug Section - Remove in production */}
-        <View style={styles.settingsSection}>
-          <Text style={styles.sectionTitle}>Debug</Text>
+        <Card style={styles.settingsSection} elevation="small">
+          <Text style={[styles.sectionTitle, theme.typography.overline, { color: theme.colors.text.tertiary }]}>Debug</Text>
           
           <TouchableOpacity 
-            style={styles.settingItem}
+            style={[styles.settingItem, { minHeight: theme.touchTargets.medium }]}
             onPress={async () => {
               const result = await testE2EEncryption();
               Alert.alert('E2E Test', result ? 'Encryption working correctly!' : 'Encryption test failed!');
             }}
           >
-            <View style={[styles.settingIcon, { backgroundColor: '#FEF3C7' }]}>
-              <Ionicons name="bug-outline" size={20} color="#F59E0B" />
+            <View style={[styles.settingIcon, { backgroundColor: theme.colors.status.warning + '20' }]}>
+              <Ionicons name="bug-outline" size={20} color={theme.colors.status.warning} />
             </View>
-            <Text style={styles.settingText}>Test E2E Encryption</Text>
-            <Ionicons name="chevron-forward" size={20} color="#999" />
+            <Text style={[styles.settingText, theme.typography.bodyLarge, { color: theme.colors.text.primary }]}>Test E2E Encryption</Text>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.text.tertiary} />
           </TouchableOpacity>
           
           <TouchableOpacity 
-            style={styles.settingItem}
+            style={[styles.settingItem, { minHeight: theme.touchTargets.medium }]}
             onPress={async () => {
               const result = await testE2EDetailed();
               Alert.alert('Detailed E2E Test', result ? 'Working!' : 'Failed - check console');
             }}
           >
-            <View style={[styles.settingIcon, { backgroundColor: '#FEF3C7' }]}>
-              <Ionicons name="bug-outline" size={20} color="#F59E0B" />
+            <View style={[styles.settingIcon, { backgroundColor: theme.colors.status.warning + '20' }]}>
+              <Ionicons name="bug-outline" size={20} color={theme.colors.status.warning} />
             </View>
-            <Text style={styles.settingText}>Detailed E2E Test</Text>
-            <Ionicons name="chevron-forward" size={20} color="#999" />
+            <Text style={[styles.settingText, theme.typography.bodyLarge, { color: theme.colors.text.primary }]}>Detailed E2E Test</Text>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.text.tertiary} />
           </TouchableOpacity>
           
           <TouchableOpacity 
-            style={styles.settingItem}
+            style={[styles.settingItem, { minHeight: theme.touchTargets.medium }]}
             onPress={async () => {
               await pushNotifications.scheduleLocalNotification(
                 'Test Notification',
@@ -378,32 +397,47 @@ export default function ProfileScreen() {
               Alert.alert('Success', 'Test notification scheduled!');
             }}
           >
-            <View style={[styles.settingIcon, { backgroundColor: '#E0E7FF' }]}>
-              <Ionicons name="notifications" size={20} color="#4F46E5" />
+            <View style={[styles.settingIcon, { backgroundColor: theme.colors.status.info + '20' }]}>
+              <Ionicons name="notifications" size={20} color={theme.colors.status.info} />
             </View>
-            <Text style={styles.settingText}>Test Push Notification</Text>
-            <Ionicons name="chevron-forward" size={20} color="#999" />
+            <Text style={[styles.settingText, theme.typography.bodyLarge, { color: theme.colors.text.primary }]}>Test Push Notification</Text>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.text.tertiary} />
           </TouchableOpacity>
           
           <TouchableOpacity 
-            style={styles.settingItem}
+            style={[styles.settingItem, { minHeight: theme.touchTargets.medium }]}
             onPress={async () => {
               const { verifyE2EEncryption } = await import('../utils/verifyE2EEncryption');
               await verifyE2EEncryption(true);
             }}
           >
-            <View style={[styles.settingIcon, { backgroundColor: '#ECFDF5' }]}>
-              <Ionicons name="shield-checkmark-outline" size={20} color="#10B981" />
+            <View style={[styles.settingIcon, { backgroundColor: theme.colors.status.success + '20' }]}>
+              <Ionicons name="shield-checkmark-outline" size={20} color={theme.colors.status.success} />
             </View>
-            <Text style={styles.settingText}>Verify Voice E2E Encryption</Text>
-            <Ionicons name="chevron-forward" size={20} color="#999" />
+            <Text style={[styles.settingText, theme.typography.bodyLarge, { color: theme.colors.text.primary }]}>Verify Voice E2E Encryption</Text>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.text.tertiary} />
           </TouchableOpacity>
-        </View>
+          
+          <TouchableOpacity 
+            style={[styles.settingItem, { minHeight: theme.touchTargets.medium }]}
+            onPress={() => navigation.navigate('ThemeDemo' as never)}
+          >
+            <View style={[styles.settingIcon, { backgroundColor: theme.colors.button.primary.background + '20' }]}>
+              <Ionicons name="color-palette-outline" size={20} color={theme.colors.button.primary.background} />
+            </View>
+            <Text style={[styles.settingText, theme.typography.bodyLarge, { color: theme.colors.text.primary }]}>Theme Demo</Text>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.text.tertiary} />
+          </TouchableOpacity>
+        </Card>
 
-        <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-          <Ionicons name="log-out-outline" size={20} color="#EF4444" />
-          <Text style={styles.signOutText}>Sign Out</Text>
-        </TouchableOpacity>
+        <Button
+          variant="danger"
+          onPress={handleSignOut}
+          icon={<Ionicons name="log-out-outline" size={20} color={theme.colors.button.danger.text} />}
+          style={styles.signOutButton}
+        >
+          Sign Out
+        </Button>
       </ScrollView>
 
       {/* Username Edit Modal */}
@@ -428,81 +462,67 @@ export default function ProfileScreen() {
             }}
           >
             <TouchableOpacity 
-              style={styles.modalContent} 
+              style={[styles.modalContent, { backgroundColor: theme.colors.background.primary }]} 
               activeOpacity={1}
               onPress={() => {}}
             >
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Edit Username</Text>
-              <TouchableOpacity
+              <Text style={[styles.modalTitle, theme.typography.displaySmall, { color: theme.colors.text.primary }]}>Edit Username</Text>
+              <IconButton
+                icon={<Ionicons name="close" size={24} color={theme.colors.text.secondary} />}
                 onPress={() => {
                   setShowUsernameModal(false);
                   setNewUsername('');
                   setUsernameError('');
                   Keyboard.dismiss();
                 }}
-                style={styles.closeButton}
-              >
-                <Ionicons name="close" size={24} color="#666" />
-              </TouchableOpacity>
+                size="medium"
+                variant="ghost"
+              />
             </View>
 
-            <Text style={styles.inputLabel}>Username</Text>
-            <TextInput
-              style={[styles.input, usernameError ? styles.inputError : null]}
+            <Input
+              label="Username"
               value={newUsername}
               onChangeText={(text) => {
                 setNewUsername(text);
                 validateUsername(text);
               }}
               placeholder="Enter username"
-              placeholderTextColor="#999"
               autoCapitalize="none"
               autoCorrect={false}
               maxLength={20}
+              error={usernameError}
+              helperText={newUsername.trim() && !usernameError ? `${20 - newUsername.length} characters remaining` : undefined}
             />
-            
-            {usernameError ? (
-              <Text style={styles.errorText}>{usernameError}</Text>
-            ) : newUsername.trim() ? (
-              <Text style={styles.helperText}>
-                {20 - newUsername.length} characters remaining
-              </Text>
-            ) : null}
-
-            <Text style={styles.rulesText}>
+            <Text style={[styles.rulesText, theme.typography.bodySmall, { color: theme.colors.text.tertiary }]}>
               • 3-20 characters{'\n'}
               • Letters, numbers, and underscores only{'\n'}
               • Leave empty to remain anonymous
             </Text>
 
             <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
+              <Button
+                variant="secondary"
                 onPress={() => {
                   setShowUsernameModal(false);
                   setNewUsername('');
                   setUsernameError('');
                 }}
+                style={{ flex: 1 }}
               >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
+                Cancel
+              </Button>
               
-              <TouchableOpacity
-                style={[
-                  styles.modalButton, 
-                  styles.saveButton,
-                  (isSaving || isCheckingUsername) && styles.disabledButton
-                ]}
+              <Button
+                variant="primary"
                 onPress={saveUsername}
                 disabled={isSaving || isCheckingUsername || !!usernameError}
+                loading={isSaving}
+                style={{ flex: 1 }}
               >
-                {isSaving ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.saveButtonText}>Save</Text>
-                )}
-              </TouchableOpacity>
+                Save
+              </Button>
             </View>
             </TouchableOpacity>
           </TouchableOpacity>
@@ -513,16 +533,9 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FAFAFA',
-  },
   profileHeader: {
     alignItems: 'center',
     paddingVertical: 32,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
   },
   avatar: {
     width: 88,
@@ -540,12 +553,9 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 36,
     fontWeight: 'bold',
-    color: '#fff',
   },
   username: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1A1A1A',
+    // Using theme typography
   },
   usernameContainer: {
     flexDirection: 'row',
@@ -553,39 +563,21 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     gap: 8,
   },
-  editButton: {
-    padding: 6,
-    borderRadius: 6,
-    backgroundColor: '#F0FFFE',
-  },
   userCode: {
-    fontSize: 16,
-    color: '#666',
-    fontFamily: 'monospace',
+    // Using theme typography
   },
   usernamePromptContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF3CD',
-    borderRadius: 8,
-    padding: 12,
     marginTop: 16,
     marginHorizontal: 20,
     gap: 8,
   },
   usernamePromptText: {
-    fontSize: 13,
-    color: '#856404',
     flex: 1,
   },
   friendCodeContainer: {
-    backgroundColor: '#fff',
-    marginTop: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#F0F0F0',
+    marginHorizontal: 20,
   },
   friendCodeHeader: {
     flexDirection: 'row',
@@ -594,37 +586,20 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   friendCodeLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1A1A1A',
+    // Using theme typography
   },
   codeActions: {
     flexDirection: 'row',
     gap: 8,
   },
-  codeAction: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#F0FFFE',
-  },
   friendCodeHint: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
+    // Using theme typography
   },
   settingsSection: {
     marginTop: 24,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#F0F0F0',
+    marginHorizontal: 20,
   },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#999',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 12,
@@ -650,37 +625,17 @@ const styles = StyleSheet.create({
   },
   settingText: {
     flex: 1,
-    fontSize: 16,
-    color: '#1A1A1A',
-    fontWeight: '500',
   },
   settingBadge: {
-    backgroundColor: '#EF4444',
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 10,
     marginLeft: 8,
+    overflow: 'hidden',
   },
   signOutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
     marginVertical: 32,
     marginHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: '#FEE2E2',
-    backgroundColor: '#FEF2F2',
-  },
-  signOutText: {
-    marginLeft: 8,
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#EF4444',
   },
   modalContainer: {
     flex: 1,
@@ -706,44 +661,9 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   modalTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1A1A1A',
-  },
-  closeButton: {
-    padding: 4,
-  },
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
-    marginBottom: 8,
-  },
-  input: {
-    borderWidth: 1.5,
-    borderColor: '#E0E0E0',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    backgroundColor: '#FAFAFA',
-  },
-  inputError: {
-    borderColor: '#EF4444',
-  },
-  errorText: {
-    color: '#EF4444',
-    fontSize: 14,
-    marginTop: 6,
-  },
-  helperText: {
-    color: '#666',
-    fontSize: 14,
-    marginTop: 6,
+    // Using theme typography
   },
   rulesText: {
-    color: '#999',
-    fontSize: 14,
     lineHeight: 20,
     marginTop: 16,
     marginBottom: 24,
@@ -752,39 +672,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
   },
-  modalButton: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  cancelButton: {
-    backgroundColor: '#F5F5F5',
-  },
-  saveButton: {
-    backgroundColor: '#1A1A1A',
-  },
-  disabledButton: {
-    opacity: 0.6,
-  },
-  cancelButtonText: {
-    color: '#1A1A1A',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  // Modal button styles now handled by Button component
   notificationStatus: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
   notificationStatusText: {
-    fontSize: 14,
-    color: '#666',
-    fontWeight: '500',
+    // Using theme typography
   },
 });

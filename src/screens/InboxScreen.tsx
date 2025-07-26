@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AnonymousAuthContext';
+import { useAppTheme } from '../contexts/ThemeContext';
 import { supabase } from '../services/supabase';
 
 interface Message {
@@ -25,6 +26,7 @@ interface Message {
 
 export default function InboxScreen() {
   const { user } = useAuth();
+  const theme = useAppTheme();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -106,37 +108,37 @@ export default function InboxScreen() {
   };
 
   const renderMessage = ({ item }: { item: Message }) => (
-    <TouchableOpacity style={styles.messageItem}>
+    <TouchableOpacity style={[styles.messageItem, { backgroundColor: theme.colors.background.elevated, ...theme.shadows.small }]}>
       <View style={styles.messageIcon}>
         <Ionicons 
           name={item.listened_at ? 'mail-open-outline' : 'mail-outline'} 
           size={24} 
-          color={item.listened_at ? '#999' : '#000'} 
+          color={item.listened_at ? theme.colors.text.tertiary : theme.colors.text.primary} 
         />
       </View>
       <View style={styles.messageContent}>
-        <Text style={styles.senderText}>
+        <Text style={[styles.senderText, theme.typography.bodyLarge, { color: theme.colors.text.primary }]}>
           From: {item.sender?.friend_code || 'Anonymous'}
         </Text>
-        <Text style={styles.timeText}>{getTimeAgo(item.created_at)}</Text>
-        <Text style={styles.expiryText}>{getExpiryText(item.expiry_rule)}</Text>
+        <Text style={[styles.timeText, theme.typography.bodyMedium, { color: theme.colors.text.secondary }]}>{getTimeAgo(item.created_at)}</Text>
+        <Text style={[styles.expiryText, theme.typography.bodySmall, { color: theme.colors.text.tertiary }]}>{getExpiryText(item.expiry_rule)}</Text>
       </View>
-      <Ionicons name="chevron-forward" size={20} color="#999" />
+      <Ionicons name="chevron-forward" size={20} color={theme.colors.text.tertiary} />
     </TouchableOpacity>
   );
 
   const EmptyState = () => (
     <View style={styles.emptyState}>
-      <Ionicons name="mail-outline" size={80} color="#ddd" />
-      <Text style={styles.emptyText}>No messages yet</Text>
-      <Text style={styles.emptySubtext}>
+      <Ionicons name="mail-outline" size={80} color={theme.colors.text.disabled} />
+      <Text style={[styles.emptyText, theme.typography.headlineMedium, { color: theme.colors.text.primary }]}>No messages yet</Text>
+      <Text style={[styles.emptySubtext, theme.typography.bodyMedium, { color: theme.colors.text.secondary }]}>
         Messages sent to you will appear here
       </Text>
     </View>
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background.secondary }]}>
       <FlatList
         data={messages}
         renderItem={renderMessage}
@@ -144,10 +146,15 @@ export default function InboxScreen() {
         contentContainerStyle={messages.length === 0 ? styles.emptyContainer : undefined}
         ListEmptyComponent={EmptyState}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => {
-            setRefreshing(true);
-            fetchMessages();
-          }} />
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={() => {
+              setRefreshing(true);
+              fetchMessages();
+            }}
+            tintColor={theme.colors.text.accent}
+            colors={[theme.colors.text.accent]}
+          />
         }
       />
     </SafeAreaView>
@@ -157,7 +164,6 @@ export default function InboxScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
   },
   emptyContainer: {
     flex: 1,
@@ -165,16 +171,10 @@ const styles = StyleSheet.create({
   messageItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
     padding: 15,
     marginHorizontal: 10,
     marginVertical: 5,
     borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
   },
   messageIcon: {
     marginRight: 15,
@@ -183,17 +183,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   senderText: {
-    fontSize: 16,
-    fontWeight: '600',
   },
   timeText: {
-    fontSize: 14,
-    color: '#666',
     marginTop: 2,
   },
   expiryText: {
-    fontSize: 12,
-    color: '#999',
     marginTop: 2,
   },
   emptyState: {
@@ -203,14 +197,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   emptyText: {
-    fontSize: 20,
-    fontWeight: '600',
     marginTop: 20,
-    color: '#333',
   },
   emptySubtext: {
-    fontSize: 16,
-    color: '#666',
     marginTop: 10,
     textAlign: 'center',
   },

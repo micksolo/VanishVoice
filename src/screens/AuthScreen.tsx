@@ -8,10 +8,12 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { useAuth } from '../contexts/AnonymousAuthContext';
+import { useAppTheme } from '../contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function AuthScreen() {
   const { signInAnonymously } = useAuth();
+  const theme = useAppTheme();
   const [loading, setLoading] = useState(false);
 
   const handleAnonymousSignIn = async () => {
@@ -26,45 +28,45 @@ export default function AuthScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
       <View style={styles.content}>
         <View style={styles.logoContainer}>
-          <Ionicons name="mic-circle" size={100} color="#000" />
-          <Text style={styles.title}>VanishVoice</Text>
-          <Text style={styles.subtitle}>Ephemeral Voice Messages</Text>
+          <Ionicons name="mic-circle" size={100} color={theme.colors.text.primary} />
+          <Text style={[styles.title, theme.typography.displayLarge, { color: theme.colors.text.primary }]}>VanishVoice</Text>
+          <Text style={[styles.subtitle, theme.typography.bodyLarge, { color: theme.colors.text.secondary }]}>Ephemeral Voice Messages</Text>
         </View>
 
         <View style={styles.featuresContainer}>
           <View style={styles.feature}>
-            <Ionicons name="time-outline" size={24} color="#666" />
-            <Text style={styles.featureText}>Messages that disappear</Text>
+            <Ionicons name="time-outline" size={24} color={theme.colors.text.secondary} />
+            <Text style={[styles.featureText, theme.typography.bodyMedium, { color: theme.colors.text.secondary }]}>Messages that disappear</Text>
           </View>
           <View style={styles.feature}>
-            <Ionicons name="lock-closed-outline" size={24} color="#666" />
-            <Text style={styles.featureText}>End-to-end encrypted</Text>
+            <Ionicons name="lock-closed-outline" size={24} color={theme.colors.text.secondary} />
+            <Text style={[styles.featureText, theme.typography.bodyMedium, { color: theme.colors.text.secondary }]}>End-to-end encrypted</Text>
           </View>
           <View style={styles.feature}>
-            <Ionicons name="location-outline" size={24} color="#666" />
-            <Text style={styles.featureText}>Location & time based expiry</Text>
+            <Ionicons name="location-outline" size={24} color={theme.colors.text.secondary} />
+            <Text style={[styles.featureText, theme.typography.bodyMedium, { color: theme.colors.text.secondary }]}>Location & time based expiry</Text>
           </View>
         </View>
 
         <TouchableOpacity
-          style={styles.button}
+          style={[styles.button, { backgroundColor: theme.colors.button.primary.background }]}
           onPress={handleAnonymousSignIn}
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={theme.colors.button.primary.text} />
           ) : (
             <>
-              <Ionicons name="person-outline" size={24} color="#fff" />
-              <Text style={styles.buttonText}>Start Anonymously</Text>
+              <Ionicons name="person-outline" size={24} color={theme.colors.button.primary.text} />
+              <Text style={[styles.buttonText, theme.typography.buttonLarge, { color: theme.colors.button.primary.text }]}>Start Anonymously</Text>
             </>
           )}
         </TouchableOpacity>
 
-        <Text style={styles.disclaimer}>
+        <Text style={[styles.disclaimer, theme.typography.bodySmall, { color: theme.colors.text.tertiary }]}>
           No account needed. Your messages will vanish.
         </Text>
       </View>
@@ -75,7 +77,6 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
   },
   content: {
     flex: 1,
@@ -88,13 +89,9 @@ const styles = StyleSheet.create({
     marginBottom: 50,
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
     marginTop: 20,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#666',
     marginTop: 5,
   },
   featuresContainer: {
@@ -107,12 +104,9 @@ const styles = StyleSheet.create({
   },
   featureText: {
     marginLeft: 10,
-    fontSize: 16,
-    color: '#666',
   },
   button: {
     flexDirection: 'row',
-    backgroundColor: '#000',
     paddingHorizontal: 30,
     paddingVertical: 15,
     borderRadius: 30,
@@ -120,14 +114,9 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   buttonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
     marginLeft: 10,
   },
   disclaimer: {
     marginTop: 20,
-    color: '#999',
-    fontSize: 14,
   },
 });

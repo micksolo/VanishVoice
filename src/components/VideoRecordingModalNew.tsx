@@ -90,7 +90,7 @@ export default function VideoRecordingModal({
         videoOptions = {
           ...videoOptions,
           videoQuality: '720p', // Decent quality
-          codec: 'h264',
+          codec: 'avc1',
           videoBitrate: 2000000, // 2 Mbps (like WhatsApp)
         };
       } else {

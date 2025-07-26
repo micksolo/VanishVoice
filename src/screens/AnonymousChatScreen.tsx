@@ -17,6 +17,8 @@ import { Audio } from 'expo-av';
 import { supabase } from '../services/supabase';
 import matchingEngine from '../services/matching';
 import { useAnonymousSession } from '../hooks/useAnonymousSession';
+import { useAppTheme } from '../contexts/ThemeContext';
+import { Theme } from '../theme';
 import AnonymousEncryption from '../utils/anonymousEncryption';
 import AnonymousAudioStorage from '../utils/anonymousAudioStorage';
 
@@ -31,6 +33,7 @@ interface Message {
 export default function AnonymousChatScreen({ route, navigation }: any) {
   const { conversationId, partnerId } = route.params;
   const { session, deviceHash } = useAnonymousSession();
+  const theme = useAppTheme();
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
@@ -475,7 +478,7 @@ export default function AnonymousChatScreen({ route, navigation }: any) {
       >
         {isVoice ? (
           <View style={styles.voiceMessage}>
-            <Ionicons name="mic" size={20} color={item.isMine ? '#fff' : '#000'} />
+            <Ionicons name="mic" size={20} color={item.isMine ? theme.colors.text.inverse : theme.colors.text.primary} />
             <Text style={[styles.messageText, item.isMine && styles.myMessageText]}>
               Voice message
             </Text>
@@ -489,10 +492,12 @@ export default function AnonymousChatScreen({ route, navigation }: any) {
     );
   };
 
+  const styles = getStyles(theme);
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color="#4ECDC4" />
+        <ActivityIndicator size="large" color={theme.colors.accent.teal} />
       </SafeAreaView>
     );
   }
@@ -550,7 +555,7 @@ export default function AnonymousChatScreen({ route, navigation }: any) {
           
           {inputText.trim() ? (
             <TouchableOpacity onPress={sendTextMessage} style={styles.sendButton}>
-              <Ionicons name="send" size={24} color="#4ECDC4" />
+              <Ionicons name="send" size={24} color={theme.colors.accent.teal} />
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
@@ -558,7 +563,7 @@ export default function AnonymousChatScreen({ route, navigation }: any) {
               onPressOut={stopRecording}
               style={[styles.micButton, isRecording && styles.micButtonRecording]}
             >
-              <Ionicons name="mic" size={24} color={isRecording ? '#fff' : '#4ECDC4'} />
+              <Ionicons name="mic" size={24} color={isRecording ? theme.colors.text.inverse : theme.colors.accent.teal} />
               {isRecording && (
                 <Text style={styles.recordingDuration}>{recordingDuration}s</Text>
               )}
@@ -570,77 +575,76 @@ export default function AnonymousChatScreen({ route, navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: Theme) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: theme.colors.surface.primary,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#fff',
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surface.secondary,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: theme.colors.border.light,
   },
   headerCenter: {
     flex: 1,
-    marginLeft: 16,
+    marginLeft: theme.spacing.md,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1A1A1A',
+    ...theme.typography.heading.h4,
+    color: theme.colors.text.primary,
   },
   headerSubtitle: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 2,
+    ...theme.typography.body.small,
+    color: theme.colors.text.secondary,
+    marginTop: theme.spacing.xs,
   },
   headerActions: {
     flexDirection: 'row',
-    gap: 8,
+    gap: theme.spacing.xs,
   },
   headerButton: {
-    padding: 8,
+    padding: theme.spacing.xs,
   },
   messagesList: {
-    padding: 16,
+    padding: theme.spacing.md,
     flexGrow: 1,
   },
   messageBubble: {
     maxWidth: '75%',
-    padding: 12,
-    borderRadius: 20,
-    marginVertical: 4,
+    padding: theme.spacing.sm,
+    borderRadius: theme.borderRadius.lg,
+    marginVertical: theme.spacing.xs,
   },
   myMessage: {
     alignSelf: 'flex-end',
-    backgroundColor: '#4ECDC4',
+    backgroundColor: theme.colors.accent.teal,
   },
   theirMessage: {
     alignSelf: 'flex-start',
-    backgroundColor: '#E0E0E0',
+    backgroundColor: theme.colors.surface.tertiary,
   },
   messageText: {
-    fontSize: 16,
-    color: '#000',
+    ...theme.typography.body.medium,
+    color: theme.colors.text.primary,
   },
   myMessageText: {
-    color: '#fff',
+    color: theme.colors.text.inverse,
   },
   voiceMessage: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: theme.spacing.xs,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    padding: 16,
-    backgroundColor: '#fff',
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surface.secondary,
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: theme.colors.border.light,
   },
   textInput: {
     flex: 1,

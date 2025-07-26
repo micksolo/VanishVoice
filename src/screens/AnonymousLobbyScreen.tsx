@@ -10,10 +10,13 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAnonymousSession } from '../hooks/useAnonymousSession';
+import { useAppTheme } from '../contexts/ThemeContext';
+import { Theme } from '../theme';
 import matchingEngine from '../services/matching';
 
 export default function AnonymousLobbyScreen({ navigation }: any) {
   const { session, loading: sessionLoading, error: sessionError } = useAnonymousSession();
+  const theme = useAppTheme();
   const [matchingState, setMatchingState] = useState<'idle' | 'searching' | 'matched'>('idle');
   const [matchData, setMatchData] = useState<any>(null);
   const [searchTime, setSearchTime] = useState(0);
@@ -92,10 +95,12 @@ export default function AnonymousLobbyScreen({ navigation }: any) {
     }
   };
 
+  const styles = getStyles(theme);
+
   if (sessionLoading) {
     return (
       <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color="#4ECDC4" />
+        <ActivityIndicator size="large" color={theme.colors.accent.teal} />
         <Text style={styles.loadingText}>Initializing...</Text>
       </SafeAreaView>
     );
@@ -138,7 +143,7 @@ export default function AnonymousLobbyScreen({ navigation }: any) {
                   onPress={showPremiumAlert}
                 >
                   <View style={styles.premiumBadge}>
-                    <Ionicons name="star" size={12} color="#FFD700" />
+                    <Ionicons name="star" size={12} color={theme.colors.accent.orange} />
                   </View>
                   <Text style={styles.filterButtonText}>Male</Text>
                 </TouchableOpacity>
@@ -147,7 +152,7 @@ export default function AnonymousLobbyScreen({ navigation }: any) {
                   onPress={showPremiumAlert}
                 >
                   <View style={styles.premiumBadge}>
-                    <Ionicons name="star" size={12} color="#FFD700" />
+                    <Ionicons name="star" size={12} color={theme.colors.accent.orange} />
                   </View>
                   <Text style={styles.filterButtonText}>Female</Text>
                 </TouchableOpacity>
@@ -169,7 +174,7 @@ export default function AnonymousLobbyScreen({ navigation }: any) {
                   onPress={showPremiumAlert}
                 >
                   <View style={styles.premiumBadge}>
-                    <Ionicons name="star" size={12} color="#FFD700" />
+                    <Ionicons name="star" size={12} color={theme.colors.accent.orange} />
                   </View>
                   <Text style={styles.filterButtonText}>My Country</Text>
                 </TouchableOpacity>
@@ -182,7 +187,7 @@ export default function AnonymousLobbyScreen({ navigation }: any) {
         {matchingState === 'idle' && (
           <View style={styles.idleState}>
             <TouchableOpacity style={styles.findButton} onPress={findMatch}>
-              <Ionicons name="chatbubbles" size={32} color="#fff" />
+              <Ionicons name="chatbubbles" size={32} color={theme.colors.text.inverse} />
               <Text style={styles.findButtonText}>Find Someone</Text>
             </TouchableOpacity>
             
@@ -194,7 +199,7 @@ export default function AnonymousLobbyScreen({ navigation }: any) {
 
         {matchingState === 'searching' && (
           <View style={styles.searchingState}>
-            <ActivityIndicator size="large" color="#4ECDC4" />
+            <ActivityIndicator size="large" color={theme.colors.accent.teal} />
             <Text style={styles.searchingText}>Finding someone...</Text>
             <Text style={styles.searchTime}>{searchTime}s</Text>
             
@@ -228,54 +233,63 @@ export default function AnonymousLobbyScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: Theme) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: theme.colors.surface.primary,
   },
   content: {
     flex: 1,
-    padding: 20,
+    padding: theme.spacing.lg,
     paddingTop: 60,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: theme.spacing.xl,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#1A1A1A',
+    ...theme.typography.heading.h1,
+    color: theme.colors.text.primary,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#666',
-    marginTop: 4,
+    ...theme.typography.body.medium,
+    color: theme.colors.text.secondary,
+    marginTop: theme.spacing.xs,
+  },
+  loadingText: {
+    ...theme.typography.body.medium,
+    color: theme.colors.text.primary,
+    textAlign: 'center',
+    marginTop: theme.spacing.md,
+  },
+  errorText: {
+    ...theme.typography.body.medium,
+    color: theme.colors.feedback.error,
+    textAlign: 'center',
   },
   filtersContainer: {
-    backgroundColor: '#F8F8F8',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 30,
+    backgroundColor: theme.colors.surface.tertiary,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.lg,
+    marginBottom: theme.spacing.xl,
   },
   filtersTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1A1A1A',
-    marginBottom: 20,
+    ...theme.typography.heading.h4,
+    color: theme.colors.text.primary,
+    marginBottom: theme.spacing.lg,
   },
   filterSection: {
-    marginBottom: 20,
+    marginBottom: theme.spacing.lg,
   },
   filterLabel: {
-    fontSize: 16,
+    ...theme.typography.body.medium,
+    color: theme.colors.text.primary,
     fontWeight: '500',
-    color: '#1A1A1A',
-    marginBottom: 10,
+    marginBottom: theme.spacing.sm,
   },
   filterOptions: {
     flexDirection: 'row',
-    gap: 10,
+    gap: theme.spacing.sm,
   },
   filterButton: {
     paddingHorizontal: 16,
