@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -32,6 +32,26 @@ export default function VideoPlayerModal({
   const [isPlaying, setIsPlaying] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const videoRef = useRef<Video>(null);
+
+  // Cleanup video when modal closes or component unmounts
+  useEffect(() => {
+    return () => {
+      if (videoRef.current) {
+        videoRef.current.unloadAsync().catch(console.error);
+      }
+    };
+  }, []);
+
+  // Reset state when video URI changes
+  useEffect(() => {
+    if (videoUri) {
+      setIsLoading(true);
+      setError(null);
+      setIsPlaying(true);
+      setPosition(0);
+      setDuration(0);
+    }
+  }, [videoUri]);
 
   const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
     console.log(`[VideoPlayer] Status update:`, {
@@ -80,6 +100,19 @@ export default function VideoPlayerModal({
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
+  const handleClose = async () => {
+    // Cleanup video before closing
+    if (videoRef.current) {
+      try {
+        await videoRef.current.pauseAsync();
+        await videoRef.current.unloadAsync();
+      } catch (error) {
+        console.error('[VideoPlayer] Error cleaning up video:', error);
+      }
+    }
+    onClose();
+  };
+
   if (!videoUri) return null;
 
   return (
@@ -87,13 +120,13 @@ export default function VideoPlayerModal({
       visible={visible}
       animationType="fade"
       transparent={true}
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
     >
       <SafeAreaView style={styles.container}>
         <TouchableOpacity 
           style={styles.backdrop} 
           activeOpacity={1} 
-          onPress={onClose}
+          onPress={handleClose}
         >
           <View style={styles.playerContainer}>
             <Video
@@ -145,7 +178,7 @@ export default function VideoPlayerModal({
             <View style={styles.topBar}>
               <TouchableOpacity
                 style={styles.closeButton}
-                onPress={onClose}
+                onPress={handleClose}
               >
                 <Ionicons name="close" size={30} color="white" />
               </TouchableOpacity>

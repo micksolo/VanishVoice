@@ -15,7 +15,7 @@ import { CameraView, CameraType, useCameraPermissions, useMicrophonePermissions 
 import { Video, ResizeMode } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
-import { VideoCompressorUtil } from '../utils/videoCompressor';
+// Compression is now handled in SecureE2EVideoStorageFastAndroid to avoid double compression
 
 interface VideoRecordingModalProps {
   visible: boolean;
@@ -37,6 +37,7 @@ export default function VideoRecordingModal({
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [videoUri, setVideoUri] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  // Compression now happens in SecureE2EVideoStorageFastAndroid
   
   const cameraRef = useRef<CameraView>(null);
   const recordingInterval = useRef<NodeJS.Timeout | null>(null);
@@ -179,9 +180,8 @@ export default function VideoRecordingModal({
       const fileSizeMB = (fileInfo.size || 0) / (1024 * 1024);
       console.log(`[VideoRecording] Original video size: ${fileSizeMB.toFixed(2)} MB`);
 
-      // Accept the video as-is since we can't compress client-side
-      // Server-side compression will be needed (like Snapchat, Telegram, etc.)
-      console.log(`[VideoRecording] Sending ${fileSizeMB.toFixed(2)}MB video`);
+      // Don't compress here - SecureE2EVideoStorageFastAndroid will handle compression
+      // This avoids double compression
       onVideoRecorded(videoUri);
       
       onClose();

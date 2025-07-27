@@ -33,56 +33,54 @@ async function generateAudioKey(): Promise<string> {
 }
 
 /**
- * Encrypt audio data using AES-like algorithm with proper binary handling
+ * Simple XOR encryption - optimized for performance
+ */
+function xorEncrypt(data: Uint8Array, key: Uint8Array): Uint8Array {
+  const result = new Uint8Array(data.length);
+  const keyLen = key.length;
+  
+  for (let i = 0; i < data.length; i++) {
+    result[i] = data[i] ^ key[i % keyLen];
+  }
+  
+  return result;
+}
+
+/**
+ * Encrypt audio data using fast XOR encryption
  */
 async function encryptAudioData(
   base64Audio: string,
   key: string
 ): Promise<{ encrypted: string; nonce: string }> {
-  // Generate nonce
+  // Generate nonce (still needed for additional security)
   const nonceBytes = await Crypto.getRandomBytesAsync(16);
   const nonce = Buffer.from(nonceBytes).toString('base64');
   
-  // Create encryption key by hashing key + nonce
+  // Create encryption key by hashing key + nonce (one-time operation)
   const encryptionKey = await Crypto.digestStringAsync(
     Crypto.CryptoDigestAlgorithm.SHA256,
     key + nonce,
     { encoding: Crypto.CryptoEncoding.HEX }
   );
   
-  // Convert audio to buffer
-  const audioBuffer = Buffer.from(base64Audio, 'base64');
-  const keyBuffer = Buffer.from(encryptionKey, 'hex');
+  // Convert to Uint8Array for fast XOR
+  const audioData = new Uint8Array(Buffer.from(base64Audio, 'base64'));
+  const keyData = new Uint8Array(Buffer.from(encryptionKey, 'hex'));
   
-  // Stream cipher encryption (XOR with key stretching)
-  const encrypted = Buffer.alloc(audioBuffer.length);
-  
-  // Use counter mode for better security
-  for (let i = 0; i < audioBuffer.length; i += keyBuffer.length) {
-    // Create unique key for this block
-    const blockKey = await Crypto.digestStringAsync(
-      Crypto.CryptoDigestAlgorithm.SHA256,
-      encryptionKey + i.toString(),
-      { encoding: Crypto.CryptoEncoding.HEX }
-    );
-    const blockKeyBuffer = Buffer.from(blockKey, 'hex');
-    
-    // XOR this block
-    for (let j = 0; j < keyBuffer.length && (i + j) < audioBuffer.length; j++) {
-      encrypted[i + j] = audioBuffer[i + j] ^ blockKeyBuffer[j];
-    }
-  }
+  // Fast XOR encryption
+  const encrypted = xorEncrypt(audioData, keyData);
   
   return {
-    encrypted: encrypted.toString('base64'),
+    encrypted: Buffer.from(encrypted).toString('base64'),
     nonce
   };
 }
 
 /**
- * Decrypt audio data - Optimized version
+ * Legacy decryption for backward compatibility
  */
-async function decryptAudioData(
+async function decryptAudioDataLegacy(
   encryptedBase64: string,
   key: string,
   nonce: string
@@ -97,53 +95,106 @@ async function decryptAudioData(
   const encryptedBuffer = Buffer.from(encryptedBase64, 'base64');
   const baseKeyBuffer = Buffer.from(baseKey, 'hex');
   
-  // Stream cipher decryption with optimized key generation
+  // Stream cipher decryption
   const decrypted = Buffer.alloc(encryptedBuffer.length);
-  
-  // Pre-compute block keys for better performance (trade memory for speed)
   const blockSize = baseKeyBuffer.length;
-  const numBlocks = Math.ceil(encryptedBuffer.length / blockSize);
-  const maxPrecomputedBlocks = Math.min(numBlocks, 50); // Limit memory usage
   
-  if (numBlocks <= maxPrecomputedBlocks) {
-    // Small files: pre-compute all block keys for maximum speed
-    const blockKeys: Buffer[] = [];
-    for (let blockIndex = 0; blockIndex < numBlocks; blockIndex++) {
-      const blockKey = await Crypto.digestStringAsync(
-        Crypto.CryptoDigestAlgorithm.SHA256,
-        baseKey + (blockIndex * blockSize).toString(),
-        { encoding: Crypto.CryptoEncoding.HEX }
-      );
-      blockKeys.push(Buffer.from(blockKey, 'hex'));
-    }
+  for (let i = 0; i < encryptedBuffer.length; i += blockSize) {
+    const blockKey = await Crypto.digestStringAsync(
+      Crypto.CryptoDigestAlgorithm.SHA256,
+      baseKey + i.toString(),
+      { encoding: Crypto.CryptoEncoding.HEX }
+    );
+    const blockKeyBuffer = Buffer.from(blockKey, 'hex');
     
-    // Decrypt all blocks
-    for (let blockIndex = 0; blockIndex < numBlocks; blockIndex++) {
-      const blockKeyBuffer = blockKeys[blockIndex];
-      const startOffset = blockIndex * blockSize;
-      
-      for (let j = 0; j < blockSize && (startOffset + j) < encryptedBuffer.length; j++) {
-        decrypted[startOffset + j] = encryptedBuffer[startOffset + j] ^ blockKeyBuffer[j];
-      }
-    }
-  } else {
-    // Large files: compute keys on-demand to limit memory usage
-    for (let i = 0; i < encryptedBuffer.length; i += blockSize) {
-      const blockKey = await Crypto.digestStringAsync(
-        Crypto.CryptoDigestAlgorithm.SHA256,
-        baseKey + i.toString(),
-        { encoding: Crypto.CryptoEncoding.HEX }
-      );
-      const blockKeyBuffer = Buffer.from(blockKey, 'hex');
-      
-      // XOR this block
-      for (let j = 0; j < blockSize && (i + j) < encryptedBuffer.length; j++) {
-        decrypted[i + j] = encryptedBuffer[i + j] ^ blockKeyBuffer[j];
-      }
+    // XOR this block
+    for (let j = 0; j < blockSize && (i + j) < encryptedBuffer.length; j++) {
+      decrypted[i + j] = encryptedBuffer[i + j] ^ blockKeyBuffer[j];
     }
   }
   
   return decrypted.toString('base64');
+}
+
+/**
+ * Decrypt audio data - Fast XOR version with legacy support
+ */
+async function decryptAudioData(
+  encryptedBase64: string,
+  key: string,
+  nonce: string,
+  onProgress?: (progress: number) => void,
+  version: number = 1
+): Promise<string> {
+  const startTime = Date.now();
+  
+  // If version 1, go straight to legacy decryption
+  if (version === 1) {
+    console.log('[E2EAudio] Version 1 message detected, using legacy decryption');
+    return decryptAudioDataLegacy(encryptedBase64, key, nonce);
+  }
+  
+  // Try fast XOR decryption for v2+ messages
+  try {
+    // Create decryption key (one-time operation)
+    const decryptionKey = await Crypto.digestStringAsync(
+      Crypto.CryptoDigestAlgorithm.SHA256,
+      key + nonce,
+      { encoding: Crypto.CryptoEncoding.HEX }
+    );
+    
+    // Convert to Uint8Array for fast XOR
+    const encryptedData = new Uint8Array(Buffer.from(encryptedBase64, 'base64'));
+    const keyData = new Uint8Array(Buffer.from(decryptionKey, 'hex'));
+    
+    console.log(`[E2EAudio] Starting XOR decryption of ${(encryptedData.length / 1024 / 1024).toFixed(2)}MB`);
+    
+    // Process in chunks to keep UI responsive
+    const CHUNK_SIZE = 1024 * 1024; // 1MB chunks
+    const totalChunks = Math.ceil(encryptedData.length / CHUNK_SIZE);
+    const decrypted = new Uint8Array(encryptedData.length);
+    
+    for (let chunk = 0; chunk < totalChunks; chunk++) {
+      const start = chunk * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, encryptedData.length);
+      
+      // XOR decrypt this chunk
+      for (let i = start; i < end; i++) {
+        decrypted[i] = encryptedData[i] ^ keyData[i % keyData.length];
+      }
+      
+      // Report progress (less frequently for better performance)
+      if (onProgress && (chunk === 0 || chunk === totalChunks - 1 || chunk % 10 === 0)) {
+        onProgress((chunk + 1) / totalChunks);
+      }
+    }
+    
+    const decryptionTime = Date.now() - startTime;
+    console.log(`[E2EAudio] XOR decryption completed in ${decryptionTime}ms`);
+    
+    const result = Buffer.from(decrypted).toString('base64');
+    
+    // For v2 messages, skip validation since we know they use XOR
+    if (version >= 2) {
+      return result;
+    }
+    
+    // For unknown versions, validate the result
+    try {
+      const testBuffer = Buffer.from(result.substring(0, 100), 'base64');
+      if (testBuffer.length > 0) {
+        return result;
+      }
+    } catch (validationError) {
+      console.log('[E2EAudio] Fast decryption validation failed, trying legacy method');
+    }
+  } catch (error) {
+    console.log('[E2EAudio] Fast decryption failed, trying legacy method:', error);
+  }
+  
+  // Fall back to legacy decryption for old messages
+  console.log('[E2EAudio] Using legacy decryption method');
+  return decryptAudioDataLegacy(encryptedBase64, key, nonce);
 }
 
 /**
@@ -204,7 +255,7 @@ export const uploadE2EEncryptedAudio = async (
     return {
       path: filename,
       encryptedKey: encryptedKey,
-      nonce: JSON.stringify({ audioNonce, keyNonce }) // Store both nonces
+      nonce: JSON.stringify({ audioNonce, keyNonce, version: 2 }) // Store both nonces and version
     };
   } catch (error) {
     console.error('[E2EAudio] Error uploading encrypted audio:', error);
@@ -264,7 +315,8 @@ export const downloadAndDecryptE2EAudio = async (
     const encryptedBase64 = Buffer.from(encryptedData).toString('base64');
     
     // Parse nonces
-    const { audioNonce, keyNonce } = JSON.parse(nonce);
+    const nonceData = JSON.parse(nonce);
+    const { audioNonce, keyNonce, version = 1 } = nonceData;
     
     // Derive shared secret
     const keyDecryptStart = Date.now();
@@ -276,7 +328,17 @@ export const downloadAndDecryptE2EAudio = async (
     
     // Decrypt the audio
     const audioDecryptStart = Date.now();
-    const decryptedBase64 = await decryptAudioData(encryptedBase64, audioKey, audioNonce);
+    const decryptedBase64 = await decryptAudioData(
+      encryptedBase64, 
+      audioKey, 
+      audioNonce,
+      (progress) => {
+        // Map decryption progress to overall progress (50% to 90%)
+        const overallProgress = 0.5 + (progress * 0.4);
+        onProgress?.({ loaded: overallProgress * 100, total: 100, percentage: overallProgress * 100 });
+      },
+      version
+    );
     console.log(`[E2EAudio] Audio decryption completed in ${Date.now() - audioDecryptStart}ms`);
     
     // Save decrypted audio to cache

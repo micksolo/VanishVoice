@@ -153,3 +153,12 @@ When creating a git commit, ALWAYS follow this sequence:
 - **Compression**: Client-side video compression not available in Expo managed workflow
 - **Performance**: XOR encryption is fast enough for 50MB files (~4s decrypt on download)
 - **Solution**: Accept large files for now, implement server-side compression later (like Snapchat/WhatsApp)
+
+### Development Builds Setup
+- **Purpose**: Allows native modules (like react-native-compressor) while keeping Expo workflow benefits
+- **EAS CLI**: Already configured with project ID in app.json
+- **Build Profiles**: Use `development` for simulators, `development-device` for physical devices
+- **Rebuild Required**: Must rebuild dev client when adding/removing native modules
+- **Scripts Added**: `npm run build:dev:*` commands for easy building
+- **Metro Config**: Enhanced to support CommonJS modules and native module resolution
+- **Testing**: Always test on both iOS and Android with development builds before considering complete

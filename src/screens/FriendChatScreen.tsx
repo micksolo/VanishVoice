@@ -76,6 +76,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [uploadingMessageId, setUploadingMessageId] = useState<string | null>(null);
   const [downloadingMessageId, setDownloadingMessageId] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<{ [key: string]: number }>({});
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [messageOffset, setMessageOffset] = useState(0);
@@ -875,7 +876,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
     }
   };
 
-  const handleVideoSend = async (videoPath: string, duration: number, encryptedKey: string, nonce: string) => {
+  const handleVideoSend = async (videoPath: string, duration: number, encryptedKey: string, nonce: string, videoNonce?: string) => {
     if (!user) return;
 
     try {
@@ -907,6 +908,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
           media_path: videoPath,
           content: encryptedKey, // Store encrypted key in content field
           nonce: nonce, // Store nonce
+          video_nonce: videoNonce, // Store video-specific nonce for fast decryption
           is_encrypted: true,
           expiry_rule: currentExpiryRule,
           duration: duration
@@ -1007,6 +1009,20 @@ export default function FriendChatScreen({ route, navigation }: any) {
                 : msg
             )
           );
+        },
+        (compressionProgress) => {
+          // Update the temp message with compression progress
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === tempId 
+                ? { 
+                    ...msg, 
+                    compressionProgress: compressionProgress.percent,
+                    compressionStatus: `Compressing... ${compressionProgress.percent}%`
+                  }
+                : msg
+            )
+          );
         }
       );
       
@@ -1019,7 +1035,8 @@ export default function FriendChatScreen({ route, navigation }: any) {
           uploadResult.videoId, // Use videoId as the path
           30, // Default 30 second duration
           uploadResult.encryptedKey,
-          uploadResult.keyNonce
+          uploadResult.keyNonce,
+          uploadResult.videoNonce // Pass the video-specific nonce
         );
       } else {
         // Update temp message to failed
@@ -1140,11 +1157,23 @@ export default function FriendChatScreen({ route, navigation }: any) {
           msgData.content, // encrypted key
           msgData.nonce,
           msgData.sender_id,
-          user?.id || ''
+          user?.id || '',
+          (progress) => {
+            // Update download progress
+            setDownloadProgress(prev => ({
+              ...prev,
+              [messageId]: Math.round(progress.percentage)
+            }));
+          }
         );
 
         console.log('[Download] Clearing downloading state');
         setDownloadingMessageId(null);
+        setDownloadProgress(prev => {
+          const newProgress = { ...prev };
+          delete newProgress[messageId];
+          return newProgress;
+        });
 
         if (!decryptedUri) {
           throw new Error('Failed to decrypt voice message');
@@ -1292,6 +1321,11 @@ export default function FriendChatScreen({ route, navigation }: any) {
       console.error('Error playing voice message:', error);
       setPlayingMessageId(null);
       setDownloadingMessageId(null);
+      setDownloadProgress(prev => {
+        const newProgress = { ...prev };
+        delete newProgress[messageId];
+        return newProgress;
+      });
       
       // Clean up any existing sound
       if (sound) {
@@ -1370,7 +1404,8 @@ export default function FriendChatScreen({ route, navigation }: any) {
           (progress) => {
             // Could update UI with download progress here if needed
             console.log(`[Video] Download progress: ${Math.round(progress * 100)}%`);
-          }
+          },
+          msgData.video_nonce // Pass the video-specific nonce if available
         );
 
         setDownloadingMessageId(null);
@@ -1493,7 +1528,16 @@ export default function FriendChatScreen({ route, navigation }: any) {
                 {isUploading ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : isDownloading ? (
-                  <ActivityIndicator size="small" color={item.isMine ? "#fff" : "#4ECDC4"} />
+                  downloadProgress[item.id] !== undefined ? (
+                    <Text style={[
+                      styles.progressText,
+                      { color: item.isMine ? "#fff" : "#4ECDC4" }
+                    ]}>
+                      {downloadProgress[item.id]}%
+                    </Text>
+                  ) : (
+                    <ActivityIndicator size="small" color={item.isMine ? "#fff" : "#4ECDC4"} />
+                  )
                 ) : (
                   <Ionicons 
                     name={isCurrentlyPlaying ? "pause" : "play"} 
@@ -1960,6 +2004,10 @@ const styles = StyleSheet.create({
   },
   playButtonTheirs: {
     backgroundColor: 'rgba(78, 205, 196, 0.2)',
+  },
+  progressText: {
+    fontSize: 10,
+    fontWeight: '600',
   },
   waveformContainer: {
     flexDirection: 'row',

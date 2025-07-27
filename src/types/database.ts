@@ -15,6 +15,7 @@ export interface Message {
   content: string; // Encrypted content or key
   media_path?: string;
   nonce?: string; // Encryption nonce
+  video_nonce?: string; // Video-specific nonce for nacl.secretbox
   expiry_rule: ExpiryRule;
   created_at: string;
   viewed_at?: string; // When message was first viewed
