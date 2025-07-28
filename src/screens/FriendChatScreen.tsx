@@ -31,7 +31,7 @@ import FriendEncryption from '../utils/friendEncryption';
 import { uploadE2EEncryptedAudio, downloadAndDecryptE2EAudio } from '../utils/secureE2EAudioStorage';
 import { SecureE2EVideoStorageFastAndroid } from '../utils/secureE2EVideoStorageFastAndroid';
 import { EphemeralMessageService } from '../services/ephemeralMessages';
-import { ExpiryRule } from '../types/database';
+import { ExpiryRule, Message as DBMessage } from '../types/database';
 import RecordingModal from '../components/RecordingModal';
 import VideoRecordingModal from '../components/VideoRecordingModalNew';
 import VideoPlayerModal from '../components/VideoPlayerModal';
@@ -40,6 +40,7 @@ import ExpiryButton from '../components/ExpiryButton';
 import ExpiryRuleSelector from '../components/ExpiryRuleSelector';
 import MessageBubble from '../components/MessageBubble';
 import VoiceMessagePlayer from '../components/VoiceMessagePlayer';
+import ViewingOverlay from '../components/ViewingOverlay';
 import * as FileSystem from 'expo-file-system';
 import { Video, ResizeMode } from 'expo-av';
 
@@ -85,8 +86,10 @@ export default function FriendChatScreen({ route, navigation }: any) {
   const [micScale] = useState(new Animated.Value(1));
   const [micPulse] = useState(new Animated.Value(1));
   const [showExpirySelector, setShowExpirySelector] = useState(false);
-  const [currentExpiryRule, setCurrentExpiryRule] = useState<ExpiryRule>({ type: 'none' });
+  const [currentExpiryRule, setCurrentExpiryRule] = useState<ExpiryRule>({ type: 'view', disappear_after_view: true });
   const [messageTypeForExpiry, setMessageTypeForExpiry] = useState<'text' | 'voice' | 'video'>('text');
+  const [viewingMessage, setViewingMessage] = useState<DBMessage | null>(null);
+  const [showViewingOverlay, setShowViewingOverlay] = useState(false);
   
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -226,6 +229,12 @@ export default function FriendChatScreen({ route, navigation }: any) {
       const convertedMessages: Message[] = [];
       
       for (const msg of (reversedData || [])) {
+        // Skip expired messages from being displayed
+        if (msg.is_expired || msg.expired) {
+          console.log('[FriendChat] Skipping expired message:', msg.id);
+          continue;
+        }
+        
         let content = '';
         
         if (msg.type === 'text') {
@@ -280,7 +289,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
           isMine: msg.sender_id === user?.id,
           timestamp: new Date(msg.created_at),
           status: 'sent',
-          duration: msg.duration
+          duration: msg.duration,
+          expiryRule: msg.expiry_rule,
+          isEphemeral: msg.expiry_rule && msg.expiry_rule.type !== 'none'
         });
       }
 
@@ -328,6 +339,12 @@ export default function FriendChatScreen({ route, navigation }: any) {
         const convertedMessages: Message[] = [];
         
         for (const msg of (data || [])) {
+          // Skip expired messages
+          if (msg.is_expired || msg.expired) {
+            console.log('[FriendChat] Skipping expired message in polling:', msg.id);
+            continue;
+          }
+          
           let content = '';
           
           if (msg.type === 'text') {
@@ -361,7 +378,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
             isMine: msg.sender_id === user?.id,
             timestamp: new Date(msg.created_at),
             status: 'sent',
-            duration: msg.duration
+            duration: msg.duration,
+            expiryRule: msg.expiry_rule,
+            isEphemeral: msg.expiry_rule && msg.expiry_rule.type !== 'none'
           });
         }
 
@@ -432,7 +451,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
               isMine: false,
               timestamp: new Date(payload.new.created_at),
               status: 'delivered',
-              duration: payload.new.duration
+              duration: payload.new.duration,
+              expiryRule: payload.new.expiry_rule,
+              isEphemeral: payload.new.expiry_rule && payload.new.expiry_rule.type !== 'none'
             };
             
             setMessages(prev => [...prev, newMessage]);
@@ -450,9 +471,32 @@ export default function FriendChatScreen({ route, navigation }: any) {
       setMessages(prev => prev.filter(msg => msg.id !== expiredMessageId));
     });
 
+    // Subscribe to message updates to detect when messages are marked as expired
+    const messageUpdateSubscription = supabase
+      .channel(`message-updates:${channelName}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages',
+        },
+        async (payload) => {
+          console.log('[FriendChat] Message updated:', payload);
+          
+          // Check if the message is now expired
+          if (payload.new.expired || payload.new.is_expired) {
+            console.log('[FriendChat] Message marked as expired, removing:', payload.new.id);
+            setMessages(prev => prev.filter(msg => msg.id !== payload.new.id));
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       subscription.unsubscribe();
       expirySubscription.unsubscribe();
+      messageUpdateSubscription.unsubscribe();
     };
   };
 
@@ -555,8 +599,8 @@ export default function FriendChatScreen({ route, navigation }: any) {
         )
       );
       
-      // Reset expiry rule after successful send
-      setCurrentExpiryRule({ type: 'none' });
+      // Reset expiry rule to default view-once after successful send
+      setCurrentExpiryRule({ type: 'view', disappear_after_view: true });
 
     } catch (error) {
       console.error('Error sending message:', error);
@@ -745,8 +789,8 @@ export default function FriendChatScreen({ route, navigation }: any) {
         setMessages(prev => prev.filter(msg => msg.id !== tempId));
         setUploadingMessageId(null);
       
-      // Reset expiry rule after successful send
-      setCurrentExpiryRule({ type: 'none' });
+      // Reset expiry rule to default view-once after successful send
+      setCurrentExpiryRule({ type: 'view', disappear_after_view: true });
         
         // Send the actual message
         await handleVoiceSend(
@@ -767,8 +811,8 @@ export default function FriendChatScreen({ route, navigation }: any) {
         );
         setUploadingMessageId(null);
       
-      // Reset expiry rule after successful send
-      setCurrentExpiryRule({ type: 'none' });
+      // Reset expiry rule to default view-once after successful send
+      setCurrentExpiryRule({ type: 'view', disappear_after_view: true });
         Alert.alert('Error', 'Failed to upload voice message');
       }
     } catch (error) {
@@ -827,8 +871,8 @@ export default function FriendChatScreen({ route, navigation }: any) {
         );
         setUploadingMessageId(null);
       
-      // Reset expiry rule after successful send
-      setCurrentExpiryRule({ type: 'none' });
+      // Reset expiry rule to default view-once after successful send
+      setCurrentExpiryRule({ type: 'view', disappear_after_view: true });
         Alert.alert('Error', 'Failed to send voice message');
         return;
       }
@@ -847,8 +891,8 @@ export default function FriendChatScreen({ route, navigation }: any) {
       );
       setUploadingMessageId(null);
       
-      // Reset expiry rule after successful send
-      setCurrentExpiryRule({ type: 'none' });
+      // Reset expiry rule to default view-once after successful send
+      setCurrentExpiryRule({ type: 'view', disappear_after_view: true });
 
       // Send push notification
       try {
@@ -927,8 +971,8 @@ export default function FriendChatScreen({ route, navigation }: any) {
         );
         setUploadingMessageId(null);
       
-      // Reset expiry rule after successful send
-      setCurrentExpiryRule({ type: 'none' });
+      // Reset expiry rule to default view-once after successful send
+      setCurrentExpiryRule({ type: 'view', disappear_after_view: true });
         Alert.alert('Error', 'Failed to send video message');
         return;
       }
@@ -947,8 +991,8 @@ export default function FriendChatScreen({ route, navigation }: any) {
       );
       setUploadingMessageId(null);
       
-      // Reset expiry rule after successful send
-      setCurrentExpiryRule({ type: 'none' });
+      // Reset expiry rule to default view-once after successful send
+      setCurrentExpiryRule({ type: 'view', disappear_after_view: true });
 
       // Send push notification
       try {
@@ -1049,8 +1093,8 @@ export default function FriendChatScreen({ route, navigation }: any) {
         );
         setUploadingMessageId(null);
       
-      // Reset expiry rule after successful send
-      setCurrentExpiryRule({ type: 'none' });
+      // Reset expiry rule to default view-once after successful send
+      setCurrentExpiryRule({ type: 'view', disappear_after_view: true });
         Alert.alert('Error', 'Failed to upload video');
       }
     } catch (error: any) {
@@ -1065,8 +1109,8 @@ export default function FriendChatScreen({ route, navigation }: any) {
       );
       setUploadingMessageId(null);
       
-      // Reset expiry rule after successful send
-      setCurrentExpiryRule({ type: 'none' });
+      // Reset expiry rule to default view-once after successful send
+      setCurrentExpiryRule({ type: 'view', disappear_after_view: true });
       
       // Generic error message - don't expose technical details
       Alert.alert('Error', 'Failed to send video message. Please try again.');
@@ -1075,6 +1119,44 @@ export default function FriendChatScreen({ route, navigation }: any) {
 
   const playVoiceMessage = async (messageId: string) => {
     try {
+      // Find the message
+      const message = messages.find(m => m.id === messageId);
+      if (!message) {
+        throw new Error('Message not found');
+      }
+
+      // For view-once voice messages, show in overlay
+      if (message.expiryRule?.type === 'view') {
+        // Get the full message data from database
+        const { data: msgData, error } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('id', messageId)
+          .single();
+
+        if (error || !msgData) {
+          throw new Error('Failed to get message details');
+        }
+
+        const dbMessage: DBMessage = {
+          id: msgData.id,
+          type: msgData.type,
+          content: msgData.content,
+          media_path: msgData.media_path,
+          sender_id: msgData.sender_id,
+          recipient_id: msgData.recipient_id,
+          created_at: msgData.created_at,
+          expiry_rule: msgData.expiry_rule || { type: 'none' },
+          expired: msgData.expired || false,
+          is_encrypted: msgData.is_encrypted || false,
+          duration: msgData.duration,
+          nonce: msgData.nonce,
+          video_nonce: msgData.video_nonce
+        };
+        setViewingMessage(dbMessage);
+        setShowViewingOverlay(true);
+        return;
+      }
       // Stop current playback if playing another message
       if (sound && playingMessageId !== messageId) {
         console.log('[Voice] Stopping previous playback');
@@ -1114,12 +1196,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
         ...prev,
         [messageId]: { isPlaying: true, progress: 0, duration: 0 }
       }));
-
-      // Find the message to get encryption info
-      const message = messages.find(m => m.id === messageId);
-      if (!message) {
-        throw new Error('Message not found');
-      }
 
       let audioUri: string;
 
@@ -1350,14 +1426,46 @@ export default function FriendChatScreen({ route, navigation }: any) {
 
   const playVideoMessage = async (messageId: string) => {
     try {
-      // Set downloading state
-      setDownloadingMessageId(messageId);
-
-      // Find the message to get encryption info
+      // Find the message
       const message = messages.find(m => m.id === messageId);
       if (!message) {
         throw new Error('Message not found');
       }
+
+      // For view-once video messages, show in overlay
+      if (message.expiryRule?.type === 'view') {
+        // Get the full message data from database
+        const { data: msgData, error } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('id', messageId)
+          .single();
+
+        if (error || !msgData) {
+          throw new Error('Failed to get message details');
+        }
+
+        const dbMessage: DBMessage = {
+          id: msgData.id,
+          type: msgData.type,
+          content: msgData.content,
+          media_path: msgData.media_path,
+          sender_id: msgData.sender_id,
+          recipient_id: msgData.recipient_id,
+          created_at: msgData.created_at,
+          expiry_rule: msgData.expiry_rule || { type: 'none' },
+          expired: msgData.expired || false,
+          is_encrypted: msgData.is_encrypted || false,
+          duration: msgData.duration,
+          nonce: msgData.nonce,
+          video_nonce: msgData.video_nonce
+        };
+        setViewingMessage(dbMessage);
+        setShowViewingOverlay(true);
+        return;
+      }
+      // Set downloading state
+      setDownloadingMessageId(messageId);
 
       let videoUri: string;
 
@@ -1503,6 +1611,26 @@ export default function FriendChatScreen({ route, navigation }: any) {
           isExpired={false} // TODO: Add proper expiry logic
           messageType={item.type}
           senderName={item.isMine ? undefined : (friendName || friendUsername)}
+          onPress={() => {
+            // For view-once messages, show in overlay
+            if (item.expiryRule?.type === 'view') {
+              // Convert to database message format for ViewingOverlay
+              const dbMessage: DBMessage = {
+                id: item.id,
+                type: item.type,
+                content: item.content,
+                sender_id: item.isMine ? user?.id || '' : friendId,
+                recipient_id: item.isMine ? friendId : user?.id || '',
+                created_at: item.timestamp.toISOString(),
+                expiry_rule: item.expiryRule || { type: 'none' },
+                expired: false,
+                is_encrypted: true,
+                duration: item.duration
+              };
+              setViewingMessage(dbMessage);
+              setShowViewingOverlay(true);
+            }
+          }}
         />
       );
     } else if (item.type === 'voice') {
@@ -1515,6 +1643,22 @@ export default function FriendChatScreen({ route, navigation }: any) {
             item.isMine ? styles.myMessage : styles.theirMessage,
           ]}
         >
+          {/* View-once indicator */}
+          {item.expiryRule?.type === 'view' && (
+            <View style={styles.viewOnceIndicator}>
+              <Ionicons 
+                name="eye-outline" 
+                size={12} 
+                color={item.isMine ? 'rgba(255,255,255,0.8)' : '#4ECDC4'} 
+              />
+              <Text style={[
+                styles.viewOnceText,
+                { color: item.isMine ? 'rgba(255,255,255,0.8)' : '#666' }
+              ]}>
+                View once
+              </Text>
+            </View>
+          )}
           <View style={styles.voiceMessage}>
             <View style={styles.voiceMessageLeft}>
               <TouchableOpacity 
@@ -1589,6 +1733,19 @@ export default function FriendChatScreen({ route, navigation }: any) {
             onPress={() => playVideoMessage(item.id)}
             disabled={isUploading || isDownloading}
           >
+            {/* View-once indicator for videos */}
+            {item.expiryRule?.type === 'view' && (
+              <View style={[styles.viewOnceIndicator, styles.viewOnceIndicatorVideo]}>
+                <Ionicons 
+                  name="eye-outline" 
+                  size={14} 
+                  color="white" 
+                />
+                <Text style={styles.viewOnceTextVideo}>
+                  View once
+                </Text>
+              </View>
+            )}
             {isUploading || isDownloading ? (
               <View style={styles.videoUploadingContainer}>
                 <ActivityIndicator size="large" color={item.isMine ? "#fff" : "#4ECDC4"} />
@@ -1698,10 +1855,20 @@ export default function FriendChatScreen({ route, navigation }: any) {
             <>
               <ExpiryButton 
                 onPress={() => {
+                  // Toggle between view-once and no expiry for quick access
+                  if (currentExpiryRule.type === 'view') {
+                    setCurrentExpiryRule({ type: 'none' });
+                  } else {
+                    setCurrentExpiryRule({ type: 'view', disappear_after_view: true });
+                  }
+                }}
+                onLongPress={() => {
+                  // Long press opens full selector
                   setMessageTypeForExpiry(inputText.trim() ? 'text' : 'voice');
                   setShowExpirySelector(true);
                 }}
                 currentRule={currentExpiryRule}
+                mode="toggle"
               />
               
               <TextInput
@@ -1845,6 +2012,22 @@ export default function FriendChatScreen({ route, navigation }: any) {
           setShowExpirySelector(false);
         }}
         messageType={messageTypeForExpiry}
+      />
+      
+      {/* Viewing Overlay for view-once messages */}
+      <ViewingOverlay
+        visible={showViewingOverlay}
+        message={viewingMessage}
+        onClose={() => {
+          setShowViewingOverlay(false);
+          setViewingMessage(null);
+        }}
+        onMessageExpired={(messageId) => {
+          // Remove expired message from the list with a slight delay for animation
+          setTimeout(() => {
+            setMessages(prev => prev.filter(msg => msg.id !== messageId));
+          }, 600);
+        }}
       />
     </SafeAreaView>
     </GestureHandlerRootView>
@@ -2206,5 +2389,32 @@ const styles = StyleSheet.create({
   noMoreText: {
     color: '#999',
     fontSize: 14,
+  },
+  viewOnceIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginBottom: 8,
+  },
+  viewOnceText: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  viewOnceIndicatorVideo: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    zIndex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  viewOnceTextVideo: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: 'white',
   },
 });

@@ -15,6 +15,7 @@ import AuthScreen from '../screens/AuthScreen';
 import AnonymousLobbyScreen from '../screens/AnonymousLobbyScreen';
 import AnonymousChatScreen from '../screens/AnonymousChatScreen';
 import ThemeDemo from '../screens/ThemeDemo';
+import EphemeralDemo from '../screens/EphemeralDemo';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -93,6 +94,11 @@ function ProfileStack() {
         name="ThemeDemo" 
         component={ThemeDemo}
         options={{ title: 'Theme Demo' }}
+      />
+      <Stack.Screen 
+        name="EphemeralDemo" 
+        component={EphemeralDemo}
+        options={{ title: 'Ephemeral Demo' }}
       />
     </Stack.Navigator>
   );

@@ -8,6 +8,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Ephemeral Messaging System** ✅ COMPLETE
+  - Complete UI/UX redesign with dark mysterious aesthetic
+  - Tap-to-reveal pattern for ephemeral messages with blur effect
+  - Beautiful vanishing animations (fade, dissolve, particles, shrink)
+  - Integrated countdown timers in message bubbles
+  - Glow effects for unviewed ephemeral messages
+  - ViewingOverlay for immersive ephemeral viewing
+  - Backend auto-deletion with deletion_log audit trail
+  - Edge function for periodic message cleanup
+  - View-once messages as default option
+  - Demo screen to preview all ephemeral features
+  - Dark theme optimized for ephemeral messaging
+  - Performance-optimized animations at 60fps
+  - Backend Infrastructure:
+    - Database migration for deletion_log table (audit trail)
+    - delete_expired_messages() function for batch processing
+    - is_expired computed column for efficient queries
+    - Updated Edge Function with media cleanup
+    - Support for pg_cron scheduling (optional)
+  - Frontend Components:
+    - ViewingOverlay for immersive message viewing
+    - VanishAnimation with particle effects
+    - Real-time subscription to expiry/deletion events
+    - Automatic UI updates when messages expire
+  - Message Types Support:
+    - View-once: Expires after being viewed
+    - Playback-once: Expires after audio/video playback
+    - Read-once: Expires after text is read
+    - Time-based: Expires after duration
+  - Security & Privacy:
+    - Deletion audit trail for transparency
+    - Automatic media file cleanup from storage
+    - Soft delete → hard delete after 24 hours
+    - User deletion statistics API
 - **Video/Voice Message Performance Optimization** ✅ COMPLETE
   - Expo Development Build configuration for native module support
   - Video compression with react-native-compressor:

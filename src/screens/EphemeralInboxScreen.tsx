@@ -31,6 +31,10 @@ import { downloadAndDecryptAudio } from '../utils/encryptedAudioStorage';
 import { downloadAndDecryptE2EAudio } from '../utils/e2eAudioStorage';
 import { downloadAndDecryptAudioCompat } from '../utils/secureE2EAudioStorage';
 import { downloadAndDecryptAudioUniversal } from '../utils/audioDecryptionCompat';
+import ViewingOverlay from '../components/ViewingOverlay';
+import VanishAnimation from '../components/VanishAnimation';
+import { EphemeralMessageService } from '../services/ephemeralMessages';
+import { Message as DBMessage } from '../types/database';
 
 interface Message {
   id: string;
@@ -80,6 +84,10 @@ export default function EphemeralInboxScreen({ navigation }: any) {
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const bounceAnim = useRef(new Animated.Value(1)).current;
   const floatAnim = useRef(new Animated.Value(0)).current;
+  const [viewingMessage, setViewingMessage] = useState<DBMessage | null>(null);
+  const [vanishingMessages, setVanishingMessages] = useState<Set<string>>(new Set());
+  const expirySubscriptionRef = useRef<any>(null);
+  const deletionSubscriptionRef = useRef<any>(null);
 
   // Floating animation for empty state
   useEffect(() => {
@@ -141,6 +149,46 @@ export default function EphemeralInboxScreen({ navigation }: any) {
       }
     };
   }, [sound]);
+
+  // Subscribe to message expiry and deletion
+  useEffect(() => {
+    if (!user) return;
+
+    // Subscribe to message expiry updates
+    expirySubscriptionRef.current = EphemeralMessageService.subscribeToMessageExpiry((messageId) => {
+      setMessages(prev => prev.filter(msg => msg.id !== messageId));
+      setVanishingMessages(prev => {
+        const next = new Set(prev);
+        next.add(messageId);
+        // Remove from vanishing set after animation
+        setTimeout(() => {
+          setVanishingMessages(p => {
+            const n = new Set(p);
+            n.delete(messageId);
+            return n;
+          });
+        }, 1000);
+        return next;
+      });
+    });
+
+    // Subscribe to message deletions
+    deletionSubscriptionRef.current = EphemeralMessageService.subscribeToMessageDeletion(
+      user.id,
+      (messageId) => {
+        setMessages(prev => prev.filter(msg => msg.id !== messageId));
+      }
+    );
+
+    return () => {
+      if (expirySubscriptionRef.current) {
+        expirySubscriptionRef.current.unsubscribe();
+      }
+      if (deletionSubscriptionRef.current) {
+        deletionSubscriptionRef.current.unsubscribe();
+      }
+    };
+  }, [user]);
 
   const fetchData = async () => {
     try {
@@ -219,94 +267,37 @@ export default function EphemeralInboxScreen({ navigation }: any) {
 
   const playMessage = async (message: Message) => {
     try {
-      setPlayingMessage(message.id);
+      // Convert to DBMessage format for the overlay
+      const dbMessage: DBMessage = {
+        id: message.id,
+        sender_id: message.sender_id,
+        recipient_id: user?.id || '',
+        type: 'voice',
+        content: '',
+        media_path: message.media_path,
+        nonce: message.encryption_iv,
+        expiry_rule: { type: 'playback' }, // Voice messages expire after playback
+        created_at: message.created_at,
+        viewed_at: undefined,
+        listened_at: undefined,
+        read_at: undefined,
+        expired: false,
+        is_encrypted: true,
+        duration: undefined,
+      };
 
-      // Download the audio file if it's not a placeholder
-      if (message.media_path === 'placeholder') {
-        // Show alert for placeholder messages
-        Alert.alert(
-          'Voice Message',
-          'This is a test message. Real audio playback is now available for new messages!',
-          [{ text: 'OK' }]
-        );
-        
-        setTimeout(() => {
-          vanishMessage(message.id);
-        }, 2000);
-        return;
-      }
-
-      // Download and decrypt the audio file
-      let localUri: string | null;
-      
-      // Use universal decryption that handles all versions
-      if (userKeys && message.encryption_iv && message.encrypted_key) {
-        console.log('[EphemeralInbox] Playing message with:');
-        console.log('- Encryption version:', message.encryption_version);
-        console.log('- Encrypted key:', message.encrypted_key?.substring(0, 10) + '...');
-        console.log('- IV:', message.encryption_iv?.substring(0, 10) + '...');
-        console.log('- Sender public key:', message.sender_public_key?.substring(0, 10) + '...');
-        
-        localUri = await downloadAndDecryptAudioUniversal(message, userKeys);
-      } else {
-        // Legacy unencrypted message (shouldn't happen)
-        console.warn('Unencrypted message detected - this should not happen');
-        localUri = await downloadAudio(message.media_path);
-      }
-      
-      if (!localUri) {
-        throw new Error('Failed to download/decrypt audio');
-      }
-
-      // Set audio mode to play through speaker
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        playThroughEarpieceAndroid: false,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
-      });
-
-      // Play the audio
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: localUri },
-        { 
-          shouldPlay: true,
-          volume: 1.0,
-        }
-      );
-      setSound(newSound);
-
-      // Mark as listened
-      await supabase
-        .from('messages')
-        .update({ listened_at: new Date().toISOString() })
-        .eq('id', message.id);
-
-      // Wait for playback to finish
-      newSound.setOnPlaybackStatusUpdate((status) => {
-        if ('didJustFinish' in status && status.didJustFinish) {
-          // Vanish the message
-          vanishMessage(message.id);
-          // Unload the sound
-          newSound.unloadAsync();
-        }
-      });
+      // Show the viewing overlay instead of playing directly
+      setViewingMessage(dbMessage);
     } catch (error) {
-      console.error('Error playing message:', error);
-      Alert.alert('Error', 'Failed to play message. Please try again.');
-      setPlayingMessage(null);
+      console.error('Error preparing message:', error);
+      Alert.alert('Error', 'Failed to open message. Please try again.');
     }
   };
 
   const vanishMessage = async (messageId: string) => {
     try {
-      await supabase
-        .from('messages')
-        .update({ expired: true })
-        .eq('id', messageId);
-
-      // Remove from local state
+      // The edge function will handle the actual deletion
+      // Just update local state
       setMessages(prev => prev.filter(m => m.id !== messageId));
       setNewMessageCount(prev => Math.max(0, prev - 1));
       setPlayingMessage(null);
@@ -316,7 +307,7 @@ export default function EphemeralInboxScreen({ navigation }: any) {
         setShowMessages(false);
       }
     } catch (error) {
-      console.error('Error vanishing message:', error);
+      console.error('Error handling message expiry:', error);
     }
   };
 
@@ -524,30 +515,36 @@ export default function EphemeralInboxScreen({ navigation }: any) {
     );
   };
 
-  const renderMessage = ({ item }: { item: Message }) => (
-    <TouchableOpacity
-      style={styles.messageItem}
-      onPress={() => playMessage(item)}
-      disabled={playingMessage === item.id}
-    >
-      <View style={[styles.avatar, { backgroundColor: getAvatarColor(item.sender?.avatar_seed) }]}>
-        <Text style={styles.avatarText}>
-          {(item.sender?.username || item.sender?.friend_code || '?')[0].toUpperCase()}
-        </Text>
-      </View>
-      <View style={styles.messageContent}>
-        <Text style={styles.senderName}>From: {item.sender?.username || item.sender?.friend_code || 'Unknown'}</Text>
-        <Text style={styles.messageTime}>
-          {new Date(item.created_at).toLocaleTimeString()}
-        </Text>
-      </View>
-      {playingMessage === item.id ? (
-        <Ionicons name="volume-high" size={24} color={theme.colors.accent.teal} />
-      ) : (
-        <Ionicons name="play-circle" size={32} color={theme.colors.text.primary} />
-      )}
-    </TouchableOpacity>
-  );
+  const renderMessage = ({ item }: { item: Message }) => {
+    const isVanishing = vanishingMessages.has(item.id);
+    
+    return (
+      <VanishAnimation trigger={isVanishing} onComplete={() => {}}>
+        <TouchableOpacity
+          style={styles.messageItem}
+          onPress={() => playMessage(item)}
+          disabled={playingMessage === item.id || isVanishing}
+        >
+          <View style={[styles.avatar, { backgroundColor: getAvatarColor(item.sender?.avatar_seed) }]}>
+            <Text style={styles.avatarText}>
+              {(item.sender?.username || item.sender?.friend_code || '?')[0].toUpperCase()}
+            </Text>
+          </View>
+          <View style={styles.messageContent}>
+            <Text style={styles.senderName}>From: {item.sender?.username || item.sender?.friend_code || 'Unknown'}</Text>
+            <Text style={styles.messageTime}>
+              {new Date(item.created_at).toLocaleTimeString()}
+            </Text>
+          </View>
+          {playingMessage === item.id ? (
+            <Ionicons name="volume-high" size={24} color={theme.colors.accent.teal} />
+          ) : (
+            <Ionicons name="play-circle" size={32} color={theme.colors.text.primary} />
+          )}
+        </TouchableOpacity>
+      </VanishAnimation>
+    );
+  };
 
   const renderFriend = ({ item }: { item: Friend }) => (
     <Swipeable
@@ -821,6 +818,17 @@ export default function EphemeralInboxScreen({ navigation }: any) {
           setRecordingFor(null);
         }}
         onSend={handleSendMessage}
+      />
+
+      {/* Viewing Overlay for ephemeral messages */}
+      <ViewingOverlay
+        visible={viewingMessage !== null}
+        message={viewingMessage}
+        onClose={() => setViewingMessage(null)}
+        onMessageExpired={(messageId) => {
+          // Message will be removed by subscription handlers
+          setViewingMessage(null);
+        }}
       />
     </SafeAreaView>
   );

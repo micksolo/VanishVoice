@@ -154,6 +154,15 @@ When creating a git commit, ALWAYS follow this sequence:
 - **Performance**: XOR encryption is fast enough for 50MB files (~4s decrypt on download)
 - **Solution**: Accept large files for now, implement server-side compression later (like Snapchat/WhatsApp)
 
+### Ephemeral Messaging Implementation
+- **Database Design**: Use computed columns (is_expired) for efficient expiry checking
+- **Deletion Strategy**: Soft delete first, then hard delete after retention period
+- **Audit Trail**: Always log deletions for trust and potential recovery needs
+- **Real-time Updates**: Subscribe to both UPDATE (expired flag) and DELETE events
+- **Media Cleanup**: Edge functions need service role to delete from storage buckets
+- **Scheduling Options**: pg_cron (if available), external cron services, or edge function webhooks
+- **UI/UX**: Show clear visual indicators for ephemeral content, use animations for deletion
+
 ### Development Builds Setup
 - **Purpose**: Allows native modules (like react-native-compressor) while keeping Expo workflow benefits
 - **EAS CLI**: Already configured with project ID in app.json

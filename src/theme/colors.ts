@@ -144,15 +144,35 @@ export const lightColors = {
   },
 };
 
+// Dark mysterious palette for VanishVoice
+const darkPalette = {
+  // Deep blacks with slight tint
+  black900: '#0A0A0F',  // Almost black with blue tint
+  black800: '#12121A',  // Slightly lighter
+  black700: '#1A1A24',  // Card backgrounds
+  black600: '#22222E',  // Elevated surfaces
+  
+  // Vibrant purples for accent and glow
+  purple400: '#A78BFA',  // Light purple for glow
+  purple500: '#8B5CF6',  // Main vibrant purple
+  purple600: '#7C3AED',  // Slightly darker
+  purple700: '#6D28D9',  // Dark purple
+  
+  // Mysterious teals
+  teal400: '#2DD4BF',
+  teal500: '#14B8A6',
+  teal600: '#0D9488',
+};
+
 // Semantic color tokens for dark theme
 export const darkColors = {
-  // Background colors
+  // Background colors - darker and more mysterious
   background: {
-    primary: palette.gray900,
-    secondary: palette.gray800,
-    tertiary: palette.gray700,
-    elevated: palette.gray800,
-    overlay: 'rgba(0, 0, 0, 0.7)',
+    primary: darkPalette.black900,
+    secondary: darkPalette.black800,
+    tertiary: darkPalette.black700,
+    elevated: darkPalette.black600,
+    overlay: 'rgba(0, 0, 0, 0.85)',
   },
 
   // Text colors
@@ -234,10 +254,19 @@ export const darkColors = {
 
   // Chat specific
   chat: {
-    sent: palette.purple500,
-    received: palette.gray700,
+    sent: darkPalette.purple500,
+    received: darkPalette.black700,
     sentText: palette.white,
     receivedText: palette.gray50,
+  },
+  
+  // Ephemeral effects
+  ephemeral: {
+    glow: darkPalette.purple400,
+    glowIntense: darkPalette.purple500,
+    countdown: darkPalette.teal500,
+    warning: palette.yellow500,
+    danger: palette.red500,
   },
 };
 

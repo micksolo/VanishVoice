@@ -428,6 +428,17 @@ export default function ProfileScreen() {
             <Text style={[styles.settingText, theme.typography.bodyLarge, { color: theme.colors.text.primary }]}>Theme Demo</Text>
             <Ionicons name="chevron-forward" size={20} color={theme.colors.text.tertiary} />
           </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.settingItem, { minHeight: theme.touchTargets.medium }]}
+            onPress={() => navigation.navigate('EphemeralDemo' as never)}
+          >
+            <View style={[styles.settingIcon, { backgroundColor: theme.colors.button.primary.background + '20' }]}>
+              <Ionicons name="sparkles-outline" size={20} color={theme.colors.button.primary.background} />
+            </View>
+            <Text style={[styles.settingText, theme.typography.bodyLarge, { color: theme.colors.text.primary }]}>Ephemeral Demo</Text>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.text.tertiary} />
+          </TouchableOpacity>
         </Card>
 
         <Button

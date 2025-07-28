@@ -181,6 +181,53 @@ export class EphemeralMessageService {
   }
 
   /**
+   * Subscribe to message deletion (for hard deletes)
+   */
+  static subscribeToMessageDeletion(
+    userId: string,
+    callback: (messageId: string) => void
+  ) {
+    return supabase
+      .channel(`message_deletion_${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'messages',
+        },
+        (payload) => {
+          // Check if the user is involved in this message
+          if (payload.old.sender_id === userId || payload.old.recipient_id === userId) {
+            console.log('[EphemeralMessage] Message deleted:', payload.old.id);
+            callback(payload.old.id);
+          }
+        }
+      )
+      .subscribe();
+  }
+
+  /**
+   * Get deletion statistics for the current user
+   */
+  static async getDeletionStats(userId: string) {
+    try {
+      const { data, error } = await supabase
+        .rpc('get_deletion_stats', { user_id: userId });
+
+      if (error) {
+        console.error('[EphemeralMessage] Error getting deletion stats:', error);
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('[EphemeralMessage] Failed to get deletion stats:', error);
+      return null;
+    }
+  }
+
+  /**
    * Handle message viewing for different message types
    */
   static async handleMessageView(message: Message, viewType: 'read' | 'play' | 'view'): Promise<void> {
