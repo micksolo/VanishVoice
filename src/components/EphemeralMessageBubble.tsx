@@ -1,18 +1,17 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  Animated,
   ViewStyle,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { ExpiryRule } from '../types/database';
 import IntegratedCountdown from './IntegratedCountdown';
 import BlurredMessage from './BlurredMessage';
-import VanishAnimation, { VanishAnimationRef } from './VanishAnimation';
 
 interface EphemeralMessageBubbleProps {
   content?: string;
@@ -44,29 +43,34 @@ export default function EphemeralMessageBubble({
   blurBeforeView = true,
 }: EphemeralMessageBubbleProps) {
   const theme = useAppTheme();
-  const vanishRef = useRef<VanishAnimationRef>(null);
   const [isRevealed, setIsRevealed] = useState(!blurBeforeView || hasBeenViewed);
-  const glowAnim = useRef(new Animated.Value(0)).current;
-
-  // Glow effect for ephemeral messages
-  useEffect(() => {
-    if (isEphemeral && !hasBeenViewed && !isExpired) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(glowAnim, {
-            toValue: 1,
-            duration: 2000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(glowAnim, {
-            toValue: 0,
-            duration: 2000,
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  
+  // Calculate remaining time for time-based expiry
+  const getRemainingSeconds = () => {
+    if (expiryRule?.type !== 'time' || !expiryRule.duration_sec) {
+      return 0;
     }
-  }, [isEphemeral, hasBeenViewed, isExpired]);
+    
+    const now = new Date();
+    const createdAt = new Date(timestamp);
+    const expiryTime = new Date(createdAt.getTime() + (expiryRule.duration_sec * 1000));
+    const remainingMs = Math.max(0, expiryTime.getTime() - now.getTime());
+    
+    return Math.ceil(remainingMs / 1000);
+  };
+  
+  // Animate fade when message has been viewed (for sender)
+  useEffect(() => {
+    if (isMine && hasBeenViewed && expiryRule?.type === 'view') {
+      Animated.timing(fadeAnim, {
+        toValue: 0.4,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [hasBeenViewed, isMine, expiryRule?.type]);
+
 
   const handleReveal = () => {
     setIsRevealed(true);
@@ -74,17 +78,18 @@ export default function EphemeralMessageBubble({
   };
 
   const handleExpire = () => {
-    // Trigger vanish animation
-    vanishRef.current?.vanish();
-    // Call expiry callback after animation
-    setTimeout(() => {
-      onExpire?.();
-    }, 800);
+    // Simple immediate expiry without animation
+    onExpire?.();
   };
 
   const getBubbleColor = () => {
     if (isExpired) {
       return theme.colors.text.disabled + '40';
+    }
+    
+    // For sender: fade out viewed messages
+    if (isMine && hasBeenViewed && expiryRule?.type === 'view') {
+      return theme.colors.chat.sent + '40'; // 25% opacity
     }
     
     if (isMine) {
@@ -101,6 +106,11 @@ export default function EphemeralMessageBubble({
       return theme.colors.text.disabled;
     }
     
+    // For sender: fade out text for viewed messages
+    if (isMine && hasBeenViewed && expiryRule?.type === 'view') {
+      return theme.colors.chat.sentText + '60'; // 38% opacity
+    }
+    
     return isMine 
       ? theme.colors.chat.sentText 
       : theme.colors.chat.receivedText;
@@ -110,49 +120,18 @@ export default function EphemeralMessageBubble({
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const getVanishType = () => {
-    if (expiryRule?.type === 'view') return 'particles';
-    if (expiryRule?.type === 'time') return 'dissolve';
-    return 'fade';
-  };
 
   return (
-    <VanishAnimation
-      ref={vanishRef}
-      type={getVanishType()}
-      duration={800}
-      onComplete={() => onExpire?.()}
+    <Animated.View
+      style={[
+        styles.container,
+        {
+          alignSelf: isMine ? 'flex-end' : 'flex-start',
+          opacity: fadeAnim,
+        },
+        style,
+      ]}
     >
-      <View
-        style={[
-          styles.container,
-          {
-            alignSelf: isMine ? 'flex-end' : 'flex-start',
-          },
-          style,
-        ]}
-      >
-        {/* Glow effect layer */}
-        {isEphemeral && !hasBeenViewed && !isExpired && (
-          <Animated.View
-            style={[
-              styles.glowLayer,
-              {
-                backgroundColor: theme.colors.ephemeral?.glow || theme.colors.text.accent,
-                opacity: glowAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0, 0.2],
-                }),
-                transform: [{
-                  scale: glowAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [1, 1.08],
-                  }),
-                }],
-              },
-            ]}
-          />
-        )}
 
         <TouchableOpacity
           style={[
@@ -178,17 +157,14 @@ export default function EphemeralMessageBubble({
             />
           ) : (
             <>
-              {/* Message type icon for non-text */}
+              {/* Message type icon for non-text (no text label) */}
               {messageType !== 'text' && (
                 <View style={styles.messageTypeRow}>
                   <Ionicons
                     name={messageType === 'voice' ? 'mic' : messageType === 'video' ? 'videocam' : 'image'}
-                    size={16}
+                    size={20}
                     color={getTextColor()}
                   />
-                  <Text style={[styles.messageTypeText, { color: getTextColor() }]}>
-                    {messageType.charAt(0).toUpperCase() + messageType.slice(1)} Message
-                  </Text>
                 </View>
               )}
 
@@ -222,7 +198,7 @@ export default function EphemeralMessageBubble({
             {/* Integrated countdown for time-based expiry */}
             {expiryRule?.type === 'time' && !isExpired && isRevealed && (
               <IntegratedCountdown
-                duration={expiryRule.duration_sec}
+                duration={getRemainingSeconds()}
                 size={16}
                 strokeWidth={2}
                 showText={false}
@@ -231,14 +207,28 @@ export default function EphemeralMessageBubble({
               />
             )}
 
-            {/* View once indicator */}
-            {(expiryRule?.type === 'view' || expiryRule?.type === 'playback') && !hasBeenViewed && (
-              <Ionicons
-                name="eye-outline"
-                size={14}
-                color={getTextColor() + '80'}
-                style={styles.viewOnceIcon}
-              />
+            {/* View once indicator or viewed status */}
+            {(expiryRule?.type === 'view' || expiryRule?.type === 'playback') && (
+              <View style={styles.viewOnceIndicator}>
+                {hasBeenViewed ? (
+                  // Show eye icon when viewed
+                  <Ionicons
+                    name="eye"
+                    size={14}
+                    color={getTextColor() + '80'}
+                  />
+                ) : (
+                  // Show original view once indicator
+                  <>
+                    <Ionicons
+                      name="radio-button-on"
+                      size={14}
+                      color={getTextColor() + '80'}
+                    />
+                    <Text style={[styles.viewOnceNumberText, { color: getTextColor() + '80' }]}>1</Text>
+                  </>
+                )}
+              </View>
             )}
           </View>
 
@@ -261,16 +251,26 @@ export default function EphemeralMessageBubble({
         {/* Ephemeral type indicator */}
         {isEphemeral && !isExpired && (
           <View style={[styles.ephemeralBadge, { alignSelf: isMine ? 'flex-end' : 'flex-start' }]}>
-            <Ionicons
-              name={
-                expiryRule?.type === 'view' ? 'eye-off' :
-                expiryRule?.type === 'time' ? 'timer' :
-                expiryRule?.type === 'playback' ? 'play-circle' :
-                'sparkles'
-              }
-              size={10}
-              color={theme.colors.text.tertiary}
-            />
+            {expiryRule?.type === 'view' ? (
+              <View style={styles.ephemeralViewOnceIcon}>
+                <Ionicons
+                  name="radio-button-on"
+                  size={10}
+                  color={theme.colors.text.tertiary}
+                />
+                <Text style={[styles.ephemeralViewOnceNumber, { color: theme.colors.text.tertiary }]}>1</Text>
+              </View>
+            ) : (
+              <Ionicons
+                name={
+                  expiryRule?.type === 'time' ? 'timer' :
+                  expiryRule?.type === 'playback' ? 'play-circle' :
+                  'timer'
+                }
+                size={10}
+                color={theme.colors.text.tertiary}
+              />
+            )}
             <Text style={[styles.ephemeralText, { color: theme.colors.text.tertiary }]}>
               {expiryRule?.type === 'view' ? 'View once' :
                expiryRule?.type === 'time' ? 'Temporary' :
@@ -279,8 +279,7 @@ export default function EphemeralMessageBubble({
             </Text>
           </View>
         )}
-      </View>
-    </VanishAnimation>
+    </Animated.View>
   );
 }
 
@@ -289,14 +288,6 @@ const styles = StyleSheet.create({
     marginVertical: 4,
     maxWidth: '80%',
     position: 'relative',
-  },
-  glowLayer: {
-    position: 'absolute',
-    top: -8,
-    left: -8,
-    right: -8,
-    bottom: -8,
-    borderRadius: 20,
   },
   bubble: {
     paddingHorizontal: 12,
@@ -316,8 +307,8 @@ const styles = StyleSheet.create({
   messageTypeRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 4,
-    gap: 6,
   },
   messageTypeText: {
     fontSize: 12,
@@ -335,8 +326,22 @@ const styles = StyleSheet.create({
   timestamp: {
     fontSize: 11,
   },
-  viewOnceIcon: {
+  viewOnceIndicator: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 14,
+    height: 14,
     marginLeft: 8,
+  },
+  viewOnceNumberText: {
+    position: 'absolute',
+    fontSize: 8,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    top: 1,
+    left: 0,
+    right: 0,
   },
   progressBarContainer: {
     position: 'absolute',
@@ -364,5 +369,21 @@ const styles = StyleSheet.create({
   ephemeralText: {
     fontSize: 10,
     fontWeight: '500',
+  },
+  ephemeralViewOnceIcon: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 10,
+    height: 10,
+  },
+  ephemeralViewOnceNumber: {
+    position: 'absolute',
+    fontSize: 6,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    top: 0.5,
+    left: 0,
+    right: 0,
   },
 });

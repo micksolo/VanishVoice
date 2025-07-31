@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AnonymousAuthContext';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { supabase } from '../services/supabase';
+import messageClearingService from '../services/messageClearingService';
 
 interface Message {
   id: string;
@@ -37,6 +38,16 @@ export default function InboxScreen() {
       // TODO: Re-enable realtime subscriptions after fixing WebSocket issue
       // subscribeToMessages();
     }
+    
+    // Subscribe to message clearing events
+    const unsubscribe = messageClearingService.subscribeToMessageClearing(() => {
+      console.log('[InboxScreen] Received message clearing event, clearing local messages');
+      setMessages([]);
+    });
+    
+    return () => {
+      unsubscribe();
+    };
   }, [user]);
 
   const fetchMessages = async () => {

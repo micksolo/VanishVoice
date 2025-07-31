@@ -47,6 +47,10 @@
    - Dark mysterious UI redesign
    - Tap-to-reveal pattern for ephemeral messages
    - Backend cleanup job with deletion logs
+   - Fixed critical bug: viewed messages no longer reappear
+   - Sender-side fade animation when recipient views message
+   - View-once messages as default for all message types
+   - Inline experience without modal overlays
    - See CHANGELOG.md for details
    
 5. **Screenshot Prevention** (1 day)
@@ -65,6 +69,14 @@
 *All performance optimization features have been implemented - see CHANGELOG.md for details*
 
 ### Remaining Core Features
+- [x] **Ephemeral Messaging System** ✅ COMPLETED
+  - All technical fixes applied (SVG crashes, timer icons, modal UX)
+  - Critical bugs resolved (no more reappearing messages)
+  - View-once messages working across all types (text/voice/video)
+  - Real-time sync and database tracking functioning properly
+  - Ready for production testing
+  - See CHANGELOG.md for complete implementation details
+
 - [ ] **Screenshot Detection/Prevention**
   - Critical for ephemeral messaging trust
   - Android: actual prevention using FLAG_SECURE

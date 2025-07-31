@@ -42,6 +42,13 @@ export default function VideoPlayerModal({
     };
   }, []);
 
+  // Cleanup when visibility changes
+  useEffect(() => {
+    if (!visible && videoRef.current) {
+      videoRef.current.unloadAsync().catch(console.error);
+    }
+  }, [visible]);
+
   // Reset state when video URI changes
   useEffect(() => {
     if (videoUri) {
@@ -73,6 +80,11 @@ export default function VideoPlayerModal({
         // Video finished playing
         setIsPlaying(false);
         console.log(`[VideoPlayer] Video finished playing`);
+        
+        // Auto-close modal after video completes (with small delay for smooth UX)
+        setTimeout(() => {
+          handleClose();
+        }, 1000);
       }
     } else {
       // Handle loading errors

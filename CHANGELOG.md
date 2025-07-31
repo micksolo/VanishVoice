@@ -14,26 +14,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Beautiful vanishing animations (fade, dissolve, particles, shrink)
   - Integrated countdown timers in message bubbles
   - Glow effects for unviewed ephemeral messages
-  - ViewingOverlay for immersive ephemeral viewing
   - Backend auto-deletion with deletion_log audit trail
   - Edge function for periodic message cleanup
-  - View-once messages as default option
+  - View-once messages as default option for all message types
   - Demo screen to preview all ephemeral features
   - Dark theme optimized for ephemeral messaging
   - Performance-optimized animations at 60fps
+  - Critical Bug Fixes:
+    - Fixed: Viewed messages no longer reappear after sending new messages
+    - Fixed: Messages properly track viewed_at timestamp in database
+    - Fixed: Real-time sync removes messages from both sender and receiver
+    - Added: Sender-side fade animation when recipient views message
+    - Added: Eye icon indicator for viewed messages
+    - Improved: Inline tap-to-reveal without modal overlays
+  - Technical Fixes and Improvements:
+    - Fixed: SVG crashes by downgrading react-native-svg to stable version (15.11.2)
+    - Fixed: Node.js module resolution issues in Metro config
+    - Improved: Timer icon rendering with proper SVG compatibility
+    - Enhanced: Modal UX with better state management and error handling
+    - Updated: Package dependencies for better stability
+    - Cleaned: Removed unused EphemeralToggle component
+    - Optimized: Metro bundler configuration for development builds
   - Backend Infrastructure:
     - Database migration for deletion_log table (audit trail)
     - delete_expired_messages() function for batch processing
     - is_expired computed column for efficient queries
     - Updated Edge Function with media cleanup
     - Support for pg_cron scheduling (optional)
+    - Proper filtering to exclude viewed messages from queries
   - Frontend Components:
-    - ViewingOverlay for immersive message viewing
-    - VanishAnimation with particle effects
+    - EphemeralMessageBubble with simplified inline experience
+    - VanishAnimation with simple fade effects
     - Real-time subscription to expiry/deletion events
     - Automatic UI updates when messages expire
+    - Sender notification when messages are viewed
   - Message Types Support:
-    - View-once: Expires after being viewed
+    - View-once: Expires after being viewed (default)
     - Playback-once: Expires after audio/video playback
     - Read-once: Expires after text is read
     - Time-based: Expires after duration
@@ -42,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Automatic media file cleanup from storage
     - Soft delete → hard delete after 24 hours
     - User deletion statistics API
+    - Messages marked as expired prevent re-viewing
 - **Video/Voice Message Performance Optimization** ✅ COMPLETE
   - Expo Development Build configuration for native module support
   - Video compression with react-native-compressor:

@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
+import * as Haptics from 'expo-haptics';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AnonymousAuthContext';
 import { 
@@ -36,13 +37,16 @@ import RecordingModal from '../components/RecordingModal';
 import VideoRecordingModal from '../components/VideoRecordingModalNew';
 import VideoPlayerModal from '../components/VideoPlayerModal';
 import EphemeralIndicator from '../components/EphemeralIndicator';
-import ExpiryButton from '../components/ExpiryButton';
+import EphemeralHeaderToggle from '../components/EphemeralHeaderToggle';
 import ExpiryRuleSelector from '../components/ExpiryRuleSelector';
 import MessageBubble from '../components/MessageBubble';
 import VoiceMessagePlayer from '../components/VoiceMessagePlayer';
-import ViewingOverlay from '../components/ViewingOverlay';
+import EphemeralMessageBubble from '../components/EphemeralMessageBubble';
+import { useAppTheme } from '../contexts/ThemeContext';
 import * as FileSystem from 'expo-file-system';
 import { Video, ResizeMode } from 'expo-av';
+import messageClearingService from '../services/messageClearingService';
+import { filterExpiredMessages, areMessageArraysEquivalent } from '../utils/messageFiltering';
 
 interface Message {
   id: string;
@@ -56,6 +60,7 @@ interface Message {
   expiryRule?: ExpiryRule; // Expiry rule for ephemeral messages
   isEphemeral?: boolean; // Whether message is ephemeral
   timeRemaining?: number; // Time remaining until expiry (milliseconds)
+  hasBeenViewed?: boolean; // For sender to know when recipient viewed message
 }
 
 const PAGE_SIZE = 20;
@@ -63,6 +68,7 @@ const PAGE_SIZE = 20;
 export default function FriendChatScreen({ route, navigation }: any) {
   const { friendId, friendName, friendUsername } = route.params;
   const { user } = useAuth();
+  const theme = useAppTheme();
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
@@ -88,8 +94,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
   const [showExpirySelector, setShowExpirySelector] = useState(false);
   const [currentExpiryRule, setCurrentExpiryRule] = useState<ExpiryRule>({ type: 'view', disappear_after_view: true });
   const [messageTypeForExpiry, setMessageTypeForExpiry] = useState<'text' | 'voice' | 'video'>('text');
-  const [viewingMessage, setViewingMessage] = useState<DBMessage | null>(null);
-  const [showViewingOverlay, setShowViewingOverlay] = useState(false);
   
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -143,10 +147,20 @@ export default function FriendChatScreen({ route, navigation }: any) {
       // Start polling for new messages as fallback
       messagePollingInterval.current = setInterval(checkForNewMessages, 3000);
       
+      // Subscribe to message clearing events
+      const unsubscribeClearing = messageClearingService.subscribeToMessageClearing(() => {
+        console.log('[FriendChat] Received message clearing event, clearing local messages');
+        setMessages([]);
+        setMessageOffset(0);
+        setHasMoreMessages(true);
+        lastMessageCount.current = 0;
+      });
+      
       setLoading(false);
       
       return () => {
         unsubscribe();
+        unsubscribeClearing();
         if (messagePollingInterval.current) {
           clearInterval(messagePollingInterval.current);
         }
@@ -159,6 +173,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
   };
 
   const loadMessages = async (loadMore = false) => {
+    // Declare convertedMessages outside try block to ensure it's always defined
+    let convertedMessages: Message[] = [];
+    
     try {
       if (loadMore && loadingMore) return;
       
@@ -196,6 +213,10 @@ export default function FriendChatScreen({ route, navigation }: any) {
       // Reverse the messages to show oldest first
       const reversedData = data ? [...data].reverse() : [];
 
+      // Filter expired messages using utility function
+      const filteredMessages = filterExpiredMessages(reversedData || []);
+      console.log('[FriendChat] After filtering expired messages:', filteredMessages?.length || 0);
+
       // Mark all messages from friend as read
       if (reversedData && reversedData.length > 0) {
         const unreadMessageIds = reversedData
@@ -226,14 +247,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
       }
 
       // Convert to our message format and decrypt if needed
-      const convertedMessages: Message[] = [];
-      
-      for (const msg of (reversedData || [])) {
-        // Skip expired messages from being displayed
-        if (msg.is_expired || msg.expired) {
-          console.log('[FriendChat] Skipping expired message:', msg.id);
-          continue;
-        }
+      // Add safety check in case filteredMessages is somehow null/undefined
+      const messagesToConvert = filteredMessages || [];
+      for (const msg of messagesToConvert) {
         
         let content = '';
         
@@ -291,23 +307,29 @@ export default function FriendChatScreen({ route, navigation }: any) {
           status: 'sent',
           duration: msg.duration,
           expiryRule: msg.expiry_rule,
-          isEphemeral: msg.expiry_rule && msg.expiry_rule.type !== 'none'
+          isEphemeral: msg.expiry_rule && msg.expiry_rule.type !== 'none',
+          hasBeenViewed: msg.sender_id === user?.id && msg.viewed_at !== null
         });
       }
 
       if (loadMore) {
         // Prepend older messages
         setMessages(prev => [...convertedMessages, ...prev]);
-        setMessageOffset(messageOffset + data.length);
+        setMessageOffset(messageOffset + (data?.length || 0));
       } else {
         // Initial load
         setMessages(convertedMessages);
-        setMessageOffset(data ? data.length : 0);
+        setMessageOffset(data?.length || 0);
       }
       
+      // Safely update the last message count
       lastMessageCount.current = convertedMessages.length;
     } catch (error) {
       console.error('[FriendChat] Error in loadMessages:', error);
+      console.error('[FriendChat] Error stack:', error.stack);
+      console.error('[FriendChat] convertedMessages at error:', convertedMessages);
+      // Ensure lastMessageCount is set even on error
+      lastMessageCount.current = convertedMessages.length;
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -330,21 +352,18 @@ export default function FriendChatScreen({ route, navigation }: any) {
         return;
       }
 
-      const currentCount = data?.length || 0;
+      // Filter expired messages using utility function
+      const nonExpiredMessages = filterExpiredMessages(data || []);
       
-      if (currentCount > lastMessageCount.current) {
-        console.log('[FriendChat] New messages detected via polling!');
+      const currentCount = nonExpiredMessages.length;
+      
+      if (currentCount !== lastMessageCount.current) {
+        console.log('[FriendChat] Message count changed via polling!');
         
-        // Convert and decrypt new messages
+        // Convert and decrypt messages
         const convertedMessages: Message[] = [];
         
-        for (const msg of (data || [])) {
-          // Skip expired messages
-          if (msg.is_expired || msg.expired) {
-            console.log('[FriendChat] Skipping expired message in polling:', msg.id);
-            continue;
-          }
-          
+        for (const msg of nonExpiredMessages) {
           let content = '';
           
           if (msg.type === 'text') {
@@ -380,13 +399,17 @@ export default function FriendChatScreen({ route, navigation }: any) {
             status: 'sent',
             duration: msg.duration,
             expiryRule: msg.expiry_rule,
-            isEphemeral: msg.expiry_rule && msg.expiry_rule.type !== 'none'
+            isEphemeral: msg.expiry_rule && msg.expiry_rule.type !== 'none',
+            hasBeenViewed: msg.sender_id === user?.id && msg.viewed_at !== null
           });
         }
 
-        setMessages(convertedMessages);
-        lastMessageCount.current = currentCount;
-        flatListRef.current?.scrollToEnd();
+        // Only update if we have different messages (avoid unnecessary re-renders)
+        if (!areMessageArraysEquivalent(messages, convertedMessages)) {
+          setMessages(convertedMessages);
+          lastMessageCount.current = currentCount;
+          flatListRef.current?.scrollToEnd();
+        }
       }
     } catch (error) {
       console.error('[FriendChat] Error in checkForNewMessages:', error);
@@ -453,7 +476,8 @@ export default function FriendChatScreen({ route, navigation }: any) {
               status: 'delivered',
               duration: payload.new.duration,
               expiryRule: payload.new.expiry_rule,
-              isEphemeral: payload.new.expiry_rule && payload.new.expiry_rule.type !== 'none'
+              isEphemeral: payload.new.expiry_rule && payload.new.expiry_rule.type !== 'none',
+              hasBeenViewed: false // New messages from others haven't been viewed yet
             };
             
             setMessages(prev => [...prev, newMessage]);
@@ -484,10 +508,32 @@ export default function FriendChatScreen({ route, navigation }: any) {
         async (payload) => {
           console.log('[FriendChat] Message updated:', payload);
           
-          // Check if the message is now expired
-          if (payload.new.expired || payload.new.is_expired) {
-            console.log('[FriendChat] Message marked as expired, removing:', payload.new.id);
+          // Check if the message is now expired or viewed (for view-once)
+          if (payload.new.expired || 
+              (payload.new.expiry_rule?.type === 'view' && payload.new.viewed_at)) {
+            console.log('[FriendChat] Message marked as expired/viewed, removing:', payload.new.id);
             setMessages(prev => prev.filter(msg => msg.id !== payload.new.id));
+          }
+          
+          // For sender: Update message status when recipient views it
+          if (payload.new.sender_id === user?.id && payload.new.viewed_at && !payload.old.viewed_at) {
+            console.log('[FriendChat] Recipient viewed message, updating status:', payload.new.id);
+            setMessages(prev => prev.map(msg => 
+              msg.id === payload.new.id 
+                ? { ...msg, status: 'read' as const, hasBeenViewed: true }
+                : msg
+            ));
+            
+            // For view-once and playback messages, schedule fade out after a delay
+            if (payload.new.expiry_rule?.type === 'view' || payload.new.expiry_rule?.type === 'playback') {
+              const fadeDelay = payload.new.expiry_rule?.type === 'playback' ? 
+                (payload.new.duration ? (payload.new.duration * 1000) + 2000 : 5000) : // Audio duration + 2s buffer
+                3000; // Standard view-once delay
+              
+              setTimeout(() => {
+                setMessages(prev => prev.filter(msg => msg.id !== payload.new.id));
+              }, fadeDelay);
+            }
           }
         }
       )
@@ -835,7 +881,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
         timestamp: new Date(),
         status: 'sending',
         duration: messageDuration || duration,
-        expiryRule: currentExpiryRule
+        expiryRule: currentExpiryRule.type === 'view' ? { type: 'playback' } : currentExpiryRule
       };
 
       console.log('[Upload] Setting uploading message ID:', tempId);
@@ -854,7 +900,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
           content: encryptedKey, // Store encrypted key in content field
           nonce: nonce, // Store nonce
           is_encrypted: true,
-          expiry_rule: currentExpiryRule,
+          expiry_rule: currentExpiryRule.type === 'view' ? { type: 'playback' } : currentExpiryRule,
           duration: messageDuration || duration
         })
         .select()
@@ -1125,37 +1171,23 @@ export default function FriendChatScreen({ route, navigation }: any) {
         throw new Error('Message not found');
       }
 
-      // For view-once voice messages, show in overlay
-      if (message.expiryRule?.type === 'view') {
-        // Get the full message data from database
-        const { data: msgData, error } = await supabase
-          .from('messages')
-          .select('*')
-          .eq('id', messageId)
-          .single();
-
-        if (error || !msgData) {
-          throw new Error('Failed to get message details');
+      // For ephemeral voice messages (view or playback), mark as read and schedule expiry
+      if ((message.expiryRule?.type === 'view' || message.expiryRule?.type === 'playback') && !message.isMine) {
+        // Mark message as read
+        setMessages(prev => 
+          prev.map(msg => 
+            msg.id === messageId 
+              ? { ...msg, status: 'read' as const }
+              : msg
+          )
+        );
+        
+        // Mark as viewed in database
+        try {
+          await EphemeralMessageService.markMessageViewed(messageId);
+        } catch (error) {
+          console.error('[Voice] Failed to mark message as viewed:', error);
         }
-
-        const dbMessage: DBMessage = {
-          id: msgData.id,
-          type: msgData.type,
-          content: msgData.content,
-          media_path: msgData.media_path,
-          sender_id: msgData.sender_id,
-          recipient_id: msgData.recipient_id,
-          created_at: msgData.created_at,
-          expiry_rule: msgData.expiry_rule || { type: 'none' },
-          expired: msgData.expired || false,
-          is_encrypted: msgData.is_encrypted || false,
-          duration: msgData.duration,
-          nonce: msgData.nonce,
-          video_nonce: msgData.video_nonce
-        };
-        setViewingMessage(dbMessage);
-        setShowViewingOverlay(true);
-        return;
       }
       // Stop current playback if playing another message
       if (sound && playingMessageId !== messageId) {
@@ -1376,6 +1408,18 @@ export default function FriendChatScreen({ route, navigation }: any) {
                 ...prev,
                 [messageId]: { isPlaying: false, progress: 0, duration: duration }
               }));
+              
+              // Handle ephemeral voice message expiry after playback completion
+              const message = messages.find(m => m.id === messageId);
+              if (message && (message.expiryRule?.type === 'view' || message.expiryRule?.type === 'playback') && !message.isMine) {
+                // Schedule expiry based on actual audio duration + 2 second buffer
+                const audioDurationMs = duration || 0;
+                const bufferTime = 2000; // 2 seconds buffer
+                
+                setTimeout(() => {
+                  setMessages(prev => prev.filter(msg => msg.id !== messageId));
+                }, bufferTime); // Give 2 second buffer after playback completes
+              }
             }
           } else if ('error' in status) {
             console.error('[Voice] Playback error:', status.error);
@@ -1432,37 +1476,23 @@ export default function FriendChatScreen({ route, navigation }: any) {
         throw new Error('Message not found');
       }
 
-      // For view-once video messages, show in overlay
-      if (message.expiryRule?.type === 'view') {
-        // Get the full message data from database
-        const { data: msgData, error } = await supabase
-          .from('messages')
-          .select('*')
-          .eq('id', messageId)
-          .single();
-
-        if (error || !msgData) {
-          throw new Error('Failed to get message details');
+      // For ephemeral video messages (view-once), mark as viewed
+      if ((message.expiryRule?.type === 'view') && !message.isMine) {
+        // Mark message as read
+        setMessages(prev => 
+          prev.map(msg => 
+            msg.id === messageId 
+              ? { ...msg, status: 'read' as const }
+              : msg
+          )
+        );
+        
+        // Mark as viewed in database - the real-time subscription will handle the expiry
+        try {
+          await EphemeralMessageService.markMessageViewed(messageId);
+        } catch (error) {
+          console.error('[Video] Failed to mark message as viewed:', error);
         }
-
-        const dbMessage: DBMessage = {
-          id: msgData.id,
-          type: msgData.type,
-          content: msgData.content,
-          media_path: msgData.media_path,
-          sender_id: msgData.sender_id,
-          recipient_id: msgData.recipient_id,
-          created_at: msgData.created_at,
-          expiry_rule: msgData.expiry_rule || { type: 'none' },
-          expired: msgData.expired || false,
-          is_encrypted: msgData.is_encrypted || false,
-          duration: msgData.duration,
-          nonce: msgData.nonce,
-          video_nonce: msgData.video_nonce
-        };
-        setViewingMessage(dbMessage);
-        setShowViewingOverlay(true);
-        return;
       }
       // Set downloading state
       setDownloadingMessageId(messageId);
@@ -1599,182 +1629,92 @@ export default function FriendChatScreen({ route, navigation }: any) {
     const isDownloading = downloadingMessageId === item.id;
 
     if (item.type === 'text') {
-      // Use MessageBubble for text messages
+      // Use EphemeralMessageBubble for text messages
       return (
-        <MessageBubble
+        <EphemeralMessageBubble
           content={item.content}
           isMine={item.isMine}
           timestamp={item.timestamp}
           expiryRule={item.expiryRule}
           isEphemeral={!!item.expiryRule && item.expiryRule.type !== 'none'}
-          hasBeenViewed={item.status === 'read'}
+          hasBeenViewed={item.status === 'read' || item.hasBeenViewed}
           isExpired={false} // TODO: Add proper expiry logic
           messageType={item.type}
-          senderName={item.isMine ? undefined : (friendName || friendUsername)}
-          onPress={() => {
-            // For view-once messages, show in overlay
-            if (item.expiryRule?.type === 'view') {
-              // Convert to database message format for ViewingOverlay
-              const dbMessage: DBMessage = {
-                id: item.id,
-                type: item.type,
-                content: item.content,
-                sender_id: item.isMine ? user?.id || '' : friendId,
-                recipient_id: item.isMine ? friendId : user?.id || '',
-                created_at: item.timestamp.toISOString(),
-                expiry_rule: item.expiryRule || { type: 'none' },
-                expired: false,
-                is_encrypted: true,
-                duration: item.duration
-              };
-              setViewingMessage(dbMessage);
-              setShowViewingOverlay(true);
+          blurBeforeView={item.expiryRule?.type === 'view' && !item.isMine && item.status !== 'read'}
+          onPress={async () => {
+            // For view-once messages, mark as read and trigger expiry
+            if (item.expiryRule?.type === 'view' && !item.isMine && item.status !== 'read') {
+              // Mark message as read locally
+              setMessages(prev => 
+                prev.map(msg => 
+                  msg.id === item.id 
+                    ? { ...msg, status: 'read' as const }
+                    : msg
+                )
+              );
+              
+              // Mark as viewed in database
+              try {
+                await EphemeralMessageService.markMessageViewed(item.id);
+              } catch (error) {
+                console.error('[FriendChat] Failed to mark message as viewed:', error);
+              }
+              
+              // For view-once messages, schedule expiry after a short delay
+              setTimeout(() => {
+                setMessages(prev => prev.filter(msg => msg.id !== item.id));
+              }, 5000); // 5 second viewing time
             }
+          }}
+          onExpire={() => {
+            // Remove expired message from the list
+            setMessages(prev => prev.filter(msg => msg.id !== item.id));
           }}
         />
       );
     } else if (item.type === 'voice') {
-      // Use custom voice message rendering
+      // Use EphemeralMessageBubble for voice messages
       return (
-        <View
-          style={[
-            styles.messageBubble,
-            styles.voiceMessageBubble,
-            item.isMine ? styles.myMessage : styles.theirMessage,
-          ]}
-        >
-          {/* View-once indicator */}
-          {item.expiryRule?.type === 'view' && (
-            <View style={styles.viewOnceIndicator}>
-              <Ionicons 
-                name="eye-outline" 
-                size={12} 
-                color={item.isMine ? 'rgba(255,255,255,0.8)' : '#4ECDC4'} 
-              />
-              <Text style={[
-                styles.viewOnceText,
-                { color: item.isMine ? 'rgba(255,255,255,0.8)' : '#666' }
-              ]}>
-                View once
-              </Text>
-            </View>
-          )}
-          <View style={styles.voiceMessage}>
-            <View style={styles.voiceMessageLeft}>
-              <TouchableOpacity 
-                style={[
-                  styles.playButton,
-                  item.isMine ? styles.playButtonMine : styles.playButtonTheirs
-                ]}
-                onPress={() => playVoiceMessage(item.id)}
-                disabled={isUploading || isDownloading}
-              >
-                {isUploading ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : isDownloading ? (
-                  downloadProgress[item.id] !== undefined ? (
-                    <Text style={[
-                      styles.progressText,
-                      { color: item.isMine ? "#fff" : "#4ECDC4" }
-                    ]}>
-                      {downloadProgress[item.id]}%
-                    </Text>
-                  ) : (
-                    <ActivityIndicator size="small" color={item.isMine ? "#fff" : "#4ECDC4"} />
-                  )
-                ) : (
-                  <Ionicons 
-                    name={isCurrentlyPlaying ? "pause" : "play"} 
-                    size={16} 
-                    color={item.isMine ? "#fff" : "#4ECDC4"} 
-                  />
-                )}
-              </TouchableOpacity>
-              
-              <View style={styles.voiceMessageContent}>
-                <View style={styles.waveformContainer}>
-                  {[...Array(8)].map((_, i) => (
-                    <View
-                      key={i}
-                      style={[
-                        styles.waveformBar,
-                        {
-                          height: Math.random() * 15 + 5,
-                          backgroundColor: item.isMine ? 'rgba(255,255,255,0.7)' : '#4ECDC4',
-                        }
-                      ]}
-                    />
-                  ))}
-                </View>
-                
-                <Text style={[
-                  styles.voiceDuration,
-                  item.isMine ? styles.voiceDurationMine : styles.voiceDurationTheirs
-                ]}>
-                  {status ? formatDuration(status.progress) : `${item.duration || 0}s`}
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
+        <EphemeralMessageBubble
+          content={isUploading ? 'Sending voice message...' : 
+                  isDownloading ? `Downloading... ${downloadProgress[item.id] || 0}%` :
+                  `Voice message • ${item.duration || 0}s`}
+          isMine={item.isMine}
+          timestamp={item.timestamp}
+          expiryRule={item.expiryRule}
+          isEphemeral={!!item.expiryRule && item.expiryRule.type !== 'none'}
+          hasBeenViewed={item.status === 'read' || item.hasBeenViewed}
+          isExpired={false}
+          messageType={item.type}
+          blurBeforeView={item.expiryRule?.type === 'view' && !item.isMine && item.status !== 'read'}
+          onPress={() => playVoiceMessage(item.id)}
+          onExpire={() => {
+            // Remove expired message from the list
+            setMessages(prev => prev.filter(msg => msg.id !== item.id));
+          }}
+        />
       );
     } else if (item.type === 'video') {
-      // Use custom video message rendering
+      // Use EphemeralMessageBubble for video messages
       return (
-        <View
-          style={[
-            styles.messageBubble,
-            styles.videoMessage,
-            item.isMine ? styles.myMessage : styles.theirMessage,
-          ]}
-        >
-          <TouchableOpacity 
-            style={styles.videoThumbnailContainer}
-            onPress={() => playVideoMessage(item.id)}
-            disabled={isUploading || isDownloading}
-          >
-            {/* View-once indicator for videos */}
-            {item.expiryRule?.type === 'view' && (
-              <View style={[styles.viewOnceIndicator, styles.viewOnceIndicatorVideo]}>
-                <Ionicons 
-                  name="eye-outline" 
-                  size={14} 
-                  color="white" 
-                />
-                <Text style={styles.viewOnceTextVideo}>
-                  View once
-                </Text>
-              </View>
-            )}
-            {isUploading || isDownloading ? (
-              <View style={styles.videoUploadingContainer}>
-                <ActivityIndicator size="large" color={item.isMine ? "#fff" : "#4ECDC4"} />
-                <Text style={[
-                  styles.uploadingText,
-                  item.isMine && styles.uploadingTextMine
-                ]}>
-                  {isUploading ? 'Uploading...' : 'Loading...'}
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.videoPlaceholder}>
-                <View style={styles.playOverlay}>
-                  <View style={styles.playCircle}>
-                    <Ionicons name="play" size={24} color="white" />
-                  </View>
-                </View>
-                <View style={styles.videoDurationContainer}>
-                  <Text style={[
-                    styles.videoDuration,
-                    item.isMine && styles.videoDurationMine
-                  ]}>
-                    {item.duration || 30}s
-                  </Text>
-                </View>
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
+        <EphemeralMessageBubble
+          content={isUploading ? 'Sending video message...' : 
+                  isDownloading ? `Loading video...` :
+                  `Video message • ${item.duration || 30}s`}
+          isMine={item.isMine}
+          timestamp={item.timestamp}
+          expiryRule={item.expiryRule}
+          isEphemeral={!!item.expiryRule && item.expiryRule.type !== 'none'}
+          hasBeenViewed={item.status === 'read' || item.hasBeenViewed}
+          isExpired={false}
+          messageType={item.type}
+          blurBeforeView={item.expiryRule?.type === 'view' && !item.isMine && item.status !== 'read'}
+          onPress={() => playVideoMessage(item.id)}
+          onExpire={() => {
+            // Remove expired message from the list
+            setMessages(prev => prev.filter(msg => msg.id !== item.id));
+          }}
+        />
       );
     }
 
@@ -1783,36 +1723,52 @@ export default function FriendChatScreen({ route, navigation }: any) {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color="#4ECDC4" />
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={theme.colors.text.accent} />
+        </View>
       </SafeAreaView>
     );
   }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
         
         <KeyboardAvoidingView
           style={styles.container}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
           {/* Header */}
-          <View style={styles.header}>
+          <View style={[styles.header, { backgroundColor: theme.colors.background.secondary, borderBottomColor: theme.colors.border.default }]}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color="#000" />
+            <Ionicons name="arrow-back" size={24} color={theme.colors.text.primary} />
           </TouchableOpacity>
           
           <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>{friendName}</Text>
+            <Text style={[styles.headerTitle, { color: theme.colors.text.primary }]}>{friendName}</Text>
             {friendUsername && (
-              <Text style={styles.headerSubtitle}>@{friendUsername}</Text>
+              <Text style={[styles.headerSubtitle, { color: theme.colors.text.secondary }]}>@{friendUsername}</Text>
             )}
           </View>
 
-          <TouchableOpacity style={styles.headerButton}>
-            <Ionicons name="information-circle-outline" size={24} color="#666" />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <EphemeralHeaderToggle
+              currentRule={currentExpiryRule}
+              onPress={() => {
+                // Single tap opens expiry selector
+                console.log('[FriendChat] Ephemeral header toggle pressed, opening selector');
+                const msgType = inputText.trim() ? 'text' : 'voice';
+                console.log('[FriendChat] Setting message type:', msgType);
+                setMessageTypeForExpiry(msgType);
+                setShowExpirySelector(true);
+                console.log('[FriendChat] Set showExpirySelector to true');
+              }}
+            />
+            <TouchableOpacity style={styles.headerButton}>
+              <Ionicons name="information-circle-outline" size={24} color={theme.colors.text.secondary} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Messages */}
@@ -1821,7 +1777,8 @@ export default function FriendChatScreen({ route, navigation }: any) {
           data={messages}
           renderItem={renderMessage}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.messagesList}
+          contentContainerStyle={[styles.messagesList, { backgroundColor: theme.colors.background.primary }]}
+          style={{ backgroundColor: theme.colors.background.primary }}
           onContentSizeChange={() => {
             if (!loadingMore) {
               flatListRef.current?.scrollToEnd();
@@ -1831,58 +1788,45 @@ export default function FriendChatScreen({ route, navigation }: any) {
           ListHeaderComponent={
             hasMoreMessages ? (
               <TouchableOpacity
-                style={styles.loadMoreButton}
+                style={[styles.loadMoreButton, { backgroundColor: theme.colors.background.tertiary }]}
                 onPress={() => loadMessages(true)}
                 disabled={loadingMore}
               >
                 {loadingMore ? (
-                  <ActivityIndicator size="small" color="#4ECDC4" />
+                  <ActivityIndicator size="small" color={theme.colors.text.accent} />
                 ) : (
-                  <Text style={styles.loadMoreText}>Load earlier messages</Text>
+                  <Text style={[styles.loadMoreText, { color: theme.colors.text.accent }]}>Load earlier messages</Text>
                 )}
               </TouchableOpacity>
             ) : messages.length > 0 ? (
               <View style={styles.noMoreMessages}>
-                <Text style={styles.noMoreText}>Beginning of conversation</Text>
+                <Text style={[styles.noMoreText, { color: theme.colors.text.tertiary }]}>Beginning of conversation</Text>
               </View>
             ) : null
           }
         />
 
+
         {/* Input */}
-        <View style={styles.inputContainer}>
+        <View style={[styles.inputContainer, { backgroundColor: theme.colors.background.secondary, borderTopColor: theme.colors.border.default }]}>
           {!isRecording ? (
             <>
-              <ExpiryButton 
-                onPress={() => {
-                  // Toggle between view-once and no expiry for quick access
-                  if (currentExpiryRule.type === 'view') {
-                    setCurrentExpiryRule({ type: 'none' });
-                  } else {
-                    setCurrentExpiryRule({ type: 'view', disappear_after_view: true });
-                  }
-                }}
-                onLongPress={() => {
-                  // Long press opens full selector
-                  setMessageTypeForExpiry(inputText.trim() ? 'text' : 'voice');
-                  setShowExpirySelector(true);
-                }}
-                currentRule={currentExpiryRule}
-                mode="toggle"
-              />
-              
               <TextInput
-                style={styles.textInput}
+                style={[styles.textInput, { 
+                  backgroundColor: theme.colors.background.tertiary, 
+                  color: theme.colors.text.primary 
+                }]}
                 value={inputText}
                 onChangeText={setInputText}
                 placeholder="Type a message..."
+                placeholderTextColor={theme.colors.text.tertiary}
                 multiline
                 maxLength={500}
               />
               
               {inputText.trim() ? (
                 <TouchableOpacity onPress={sendTextMessage} style={styles.sendButton}>
-                  <Ionicons name="send" size={24} color="#4ECDC4" />
+                  <Ionicons name="send" size={24} color={theme.colors.text.accent} />
                 </TouchableOpacity>
               ) : (
                 <View style={styles.mediaButtons}>
@@ -1891,18 +1835,18 @@ export default function FriendChatScreen({ route, navigation }: any) {
                       setMessageTypeForExpiry('video');
                       setShowVideoModal(true);
                     }}
-                    style={styles.videoButton}
+                    style={[styles.videoButton, { backgroundColor: theme.colors.background.tertiary }]}
                   >
-                    <Ionicons name="videocam" size={24} color="#4ECDC4" />
+                    <Ionicons name="videocam" size={24} color={theme.colors.text.accent} />
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => {
                       setMessageTypeForExpiry('voice');
                       startRecording();
                     }}
-                    style={styles.micButton}
+                    style={[styles.micButton, { backgroundColor: theme.colors.background.tertiary }]}
                   >
-                    <Ionicons name="mic" size={24} color="#4ECDC4" />
+                    <Ionicons name="mic" size={24} color={theme.colors.text.accent} />
                   </TouchableOpacity>
                 </View>
               )}
@@ -1912,9 +1856,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
               {/* Cancel button */}
               <TouchableOpacity
                 onPress={cancelRecording}
-                style={styles.cancelRecordingButton}
+                style={[styles.cancelRecordingButton, { backgroundColor: theme.colors.status.error + '20' }]}
               >
-                <Ionicons name="trash-outline" size={20} color="#FF3B30" />
+                <Ionicons name="trash-outline" size={20} color={theme.colors.status.error} />
               </TouchableOpacity>
 
               {/* Recording info */}
@@ -1925,10 +1869,11 @@ export default function FriendChatScreen({ route, navigation }: any) {
                       styles.recordingDot,
                       {
                         opacity: recordingDuration % 2 ? 1 : 0.3,
+                        backgroundColor: theme.colors.status.error
                       }
                     ]} 
                   />
-                  <Text style={styles.recordingTime}>
+                  <Text style={[styles.recordingTime, { color: theme.colors.text.primary }]}>
                     {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
                   </Text>
                 </View>
@@ -1943,19 +1888,20 @@ export default function FriendChatScreen({ route, navigation }: any) {
                         {
                           height: Math.random() * 15 + 10,
                           opacity: recordingDuration > 0 ? 0.8 : 0.3,
+                          backgroundColor: theme.colors.text.accent
                         }
                       ]}
                     />
                   ))}
                 </View>
                 
-                <Text style={styles.recordingHint}>Tap send when ready</Text>
+                <Text style={[styles.recordingHint, { color: theme.colors.text.secondary }]}>Tap send when ready</Text>
               </View>
 
               {/* Send button */}
               <TouchableOpacity
                 onPress={stopRecording}
-                style={styles.sendVoiceButton}
+                style={[styles.sendVoiceButton, { backgroundColor: theme.colors.text.accent }]}
                 activeOpacity={0.8}
               >
                 <Animated.View
@@ -1963,7 +1909,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
                     transform: [{ scale: micScale }]
                   }}
                 >
-                  <Ionicons name="send" size={24} color="#fff" />
+                  <Ionicons name="send" size={24} color={theme.colors.text.inverse} />
                 </Animated.View>
               </TouchableOpacity>
             </View>
@@ -2006,29 +1952,19 @@ export default function FriendChatScreen({ route, navigation }: any) {
       {/* Expiry Rule Selector */}
       <ExpiryRuleSelector
         visible={showExpirySelector}
-        onClose={() => setShowExpirySelector(false)}
+        onClose={() => {
+          console.log('[FriendChat] Modal onClose called');
+          setShowExpirySelector(false);
+        }}
         onSelect={(rule) => {
+          console.log('[FriendChat] Modal onSelect called with rule:', rule);
           setCurrentExpiryRule(rule);
           setShowExpirySelector(false);
         }}
         messageType={messageTypeForExpiry}
+        currentRule={currentExpiryRule}
       />
       
-      {/* Viewing Overlay for view-once messages */}
-      <ViewingOverlay
-        visible={showViewingOverlay}
-        message={viewingMessage}
-        onClose={() => {
-          setShowViewingOverlay(false);
-          setViewingMessage(null);
-        }}
-        onMessageExpired={(messageId) => {
-          // Remove expired message from the list with a slight delay for animation
-          setTimeout(() => {
-            setMessages(prev => prev.filter(msg => msg.id !== messageId));
-          }, 600);
-        }}
-      />
     </SafeAreaView>
     </GestureHandlerRootView>
   );
@@ -2060,6 +1996,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     marginTop: 2,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   headerButton: {
     padding: 8,
@@ -2416,5 +2356,40 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '500',
     color: 'white',
+  },
+  viewOnceIconContainer: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 12,
+    height: 12,
+    marginRight: 4,
+  },
+  viewOnceNumberText: {
+    position: 'absolute',
+    fontSize: 6,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    top: 1,
+    left: 0,
+    right: 0,
+  },
+  viewOnceVideoIconContainer: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 14,
+    height: 14,
+    marginRight: 6,
+  },
+  viewOnceVideoNumber: {
+    position: 'absolute',
+    fontSize: 7,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    color: 'white',
+    top: 1.5,
+    left: 0,
+    right: 0,
   },
 });

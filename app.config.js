@@ -7,6 +7,7 @@ module.exports = ({ config }) => {
       // expo-dev-client plugin is automatically included when installed
       // react-native-compressor for video compression
       'react-native-compressor',
+      // react-native-svg doesn't need a config plugin, it works natively in development builds
     ],
     // Configure iOS-specific settings for development builds
     ios: {

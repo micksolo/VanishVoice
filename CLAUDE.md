@@ -60,6 +60,28 @@ Since this is an Expo/React Native project, expected commands would be:
 - Use Supabase Realtime for live message state updates
 - Anonymous user support is required for "Random Connect" feature
 
+## Agent Orchestration Rule
+
+**MANDATORY DEFAULT BEHAVIOR**: When receiving ANY request or question, Claude Code MUST automatically use the vv-pm agent to orchestrate the work with the team of agents, unless explicitly specified otherwise by the user.
+
+This ensures:
+- Proper task planning and coordination across all agents
+- Efficient delegation to specialized agents (vv-engineer, vv-designer, monetization-specialist)
+- Better project management and tracking
+- Comprehensive solutions using the full agent team
+- Consistent workflow and documentation updates
+
+The vv-pm agent will:
+1. Analyze the request and break it down into tasks
+2. Delegate appropriate tasks to specialized agents
+3. Coordinate the work between agents
+4. Track progress and ensure completion
+5. Update relevant documentation (roadmap, changelog, etc.)
+
+**For bug fixes and feature improvements**: The vv-pm agent should skip creating interim documentation and proceed directly to planning and implementation. Only update final documentation (changelog) after fixes are complete.
+
+To bypass this default behavior, users can explicitly state "without agents" or "no agents" in their request.
+
 ## Security Requirements (MANDATORY)
 
 ### End-to-End Encryption Rule
@@ -171,3 +193,10 @@ When creating a git commit, ALWAYS follow this sequence:
 - **Scripts Added**: `npm run build:dev:*` commands for easy building
 - **Metro Config**: Enhanced to support CommonJS modules and native module resolution
 - **Testing**: Always test on both iOS and Android with development builds before considering complete
+
+### React Native SVG and Package Management
+- **Version Stability**: Use specific stable versions for critical packages (react-native-svg: 15.11.2)
+- **SVG Crashes**: Newer versions of react-native-svg can cause crashes in development builds
+- **Package Updates**: Always test thoroughly when updating native module dependencies
+- **Metro Configuration**: Simplified resolver configuration works better than complex polyfills
+- **Node.js Modules**: Use minimal polyfills - let Metro handle most module resolution automatically

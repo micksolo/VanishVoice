@@ -181,7 +181,7 @@ export class EphemeralMessageService {
   }
 
   /**
-   * Subscribe to message deletion (for hard deletes)
+   * Subscribe to message deletion and expiry updates (for hard deletes and soft deletes)
    */
   static subscribeToMessageDeletion(
     userId: string,
@@ -201,6 +201,22 @@ export class EphemeralMessageService {
           if (payload.old.sender_id === userId || payload.old.recipient_id === userId) {
             console.log('[EphemeralMessage] Message deleted:', payload.old.id);
             callback(payload.old.id);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages',
+          filter: 'expired=eq.true'
+        },
+        (payload) => {
+          // Check if the user is involved in this expired message
+          if (payload.new.sender_id === userId || payload.new.recipient_id === userId) {
+            console.log('[EphemeralMessage] Message expired for user:', payload.new.id);
+            callback(payload.new.id);
           }
         }
       )

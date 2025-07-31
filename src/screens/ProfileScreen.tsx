@@ -28,6 +28,7 @@ import { generateRecoveryCode, saveRecoveryCode, getStoredRecoveryCode } from '.
 import { SafeAreaView, Button, Card, IconButton, Input } from '../components/ui';
 import { ThemeSelector } from '../components/ThemeSelector';
 import { useNavigation } from '@react-navigation/native';
+import messageClearingService from '../services/messageClearingService';
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
@@ -55,6 +56,119 @@ export default function ProfileScreen() {
   const checkNotificationPermissions = async () => {
     const { status } = await Notifications.getPermissionsAsync();
     setNotificationStatus(status);
+  };
+
+  const handleClearAllChats = async () => {
+    Alert.alert(
+      'Clear All Chats',
+      'This will permanently delete ALL your messages. This action cannot be undone. Are you sure?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Clear All',
+          style: 'destructive',
+          onPress: async () => {
+            let isLoading = false;
+            try {
+              if (!user?.id) {
+                Alert.alert('Error', 'User not authenticated. Please sign in again.');
+                return;
+              }
+
+              console.log('[ClearAllChats] Starting clear all operation for user:', user.id);
+              isLoading = true;
+
+              // Show loading indicator
+              Alert.alert(
+                'Clearing Messages', 
+                'Please wait while we clear all your messages...',
+                [],
+                { cancelable: false }
+              );
+              
+              // First, notify all screens to clear their local state immediately
+              console.log('[ClearAllChats] Notifying all screens to clear local state');
+              messageClearingService.notifyMessagesCleared({ userId: user.id });
+              
+              // Small delay to ensure UI updates
+              await new Promise(resolve => setTimeout(resolve, 100));
+              
+              // Use the database function for safer deletion with logging
+              console.log('[ClearAllChats] Calling delete_user_messages function');
+              const { data: deletedCount, error: functionError } = await supabase
+                .rpc('delete_user_messages', { target_user_id: user.id });
+
+              if (functionError) {
+                console.error('[ClearAllChats] Database function error:', functionError);
+                
+                // Fallback to direct deletion if function fails
+                console.log('[ClearAllChats] Attempting fallback direct deletion');
+                const { error: deleteError, count } = await supabase
+                  .from('messages')
+                  .delete({ count: 'exact' })
+                  .or(`sender_id.eq.${user.id},recipient_id.eq.${user.id}`);
+
+                if (deleteError) {
+                  throw new Error(`Database deletion failed: ${deleteError.message}`);
+                }
+                
+                console.log('[ClearAllChats] Fallback deletion completed, count:', count);
+              } else {
+                console.log('[ClearAllChats] Database function completed, deleted count:', deletedCount);
+                
+                // Send final notification with deletion count
+                messageClearingService.notifyMessagesCleared({ 
+                  userId: user.id, 
+                  deletedCount: deletedCount 
+                });
+              }
+
+              // Wait a moment for database changes to propagate
+              await new Promise(resolve => setTimeout(resolve, 500));
+
+              // Navigate back to home screen to ensure fresh state
+              navigation.navigate('Home' as never);
+              
+              isLoading = false;
+              const countMessage = deletedCount && deletedCount > 0 ? ` (${deletedCount} messages deleted)` : '';
+              Alert.alert(
+                'Success', 
+                `All your chat messages have been cleared.${countMessage}`,
+                [{ text: 'OK' }]
+              );
+              
+            } catch (error) {
+              isLoading = false;
+              console.error('[ClearAllChats] Error clearing chats:', error);
+              
+              // Provide more specific error messages
+              let errorMessage = 'Failed to clear messages. Please try again.';
+              if (error instanceof Error) {
+                if (error.message.includes('Access denied')) {
+                  errorMessage = 'Access denied. Please sign out and sign back in.';
+                } else if (error.message.includes('Network')) {
+                  errorMessage = 'Network error. Please check your connection and try again.';
+                } else if (error.message.includes('Policy')) {
+                  errorMessage = 'Permission error. The app may need to be updated.';
+                }
+              }
+              
+              Alert.alert('Error', errorMessage, [
+                { text: 'OK' },
+                { 
+                  text: 'Retry', 
+                  onPress: () => handleClearAllChats() 
+                }
+              ]);
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   const handleNotificationToggle = async () => {
@@ -434,9 +548,20 @@ export default function ProfileScreen() {
             onPress={() => navigation.navigate('EphemeralDemo' as never)}
           >
             <View style={[styles.settingIcon, { backgroundColor: theme.colors.button.primary.background + '20' }]}>
-              <Ionicons name="sparkles-outline" size={20} color={theme.colors.button.primary.background} />
+              <Ionicons name="timer-outline" size={20} color={theme.colors.button.primary.background} />
             </View>
             <Text style={[styles.settingText, theme.typography.bodyLarge, { color: theme.colors.text.primary }]}>Ephemeral Demo</Text>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.text.tertiary} />
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.settingItem, { minHeight: theme.touchTargets.medium }]}
+            onPress={handleClearAllChats}
+          >
+            <View style={[styles.settingIcon, { backgroundColor: theme.colors.status.error + '20' }]}>
+              <Ionicons name="trash-outline" size={20} color={theme.colors.status.error} />
+            </View>
+            <Text style={[styles.settingText, theme.typography.bodyLarge, { color: theme.colors.text.primary }]}>Clear All Chats</Text>
             <Ionicons name="chevron-forward" size={20} color={theme.colors.text.tertiary} />
           </TouchableOpacity>
         </Card>

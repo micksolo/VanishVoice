@@ -21,6 +21,7 @@ import { useAppTheme } from '../contexts/ThemeContext';
 import { Theme } from '../theme';
 import AnonymousEncryption from '../utils/anonymousEncryption';
 import AnonymousAudioStorage from '../utils/anonymousAudioStorage';
+import messageClearingService from '../services/messageClearingService';
 
 interface Message {
   id: string;
@@ -107,11 +108,18 @@ export default function AnonymousChatScreen({ route, navigation }: any) {
       // Then subscribe to new messages
       const unsubscribe = subscribeToMessages();
       
+      // Subscribe to message clearing events
+      const unsubscribeClearing = messageClearingService.subscribeToMessageClearing(() => {
+        console.log('[AnonymousChat] Received message clearing event, clearing local messages');
+        setMessages([]);
+      });
+      
       setLoading(false);
       
       // Return cleanup function
       return () => {
         unsubscribe();
+        unsubscribeClearing();
         if (enc) {
           enc.cleanup();
         }

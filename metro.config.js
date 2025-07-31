@@ -2,7 +2,7 @@ const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
-// Fix for Supabase and other packages that use Node.js modules
+// Simplified resolver for Node.js modules
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (['stream', 'crypto', 'events', 'http', 'https', 'zlib', 'url', 'net', 'tls', 'fs', 'dns'].includes(moduleName)) {
     return {
@@ -10,7 +10,6 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     };
   }
   
-  // Ensure we return `null` and not `undefined` for the default case
   return context.resolveRequest(context, moduleName, platform);
 };
 
@@ -29,7 +28,7 @@ config.watchFolders = [
   // Add any native module directories here if needed
 ];
 
-// Clear Metro cache on start to avoid issues with native modules
-config.resetCache = true;
+// Remove resetCache as it can cause issues with startup
+// config.resetCache = true;
 
 module.exports = config;

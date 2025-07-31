@@ -48,7 +48,7 @@ export default function EphemeralIndicator({
   const getIcon = () => {
     switch (expiryRule.type) {
       case 'view':
-        return hasBeenViewed ? 'eye-off' : 'eye';
+        return hasBeenViewed ? 'radio-button-off' : 'radio-button-on';
       case 'read':
         return hasBeenViewed ? 'mail-open' : 'mail';
       case 'playback':
@@ -137,12 +137,23 @@ export default function EphemeralIndicator({
 
   return (
     <View style={[styles.container, { backgroundColor: getColor() }]}>
-      <Ionicons 
-        name={getIcon()} 
-        size={12} 
-        color={getTextColor()} 
-        style={styles.icon}
-      />
+      {expiryRule.type === 'view' && !hasBeenViewed ? (
+        <View style={styles.viewOnceIconContainer}>
+          <Ionicons 
+            name="radio-button-on" 
+            size={12} 
+            color={getTextColor()} 
+          />
+          <Text style={[styles.viewOnceNumber, { color: getTextColor() }]}>1</Text>
+        </View>
+      ) : (
+        <Ionicons 
+          name={getIcon()} 
+          size={12} 
+          color={getTextColor()} 
+          style={styles.icon}
+        />
+      )}
       <Text style={[
         styles.text, 
         theme.typography.labelSmall,
@@ -168,5 +179,22 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   text: {
+  },
+  viewOnceIconContainer: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 12,
+    height: 12,
+    marginRight: 4,
+  },
+  viewOnceNumber: {
+    position: 'absolute',
+    fontSize: 6,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    top: 1,
+    left: 0,
+    right: 0,
   },
 });

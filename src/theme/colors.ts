@@ -142,6 +142,15 @@ export const lightColors = {
     sentText: palette.white,
     receivedText: palette.gray900,
   },
+  
+  // Ephemeral effects (light theme versions)
+  ephemeral: {
+    glow: palette.purple300,
+    glowIntense: palette.purple500,
+    countdown: palette.blue500,
+    warning: palette.yellow500,
+    danger: palette.red500,
+  },
 };
 
 // Dark mysterious palette for VanishVoice

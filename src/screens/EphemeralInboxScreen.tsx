@@ -31,10 +31,10 @@ import { downloadAndDecryptAudio } from '../utils/encryptedAudioStorage';
 import { downloadAndDecryptE2EAudio } from '../utils/e2eAudioStorage';
 import { downloadAndDecryptAudioCompat } from '../utils/secureE2EAudioStorage';
 import { downloadAndDecryptAudioUniversal } from '../utils/audioDecryptionCompat';
-import ViewingOverlay from '../components/ViewingOverlay';
 import VanishAnimation from '../components/VanishAnimation';
 import { EphemeralMessageService } from '../services/ephemeralMessages';
 import { Message as DBMessage } from '../types/database';
+import messageClearingService from '../services/messageClearingService';
 
 interface Message {
   id: string;
@@ -84,10 +84,10 @@ export default function EphemeralInboxScreen({ navigation }: any) {
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const bounceAnim = useRef(new Animated.Value(1)).current;
   const floatAnim = useRef(new Animated.Value(0)).current;
-  const [viewingMessage, setViewingMessage] = useState<DBMessage | null>(null);
   const [vanishingMessages, setVanishingMessages] = useState<Set<string>>(new Set());
   const expirySubscriptionRef = useRef<any>(null);
   const deletionSubscriptionRef = useRef<any>(null);
+  const clearingSubscriptionRef = useRef<any>(null);
 
   // Floating animation for empty state
   useEffect(() => {
@@ -111,10 +111,11 @@ export default function EphemeralInboxScreen({ navigation }: any) {
     if (user) {
       fetchData();
       
-      // Poll for new messages every 5 seconds
+      // Reduce polling frequency to minimize state issues
+      // Use real-time subscriptions instead of aggressive polling
       const pollInterval = setInterval(() => {
         fetchData();
-      }, 5000);
+      }, 30000); // Poll every 30 seconds instead of 5
 
       return () => clearInterval(pollInterval);
     }
@@ -180,12 +181,23 @@ export default function EphemeralInboxScreen({ navigation }: any) {
       }
     );
 
+    // Subscribe to message clearing events (for "Clear All Chats" functionality)
+    clearingSubscriptionRef.current = messageClearingService.subscribeToMessageClearing(() => {
+      console.log('[EphemeralInboxScreen] Received message clearing event, clearing local messages');
+      setMessages([]);
+      setNewMessageCount(0);
+      setVanishingMessages(new Set());
+    });
+
     return () => {
       if (expirySubscriptionRef.current) {
         expirySubscriptionRef.current.unsubscribe();
       }
       if (deletionSubscriptionRef.current) {
         deletionSubscriptionRef.current.unsubscribe();
+      }
+      if (clearingSubscriptionRef.current) {
+        clearingSubscriptionRef.current();
       }
     };
   }, [user]);
@@ -202,26 +214,36 @@ export default function EphemeralInboxScreen({ navigation }: any) {
         .order('created_at', { ascending: false });
 
       const newCount = count || 0;
+      const currentMessages = messagesData || [];
       
-      // Show alert if new messages arrived
-      if (newCount > newMessageCount && newMessageCount !== 0) {
-        // Animate the message counter
-        Animated.sequence([
-          Animated.timing(bounceAnim, {
-            toValue: 1.3,
-            duration: 200,
-            useNativeDriver: true,
-          }),
-          Animated.timing(bounceAnim, {
-            toValue: 1,
-            duration: 200,
-            useNativeDriver: true,
-          }),
-        ]).start();
+      // Only update state if the data has actually changed
+      if (newCount !== newMessageCount) {
+        // Show alert if new messages arrived
+        if (newCount > newMessageCount && newMessageCount !== 0) {
+          // Animate the message counter
+          Animated.sequence([
+            Animated.timing(bounceAnim, {
+              toValue: 1.3,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+            Animated.timing(bounceAnim, {
+              toValue: 1,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+          ]).start();
+        }
+        setNewMessageCount(newCount);
       }
 
-      setNewMessageCount(newCount);
-      setMessages(messagesData || []);
+      // Only update messages if they've changed (compare by IDs to avoid unnecessary re-renders)
+      const currentMessageIds = messages.map(m => m.id).sort().join(',');
+      const newMessageIds = currentMessages.map(m => m.id).sort().join(',');
+      
+      if (currentMessageIds !== newMessageIds) {
+        setMessages(currentMessages);
+      }
 
       // Fetch friends for sending (both directions)
       // Get people I added as friends
@@ -286,8 +308,8 @@ export default function EphemeralInboxScreen({ navigation }: any) {
         duration: undefined,
       };
 
-      // Show the viewing overlay instead of playing directly
-      setViewingMessage(dbMessage);
+      // Since we removed ViewingOverlay, play messages directly in chat
+      console.log('Ephemeral messages now display inline - this function may no longer be needed');
     } catch (error) {
       console.error('Error preparing message:', error);
       Alert.alert('Error', 'Failed to open message. Please try again.');
@@ -820,16 +842,6 @@ export default function EphemeralInboxScreen({ navigation }: any) {
         onSend={handleSendMessage}
       />
 
-      {/* Viewing Overlay for ephemeral messages */}
-      <ViewingOverlay
-        visible={viewingMessage !== null}
-        message={viewingMessage}
-        onClose={() => setViewingMessage(null)}
-        onMessageExpired={(messageId) => {
-          // Message will be removed by subscription handlers
-          setViewingMessage(null);
-        }}
-      />
     </SafeAreaView>
   );
 }
