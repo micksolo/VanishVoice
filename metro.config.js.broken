@@ -1,0 +1,14 @@
+const { getDefaultConfig } = require('expo/metro-config');
+
+// EMERGENCY FIX: Use minimal Metro config to resolve Babel runtime errors
+const config = getDefaultConfig(__dirname);
+
+// Only add essential polyfill for WebSocket
+config.resolver.extraNodeModules = {
+  ws: require.resolve('./src/utils/ws-polyfill.js'),
+};
+
+// Keep SVG support disabled as before
+config.resolver.assetExts = config.resolver.assetExts.filter(ext => !['svg'].includes(ext));
+
+module.exports = config;

@@ -1,5 +1,5 @@
-import { Video } from 'react-native-compressor';
 import * as FileSystem from 'expo-file-system';
+import { getCompressor, isExpoGo, getExpoGoLimitationMessage } from './expoGoCompat';
 
 export interface CompressionOptions {
   width?: number;
@@ -56,14 +56,22 @@ export async function compressVideo(
     }
     const originalSize = originalFileInfo.size || 0;
 
-    // Log compression attempt
-    console.log(`Starting video compression:
-      Original size: ${(originalSize / 1024 / 1024).toFixed(2)}MB
-      Target bitrate: ${mergedOptions.bitrate! / 1000000}Mbps
-      Target resolution: ${mergedOptions.width}x${mergedOptions.height}`);
+    // Get compressor (real or mock depending on environment)
+    const compressor = await getCompressor();
+
+    // Show Expo Go limitation warning if applicable
+    if (isExpoGo) {
+      console.warn('🚧 Video compression in Expo Go mode - using original video');
+    } else {
+      // Log compression attempt
+      console.log(`Starting video compression:
+        Original size: ${(originalSize / 1024 / 1024).toFixed(2)}MB
+        Target bitrate: ${mergedOptions.bitrate! / 1000000}Mbps
+        Target resolution: ${mergedOptions.width}x${mergedOptions.height}`);
+    }
 
     // Compress the video
-    const compressedUri = await Video.compress(
+    const compressedUri = await compressor.Video.compress(
       videoUri,
       {
         compressionMethod: mergedOptions.compressionMethod,
@@ -94,18 +102,24 @@ export async function compressVideo(
     }
     const compressedSize = compressedFileInfo.size || 0;
 
-    const compressionRatio = ((originalSize - compressedSize) / originalSize) * 100;
+    const compressionRatio = isExpoGo ? 0 : ((originalSize - compressedSize) / originalSize) * 100;
     const duration = Date.now() - startTime;
 
-    console.log(`Video compression complete:
-      Compressed size: ${(compressedSize / 1024 / 1024).toFixed(2)}MB
-      Compression ratio: ${compressionRatio.toFixed(1)}%
-      Duration: ${(duration / 1000).toFixed(1)}s`);
+    if (isExpoGo) {
+      console.log(`Video compression skipped (Expo Go mode):
+        Original size: ${(originalSize / 1024 / 1024).toFixed(2)}MB
+        Duration: ${(duration / 1000).toFixed(1)}s`);
+    } else {
+      console.log(`Video compression complete:
+        Compressed size: ${(compressedSize / 1024 / 1024).toFixed(2)}MB
+        Compression ratio: ${compressionRatio.toFixed(1)}%
+        Duration: ${(duration / 1000).toFixed(1)}s`);
+    }
 
     return {
       uri: compressedUri,
       originalSize,
-      compressedSize,
+      compressedSize: isExpoGo ? originalSize : compressedSize,
       compressionRatio,
       duration,
     };

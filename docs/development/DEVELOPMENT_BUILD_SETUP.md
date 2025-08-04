@@ -145,12 +145,40 @@ npx expo start --clear
    npx expo start --tunnel
    ```
 
+## Expo Go vs Development Build
+
+### Features Available in Expo Go
+✅ Text messaging and basic UI features  
+✅ Camera functionality (expo-camera)  
+✅ Audio recording and playback (expo-av)  
+✅ File system operations (expo-file-system)  
+✅ Basic encryption features  
+
+### Features Requiring Development Build
+❌ Video compression (react-native-compressor)  
+❌ Push notifications (removed from Expo Go in SDK 53)  
+❌ Advanced background processing  
+❌ Custom native modules  
+
+### Current Status
+The app now includes **Expo Go compatibility layer** that:
+- Automatically detects the runtime environment
+- Provides fallback implementations for native modules
+- Shows helpful warnings when features aren't available
+- Allows basic testing in Expo Go while preserving full functionality in development builds
+
+### Testing Strategy
+1. **Quick iteration**: Use Expo Go for UI changes and basic feature testing
+2. **Full testing**: Use development builds for testing native module features
+3. **Production testing**: Always test production builds before release
+
 ## Important Notes
 
 - Development builds are larger than Expo Go apps
 - You need to rebuild when adding/removing native modules
 - Keep development and production configurations separate
 - Test on both iOS and Android before considering features complete
+- The app gracefully handles Expo Go limitations with helpful error messages
 
 ## Next Steps
 

@@ -4,6 +4,7 @@
     "slug": "VanishVoice",
     "owner": "micksolo",
     "version": "1.0.0",
+    "main": "index.js",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -35,7 +36,7 @@
       "permissions": [
         "RECORD_AUDIO",
         "CAMERA"
-      ],
+      ]
     },
     "notification": {
       "icon": "./assets/icon.png",

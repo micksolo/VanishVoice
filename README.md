@@ -55,7 +55,7 @@ Sender Device                    Server                    Recipient Device
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 18+ (automatic version switching configured - see [Node Version Isolation](./docs/setup/NODE_VERSION_ISOLATION.md))
 - Expo CLI
 - iOS Simulator (Mac) or Android Emulator
 - Supabase account
@@ -138,6 +138,7 @@ VanishVoice/
 For detailed documentation, see the [`/docs`](./docs) directory:
 - [Security Implementation](./docs/security/NACL_IMPLEMENTATION_GUIDE.md)
 - [Setup Guide](./docs/setup/SETUP.md)
+- [Node Version Isolation](./docs/setup/NODE_VERSION_ISOLATION.md)
 - [Development Guide](./docs/development/PROJECT_STATUS.md)
 - [Troubleshooting](./docs/troubleshooting/)
 

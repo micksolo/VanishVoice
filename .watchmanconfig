@@ -1,0 +1,13 @@
+{
+  "ignore_dirs": [
+    "node_modules",
+    ".git",
+    ".expo",
+    ".next",
+    "coverage",
+    "build",
+    "dist",
+    ".vscode",
+    ".idea"
+  ]
+}

@@ -3,15 +3,20 @@ import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
 import Constants from 'expo-constants';
+import { isExpoGo } from './expoGoCompat';
 
-// Configure notification handler
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+// Configure notification handler (skip in Expo Go as notifications are not available)
+if (!isExpoGo) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
+} else {
+  console.warn('🚧 Push notifications not available in Expo Go (removed in SDK 53)');
+}
 
 export interface MessageNotificationData {
   type: 'new_message' | 'friend_request';
@@ -87,6 +92,11 @@ export async function sendFriendRequestNotification(
 
 // Handle notification interactions
 export function setupNotificationHandlers(navigation: any) {
+  if (isExpoGo) {
+    console.warn('🚧 Notification handlers not available in Expo Go');
+    return () => {}; // Return empty cleanup function
+  }
+
   // Handle notifications when app is in foreground
   const foregroundSubscription = Notifications.addNotificationReceivedListener(
     (notification) => {
@@ -129,6 +139,11 @@ export function setupNotificationHandlers(navigation: any) {
 
 // Update badge count
 export async function updateBadgeCount(count: number) {
+  if (isExpoGo) {
+    console.warn('🚧 Badge count not available in Expo Go');
+    return;
+  }
+  
   try {
     await Notifications.setBadgeCountAsync(count);
   } catch (error) {
@@ -138,6 +153,11 @@ export async function updateBadgeCount(count: number) {
 
 // Register for push notifications
 async function registerForPushNotifications(userId: string): Promise<string | null> {
+  if (isExpoGo) {
+    console.warn('🚧 Push notification registration not available in Expo Go (removed in SDK 53)');
+    return null;
+  }
+  
   try {
     // Check if we're on a physical device
     if (!Device.isDevice) {
