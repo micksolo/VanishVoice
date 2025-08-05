@@ -3,19 +3,43 @@
  * Based on the style guide with purple accent (#6C63FF)
  */
 
-// Base color palette
+// Base color palette - "Neon Nights" Theme
 const palette = {
-  // Primary - Purple accent
-  purple50: '#F3F2FF',
-  purple100: '#E9E7FF',
-  purple200: '#D4D0FF',
-  purple300: '#B8B2FF',
-  purple400: '#9A91FF',
-  purple500: '#6C63FF', // Main accent
-  purple600: '#5A51E6',
-  purple700: '#4940CC',
-  purple800: '#3A32A6',
-  purple900: '#2B2580',
+  // Primary - Electric Purple (upgraded from #6C63FF)
+  purple50: '#F3F1FF',
+  purple100: '#E9E4FF',
+  purple200: '#D6CAFF',
+  purple300: '#C1A8FF',
+  purple400: '#AC80FF',
+  purple500: '#B026FF', // NEW: Electric Purple (upgraded main accent)
+  purple600: '#9D1FE6',
+  purple700: '#8518CC',
+  purple800: '#6B12A6',
+  purple900: '#520E80',
+
+  // Neon accent colors
+  neonPink50: '#FFF1F8',
+  neonPink100: '#FFE2F0',
+  neonPink200: '#FFC6E1',
+  neonPink300: '#FF9FCA',
+  neonPink400: '#FF67AB',
+  neonPink500: '#FF1B8D', // NEW: Neon Pink accent
+  neonPink600: '#E6187F',
+  neonPink700: '#CC1571',
+  neonPink800: '#A6115C',
+  neonPink900: '#800D47',
+
+  // Cyber blue colors
+  cyberBlue50: '#F0FDFF',
+  cyberBlue100: '#E0FBFF',
+  cyberBlue200: '#B8F5FF',
+  cyberBlue300: '#85ECFF',
+  cyberBlue400: '#42E0FF',
+  cyberBlue500: '#00D9FF', // NEW: Cyber Blue accent
+  cyberBlue600: '#00C3E6',
+  cyberBlue700: '#00AECC',
+  cyberBlue800: '#008FA6',
+  cyberBlue900: '#006B80',
 
   // Neutrals
   gray50: '#FAFAFA',
@@ -65,7 +89,9 @@ export const lightColors = {
     tertiary: palette.gray500,
     disabled: palette.gray400,
     inverse: palette.white,
-    accent: palette.purple600,
+    accent: palette.purple500, // Updated to use new electric purple
+    accentSecondary: palette.neonPink500, // NEW: Neon pink for highlights
+    accentTertiary: palette.cyberBlue500, // NEW: Cyber blue for success states
     error: palette.red600,
     success: palette.green600,
     warning: palette.yellow600,
@@ -74,7 +100,7 @@ export const lightColors = {
   // Border colors
   border: {
     default: palette.gray200,
-    focus: palette.purple500,
+    focus: palette.purple500, // Uses new electric purple
     error: palette.red500,
     subtle: palette.gray100,
   },
@@ -82,9 +108,9 @@ export const lightColors = {
   // Component specific
   button: {
     primary: {
-      background: palette.purple500,
+      background: palette.purple500, // Uses new electric purple
       text: palette.white,
-      pressed: palette.purple600,
+      pressed: palette.purple600, // Uses updated darker purple
       disabled: palette.purple200,
     },
     secondary: {
@@ -95,13 +121,13 @@ export const lightColors = {
     },
     tertiary: {
       background: palette.transparent,
-      text: palette.purple600,
+      text: palette.purple500, // Uses new electric purple
       pressed: palette.purple50,
       disabled: palette.gray300,
     },
     ghost: {
       background: palette.transparent,
-      text: palette.purple600,
+      text: palette.purple500, // Uses new electric purple
       pressed: palette.purple50,
       disabled: palette.gray300,
     },
@@ -137,23 +163,25 @@ export const lightColors = {
 
   // Chat specific
   chat: {
-    sent: palette.purple500,
+    sent: palette.purple500, // Uses new electric purple
     received: palette.gray100,
     sentText: palette.white,
     receivedText: palette.gray900,
   },
   
-  // Ephemeral effects (light theme versions)
+  // Ephemeral effects (light theme versions) - Enhanced with neon colors
   ephemeral: {
-    glow: palette.purple300,
-    glowIntense: palette.purple500,
-    countdown: palette.blue500,
+    glow: palette.purple300, // Uses new purple palette
+    glowIntense: palette.purple500, // Uses new electric purple
+    neonPinkGlow: palette.neonPink300, // NEW: Neon pink glow
+    cyberBlueGlow: palette.cyberBlue300, // NEW: Cyber blue glow
+    countdown: palette.cyberBlue500, // Uses cyber blue for countdown
     warning: palette.yellow500,
     danger: palette.red500,
   },
 };
 
-// Dark mysterious palette for VanishVoice
+// Dark mysterious palette for VanishVoice - "Neon Nights" Dark Theme
 const darkPalette = {
   // Deep blacks with slight tint
   black900: '#0A0A0F',  // Almost black with blue tint
@@ -161,13 +189,20 @@ const darkPalette = {
   black700: '#1A1A24',  // Card backgrounds
   black600: '#22222E',  // Elevated surfaces
   
-  // Vibrant purples for accent and glow
-  purple400: '#A78BFA',  // Light purple for glow
-  purple500: '#8B5CF6',  // Main vibrant purple
-  purple600: '#7C3AED',  // Slightly darker
-  purple700: '#6D28D9',  // Dark purple
+  // Electric purples for accent and glow (updated)
+  purple300: '#C1A8FF',  // Light purple for glow
+  purple400: '#AC80FF',  // Medium purple
+  purple500: '#B026FF',  // NEW: Electric purple (main accent)
+  purple600: '#9D1FE6',  // Slightly darker
+  purple700: '#8518CC',  // Dark purple
   
-  // Mysterious teals
+  // Neon accents for dark theme
+  neonPink400: '#FF67AB', // Neon pink for highlights
+  neonPink500: '#FF1B8D', // Full intensity neon pink
+  cyberBlue400: '#42E0FF', // Cyber blue for accents
+  cyberBlue500: '#00D9FF', // Full intensity cyber blue
+  
+  // Mysterious teals (now used as secondary accents)
   teal400: '#2DD4BF',
   teal500: '#14B8A6',
   teal600: '#0D9488',
@@ -184,14 +219,16 @@ export const darkColors = {
     overlay: 'rgba(0, 0, 0, 0.85)',
   },
 
-  // Text colors
+  // Text colors - Enhanced with neon accents
   text: {
     primary: palette.gray50,
     secondary: palette.gray300,
     tertiary: palette.gray400,
     disabled: palette.gray500,
     inverse: palette.gray900,
-    accent: palette.purple400,
+    accent: darkPalette.purple500, // NEW: Electric purple accent
+    accentSecondary: darkPalette.neonPink500, // NEW: Neon pink for highlights
+    accentTertiary: darkPalette.cyberBlue500, // NEW: Cyber blue for success states
     error: palette.red500,
     success: palette.green500,
     warning: palette.yellow500,
@@ -200,7 +237,7 @@ export const darkColors = {
   // Border colors
   border: {
     default: palette.gray700,
-    focus: palette.purple400,
+    focus: darkPalette.purple500, // Uses new electric purple
     error: palette.red500,
     subtle: palette.gray800,
   },
@@ -208,9 +245,9 @@ export const darkColors = {
   // Component specific
   button: {
     primary: {
-      background: palette.purple500,
+      background: darkPalette.purple500, // Uses new electric purple
       text: palette.white,
-      pressed: palette.purple400,
+      pressed: darkPalette.purple400, // Lighter on press for dark theme
       disabled: palette.purple900,
     },
     secondary: {
@@ -221,14 +258,14 @@ export const darkColors = {
     },
     tertiary: {
       background: palette.transparent,
-      text: palette.purple400,
-      pressed: 'rgba(108, 99, 255, 0.1)',
+      text: darkPalette.purple500, // Uses new electric purple
+      pressed: 'rgba(176, 38, 255, 0.1)', // Updated pressed color for new purple
       disabled: palette.gray600,
     },
     ghost: {
       background: palette.transparent,
-      text: palette.purple400,
-      pressed: 'rgba(108, 99, 255, 0.1)',
+      text: darkPalette.purple500, // Uses new electric purple
+      pressed: 'rgba(176, 38, 255, 0.1)', // Updated pressed color for new purple
       disabled: palette.gray600,
     },
     danger: {
@@ -263,20 +300,49 @@ export const darkColors = {
 
   // Chat specific
   chat: {
-    sent: darkPalette.purple500,
+    sent: darkPalette.purple500, // Uses new electric purple
     received: darkPalette.black700,
     sentText: palette.white,
     receivedText: palette.gray50,
   },
   
-  // Ephemeral effects
+  // Ephemeral effects - Enhanced with neon colors
   ephemeral: {
-    glow: darkPalette.purple400,
-    glowIntense: darkPalette.purple500,
-    countdown: darkPalette.teal500,
+    glow: darkPalette.purple400, // Uses new purple palette
+    glowIntense: darkPalette.purple500, // Uses new electric purple
+    neonPinkGlow: darkPalette.neonPink400, // NEW: Neon pink glow for dark theme
+    cyberBlueGlow: darkPalette.cyberBlue400, // NEW: Cyber blue glow for dark theme
+    countdown: darkPalette.cyberBlue500, // Uses cyber blue for countdown
     warning: palette.yellow500,
     danger: palette.red500,
   },
 };
 
-export type Colors = typeof lightColors;
+// Neon colors object that can be accessed via theme.colors.neon
+export const neonColors = {
+  electricPurple: '#B026FF',
+  neonPink: '#FF1B8D', 
+  cyberBlue: '#00D9FF',
+  matrixGreen: '#39FF14', // Adding matrix green for completeness
+} as const;
+
+// Add neon to light colors
+export const lightColorsWithNeon = {
+  ...lightColors,
+  neon: neonColors,
+};
+
+// Add neon to dark colors  
+export const darkColorsWithNeon = {
+  ...darkColors,
+  neon: neonColors,
+};
+
+export type Colors = typeof lightColorsWithNeon;
+
+// Export the new neon color constants for direct use
+export const NEON_COLORS = {
+  ELECTRIC_PURPLE: '#B026FF',
+  NEON_PINK: '#FF1B8D', 
+  CYBER_BLUE: '#00D9FF',
+} as const;

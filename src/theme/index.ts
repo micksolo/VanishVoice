@@ -3,7 +3,7 @@
  * Exports the complete theme object with all design tokens
  */
 
-import { lightColors, darkColors, Colors } from './colors';
+import { lightColorsWithNeon, darkColorsWithNeon, Colors } from './colors';
 import { typography, Typography } from './typography';
 import { spacing, layout, touchTargets, Spacing } from './spacing';
 
@@ -72,7 +72,7 @@ export interface Theme {
 
 // Light theme
 export const lightTheme: Theme = {
-  colors: lightColors,
+  colors: lightColorsWithNeon,
   typography,
   spacing,
   layout,
@@ -85,7 +85,7 @@ export const lightTheme: Theme = {
 
 // Dark theme
 export const darkTheme: Theme = {
-  colors: darkColors,
+  colors: darkColorsWithNeon,
   typography,
   spacing,
   layout,
@@ -97,5 +97,5 @@ export const darkTheme: Theme = {
 };
 
 // Re-export individual modules
-export { lightColors, darkColors, typography, spacing, layout, touchTargets };
+export { lightColorsWithNeon, darkColorsWithNeon, typography, spacing, layout, touchTargets };
 export type { Colors, Typography, Spacing };
