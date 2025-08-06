@@ -8,9 +8,9 @@ import {
   Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { ExpiryRule } from '../types/database';
-import IntegratedCountdown from './IntegratedCountdown';
 import BlurredMessage from './BlurredMessage';
 
 interface EphemeralMessageBubbleProps {
@@ -26,6 +26,7 @@ interface EphemeralMessageBubbleProps {
   style?: ViewStyle;
   messageType?: 'text' | 'voice' | 'video' | 'image';
   blurBeforeView?: boolean;
+  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
 }
 
 export default function EphemeralMessageBubble({
@@ -41,10 +42,25 @@ export default function EphemeralMessageBubble({
   style,
   messageType = 'text',
   blurBeforeView = true,
+  status = 'sent',
 }: EphemeralMessageBubbleProps) {
   const theme = useAppTheme();
   const [isRevealed, setIsRevealed] = useState(!blurBeforeView || hasBeenViewed);
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  
+  // Animation values for pop-in effect
+  const scaleAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const [hasAnimated, setHasAnimated] = useState(false);
+  
+  // Reaction animation values
+  const [showHeart, setShowHeart] = useState(false);
+  const [hasReaction, setHasReaction] = useState(false); // Persistent reaction state
+  const heartScale = useRef(new Animated.Value(0)).current;
+  const heartOpacity = useRef(new Animated.Value(0)).current;
+  const heartY = useRef(new Animated.Value(0)).current;
+  const persistentHeartScale = useRef(new Animated.Value(0)).current; // For sticky heart
+  const [lastTap, setLastTap] = useState(0);
   
   // Calculate remaining time for time-based expiry
   const getRemainingSeconds = () => {
@@ -60,6 +76,34 @@ export default function EphemeralMessageBubble({
     return Math.ceil(remainingMs / 1000);
   };
   
+  // Pop-in animation when message first appears
+  useEffect(() => {
+    if (!hasAnimated) {
+      // Stagger the animation slightly for different message types
+      const delay = messageType === 'text' ? 0 : messageType === 'voice' ? 100 : 200;
+      
+      setTimeout(() => {
+        Animated.parallel([
+          // Scale animation with spring physics
+          Animated.spring(scaleAnim, {
+            toValue: 1,
+            tension: 300,
+            friction: 10,
+            useNativeDriver: true,
+          }),
+          // Slide animation
+          Animated.timing(slideAnim, {
+            toValue: 0,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+        ]).start();
+        
+        setHasAnimated(true);
+      }, delay);
+    }
+  }, [hasAnimated, messageType]);
+
   // Animate fade when message has been viewed (for sender)
   useEffect(() => {
     if (isMine && hasBeenViewed && expiryRule?.type === 'view') {
@@ -71,6 +115,100 @@ export default function EphemeralMessageBubble({
     }
   }, [hasBeenViewed, isMine, expiryRule?.type]);
 
+
+  const handlePress = () => {
+    const now = Date.now();
+    const DOUBLE_TAP_DELAY = 300;
+    
+    if (now - lastTap < DOUBLE_TAP_DELAY) {
+      // Double tap detected - trigger heart reaction
+      handleDoubleTab();
+    } else {
+      // Single tap - add spring animation and reveal
+      Animated.sequence([
+        Animated.spring(scaleAnim, {
+          toValue: 0.95,
+          tension: 400,
+          friction: 10,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          tension: 400,
+          friction: 10,
+          useNativeDriver: true,
+        }),
+      ]).start();
+      
+      setIsRevealed(true);
+      onPress?.();
+    }
+    
+    setLastTap(now);
+  };
+  
+  const handleDoubleTab = () => {
+    // Trigger haptic feedback
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    // Toggle reaction state
+    const newReactionState = !hasReaction;
+    setHasReaction(newReactionState);
+    
+    if (newReactionState) {
+      // Show floating heart animation for feedback
+      setShowHeart(true);
+      
+      // Reset floating animation values
+      heartScale.setValue(0);
+      heartOpacity.setValue(1);
+      heartY.setValue(0);
+      
+      // Run floating heart animation (quick feedback)
+      Animated.parallel([
+        Animated.spring(heartScale, {
+          toValue: 1.2,
+          tension: 200,
+          friction: 5,
+          useNativeDriver: true,
+        }),
+        Animated.timing(heartOpacity, {
+          toValue: 0,
+          duration: 1000, // Shorter duration
+          useNativeDriver: true,
+        }),
+        Animated.timing(heartY, {
+          toValue: -30, // Less distance
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        setShowHeart(false);
+      });
+      
+      // Animate persistent heart in
+      Animated.spring(persistentHeartScale, {
+        toValue: 1,
+        tension: 300,
+        friction: 10,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      // Animate persistent heart out
+      Animated.spring(persistentHeartScale, {
+        toValue: 0,
+        tension: 300,
+        friction: 10,
+        useNativeDriver: true,
+      }).start();
+    }
+    
+    // Also trigger the message reveal if not already revealed
+    if (!isRevealed) {
+      setIsRevealed(true);
+      onPress?.();
+    }
+  };
 
   const handleReveal = () => {
     setIsRevealed(true);
@@ -128,6 +266,10 @@ export default function EphemeralMessageBubble({
         {
           alignSelf: isMine ? 'flex-end' : 'flex-start',
           opacity: fadeAnim,
+          transform: [
+            { scale: scaleAnim },
+            { translateY: slideAnim }
+          ],
         },
         style,
       ]}
@@ -144,9 +286,9 @@ export default function EphemeralMessageBubble({
               marginRight: isMine ? 0 : 50,
             },
           ]}
-          onPress={handleReveal}
-          activeOpacity={0.8}
-          disabled={isExpired || (isRevealed && !onPress)}
+          onPress={handlePress}
+          activeOpacity={1} // Remove default opacity change since we handle animations
+          disabled={isExpired}
         >
           {/* Message content - blur if not revealed */}
           {!isRevealed && blurBeforeView ? (
@@ -180,32 +322,98 @@ export default function EphemeralMessageBubble({
                   {content}
                 </Text>
               )}
+              
+              {/* Persistent heart reaction */}
+              {hasReaction && (
+                <Animated.View
+                  style={[
+                    styles.persistentHeart,
+                    {
+                      transform: [{ scale: persistentHeartScale }],
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name="heart"
+                    size={16}
+                    color={theme.colors.text.accentSecondary || '#FF1B8D'}
+                  />
+                </Animated.View>
+              )}
             </>
           )}
 
           {/* Bottom row with timestamp and countdown */}
           <View style={styles.bottomRow}>
-            <Text
-              style={[
-                styles.timestamp,
-                theme.typography.labelSmall,
-                { color: getTextColor() + '80' },
-              ]}
-            >
-              {formatTime(timestamp)}
-            </Text>
+            <View style={styles.timestampContainer}>
+              <Text
+                style={[
+                  styles.timestamp,
+                  theme.typography.labelSmall,
+                  { color: getTextColor() + '80' },
+                ]}
+              >
+                {formatTime(timestamp)}
+              </Text>
+              
+              {/* Read receipt indicators (only for sent messages) */}
+              {isMine && (
+                <View style={styles.statusIndicator}>
+                  {status === 'sending' && (
+                    <Ionicons
+                      name="time-outline"
+                      size={10}
+                      color={getTextColor() + '60'}
+                    />
+                  )}
+                  {status === 'sent' && (
+                    <Ionicons
+                      name="checkmark"
+                      size={10}
+                      color={getTextColor() + '60'}
+                    />
+                  )}
+                  {status === 'delivered' && (
+                    <>
+                      <Ionicons
+                        name="checkmark"
+                        size={10}
+                        color={getTextColor() + '60'}
+                        style={{ marginLeft: -4 }}
+                      />
+                      <Ionicons
+                        name="checkmark"
+                        size={10}
+                        color={getTextColor() + '60'}
+                      />
+                    </>
+                  )}
+                  {status === 'read' && (
+                    <>
+                      <Ionicons
+                        name="checkmark"
+                        size={10}
+                        color={theme.colors.text.accent}
+                        style={{ marginLeft: -4 }}
+                      />
+                      <Ionicons
+                        name="checkmark"
+                        size={10}
+                        color={theme.colors.text.accent}
+                      />
+                    </>
+                  )}
+                  {status === 'failed' && (
+                    <Ionicons
+                      name="alert-circle-outline"
+                      size={10}
+                      color={theme.colors.text.error || '#ff3b30'}
+                    />
+                  )}
+                </View>
+              )}
+            </View>
 
-            {/* Integrated countdown for time-based expiry */}
-            {expiryRule?.type === 'time' && !isExpired && isRevealed && (
-              <IntegratedCountdown
-                duration={getRemainingSeconds()}
-                size={16}
-                strokeWidth={2}
-                showText={false}
-                onExpire={handleExpire}
-                color={isMine ? theme.colors.text.inverse : theme.colors.ephemeral?.countdown}
-              />
-            )}
 
             {/* View once indicator or viewed status */}
             {(expiryRule?.type === 'view' || expiryRule?.type === 'playback') && (
@@ -279,6 +487,29 @@ export default function EphemeralMessageBubble({
             </Text>
           </View>
         )}
+
+        {/* Heart reaction animation */}
+        {showHeart && (
+          <Animated.View
+            style={[
+              styles.heartReaction,
+              {
+                opacity: heartOpacity,
+                transform: [
+                  { scale: heartScale },
+                  { translateY: heartY }
+                ],
+              },
+            ]}
+            pointerEvents="none"
+          >
+            <Ionicons
+              name="heart"
+              size={32}
+              color={theme.colors.text.accentSecondary || '#FF1B8D'} // Use neon pink for heart
+            />
+          </Animated.View>
+        )}
     </Animated.View>
   );
 }
@@ -323,8 +554,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: 4,
   },
+  timestampContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   timestamp: {
     fontSize: 11,
+  },
+  statusIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 1,
   },
   viewOnceIndicator: {
     position: 'relative',
@@ -385,5 +626,32 @@ const styles = StyleSheet.create({
     top: 0.5,
     left: 0,
     right: 0,
+  },
+  heartReaction: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    marginTop: -16,
+    marginLeft: -16,
+    zIndex: 1000,
+    shadowColor: '#FF1B8D',
+    shadowOpacity: 0.6,
+    shadowRadius: 6,
+    elevation: 10,
+  },
+  persistentHeart: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#FF1B8D',
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 3,
   },
 });

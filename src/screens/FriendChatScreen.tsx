@@ -15,6 +15,7 @@ import {
   Pressable,
   TouchableWithoutFeedback,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import * as Haptics from 'expo-haptics';
@@ -48,6 +49,9 @@ import { Video, ResizeMode } from 'expo-av';
 import messageClearingService from '../services/messageClearingService';
 import { filterExpiredMessages, areMessageArraysEquivalent } from '../utils/messageFiltering';
 import { computeMessageStatus } from '../utils/messageStatus';
+
+// Storage key for persisting user's privacy preference
+const PRIVACY_PREFERENCE_KEY = '@wyd_privacy_preference';
 
 interface Message {
   id: string;
@@ -98,6 +102,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
   const [recordButtonGlow] = useState(new Animated.Value(0));
   const [showExpirySelector, setShowExpirySelector] = useState(false);
   const [currentExpiryRule, setCurrentExpiryRule] = useState<ExpiryRule>({ type: 'view', disappear_after_view: true });
+  const [privacyPreferenceLoaded, setPrivacyPreferenceLoaded] = useState(false);
   const [messageTypeForExpiry, setMessageTypeForExpiry] = useState<'text' | 'voice' | 'video'>('text');
   
   const [sound, setSound] = useState<Audio.Sound | null>(null);
@@ -108,10 +113,38 @@ export default function FriendChatScreen({ route, navigation }: any) {
   const lastMessageCount = useRef<number>(0);
   const isRecordingRef = useRef<boolean>(false);
 
+  // Load user's privacy preference on component mount
+  useEffect(() => {
+    const loadPrivacyPreference = async () => {
+      try {
+        console.log('[FriendChat] Loading privacy preference from AsyncStorage...');
+        const storedPreference = await AsyncStorage.getItem(PRIVACY_PREFERENCE_KEY);
+        console.log('[FriendChat] Raw stored preference:', storedPreference);
+        
+        if (storedPreference) {
+          const parsedPreference = JSON.parse(storedPreference) as ExpiryRule;
+          console.log('[FriendChat] Successfully parsed preference:', JSON.stringify(parsedPreference));
+          setCurrentExpiryRule(parsedPreference);
+          console.log('[FriendChat] Privacy preference applied to state');
+        } else {
+          console.log('[FriendChat] No stored preference found, keeping default view-once');
+        }
+      } catch (error) {
+        console.error('[FriendChat] Error loading privacy preference:', error);
+        console.log('[FriendChat] Keeping default view-once due to error');
+      } finally {
+        setPrivacyPreferenceLoaded(true);
+        console.log('[FriendChat] Privacy preference loading completed');
+      }
+    };
+    
+    loadPrivacyPreference();
+  }, []);
+
   useEffect(() => {
     let cleanup: (() => void) | undefined;
     
-    if (user && friendId) {
+    if (user && friendId && privacyPreferenceLoaded) {
       initializeChat().then((cleanupFn) => {
         cleanup = cleanupFn;
       });
@@ -122,7 +155,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
         cleanup();
       }
     };
-  }, [user, friendId]);
+  }, [user, friendId, privacyPreferenceLoaded]);
 
   useEffect(() => {
     // Cleanup audio on unmount
@@ -132,6 +165,28 @@ export default function FriendChatScreen({ route, navigation }: any) {
       }
     };
   }, [sound]);
+
+  // Function to save privacy preference to AsyncStorage
+  const savePrivacyPreference = async (rule: ExpiryRule) => {
+    try {
+      const ruleString = JSON.stringify(rule);
+      console.log('[FriendChat] Saving privacy preference:', ruleString);
+      await AsyncStorage.setItem(PRIVACY_PREFERENCE_KEY, ruleString);
+      console.log('[FriendChat] Successfully saved privacy preference to AsyncStorage');
+      
+      // Verify the save by reading it back
+      const verification = await AsyncStorage.getItem(PRIVACY_PREFERENCE_KEY);
+      console.log('[FriendChat] Verification read:', verification);
+    } catch (error) {
+      console.error('[FriendChat] Error saving privacy preference:', error);
+    }
+  };
+
+  // Enhanced function to update privacy rule and persist it
+  const updatePrivacyRule = async (rule: ExpiryRule) => {
+    setCurrentExpiryRule(rule);
+    await savePrivacyPreference(rule);
+  };
 
   const initializeChat = async () => {
     try {
@@ -655,8 +710,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
         )
       );
       
-      // Reset expiry rule to default view-once after successful send
-      setCurrentExpiryRule({ type: 'view', disappear_after_view: true });
+      // Privacy preference is now persisted - no reset needed
 
     } catch (error) {
       console.error('Error sending message:', error);
@@ -898,8 +952,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
         setMessages(prev => prev.filter(msg => msg.id !== tempId));
         setUploadingMessageId(null);
       
-      // Reset expiry rule to default view-once after successful send
-      setCurrentExpiryRule({ type: 'view', disappear_after_view: true });
+      // Privacy preference is now persisted - no reset needed
         
         // Send the actual message
         await handleVoiceSend(
@@ -920,8 +973,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
         );
         setUploadingMessageId(null);
       
-      // Reset expiry rule to default view-once after successful send
-      setCurrentExpiryRule({ type: 'view', disappear_after_view: true });
+      // Privacy preference is now persisted - no reset needed
         Alert.alert('Error', 'Failed to upload voice message');
       }
     } catch (error) {
@@ -980,8 +1032,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
         );
         setUploadingMessageId(null);
       
-      // Reset expiry rule to default view-once after successful send
-      setCurrentExpiryRule({ type: 'view', disappear_after_view: true });
+      // Privacy preference is now persisted - no reset needed
         Alert.alert('Error', 'Failed to send voice message');
         return;
       }
@@ -1000,8 +1051,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
       );
       setUploadingMessageId(null);
       
-      // Reset expiry rule to default view-once after successful send
-      setCurrentExpiryRule({ type: 'view', disappear_after_view: true });
+      // Privacy preference is now persisted - no reset needed
 
       // Send push notification
       try {
@@ -1080,8 +1130,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
         );
         setUploadingMessageId(null);
       
-      // Reset expiry rule to default view-once after successful send
-      setCurrentExpiryRule({ type: 'view', disappear_after_view: true });
+      // Privacy preference is now persisted - no reset needed
         Alert.alert('Error', 'Failed to send video message');
         return;
       }
@@ -1100,8 +1149,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
       );
       setUploadingMessageId(null);
       
-      // Reset expiry rule to default view-once after successful send
-      setCurrentExpiryRule({ type: 'view', disappear_after_view: true });
+      // Privacy preference is now persisted - no reset needed
 
       // Send push notification
       try {
@@ -1202,8 +1250,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
         );
         setUploadingMessageId(null);
       
-      // Reset expiry rule to default view-once after successful send
-      setCurrentExpiryRule({ type: 'view', disappear_after_view: true });
+      // Privacy preference is now persisted - no reset needed
         Alert.alert('Error', 'Failed to upload video');
       }
     } catch (error: any) {
@@ -1218,8 +1265,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
       );
       setUploadingMessageId(null);
       
-      // Reset expiry rule to default view-once after successful send
-      setCurrentExpiryRule({ type: 'view', disappear_after_view: true });
+      // Privacy preference is now persisted - no reset needed
       
       // Provide specific error messages based on error type
       let errorMessage = 'Failed to send video message. Please try again.';
@@ -1245,18 +1291,10 @@ export default function FriendChatScreen({ route, navigation }: any) {
         throw new Error('Message not found');
       }
 
-      // For ephemeral voice messages (view or playback), mark as read and schedule expiry
+      // For ephemeral voice messages (view or playback), mark as viewed in database
+      // The real-time subscription will handle status updates automatically
       if ((message.expiryRule?.type === 'view' || message.expiryRule?.type === 'playback') && !message.isMine) {
-        // Mark message as read
-        setMessages(prev => 
-          prev.map(msg => 
-            msg.id === messageId 
-              ? { ...msg, status: 'read' as const }
-              : msg
-          )
-        );
-        
-        // Mark as viewed in database
+        // Mark as viewed in database - status will be updated via real-time subscription
         try {
           await EphemeralMessageService.markMessageViewed(messageId);
         } catch (error) {
@@ -1550,18 +1588,10 @@ export default function FriendChatScreen({ route, navigation }: any) {
         throw new Error('Message not found');
       }
 
-      // For ephemeral video messages (view-once), mark as viewed
+      // For ephemeral video messages (view-once), mark as viewed in database
+      // The real-time subscription will handle status updates and expiry automatically
       if ((message.expiryRule?.type === 'view') && !message.isMine) {
-        // Mark message as read
-        setMessages(prev => 
-          prev.map(msg => 
-            msg.id === messageId 
-              ? { ...msg, status: 'read' as const }
-              : msg
-          )
-        );
-        
-        // Mark as viewed in database - the real-time subscription will handle the expiry
+        // Mark as viewed in database - status will be updated via real-time subscription
         try {
           await EphemeralMessageService.markMessageViewed(messageId);
         } catch (error) {
@@ -1717,18 +1747,10 @@ export default function FriendChatScreen({ route, navigation }: any) {
           blurBeforeView={item.expiryRule?.type === 'view' && !item.isMine && item.status !== 'read'}
           status={item.status}
           onPress={async () => {
-            // For view-once messages, mark as read and trigger expiry
+            // For view-once messages, mark as viewed in database
+            // The real-time subscription will handle status updates automatically
             if (item.expiryRule?.type === 'view' && !item.isMine && item.status !== 'read') {
-              // Mark message as read locally
-              setMessages(prev => 
-                prev.map(msg => 
-                  msg.id === item.id 
-                    ? { ...msg, status: 'read' as const }
-                    : msg
-                )
-              );
-              
-              // Mark as viewed in database
+              // Mark as viewed in database - status will be updated via real-time subscription
               try {
                 await EphemeralMessageService.markMessageViewed(item.id);
               } catch (error) {
@@ -2081,9 +2103,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
           console.log('[FriendChat] Modal onClose called');
           setShowExpirySelector(false);
         }}
-        onSelect={(rule) => {
+        onSelect={async (rule) => {
           console.log('[FriendChat] Modal onSelect called with rule:', rule);
-          setCurrentExpiryRule(rule);
+          await updatePrivacyRule(rule);
           setShowExpirySelector(false);
         }}
         messageType={messageTypeForExpiry}
