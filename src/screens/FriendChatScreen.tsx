@@ -47,6 +47,7 @@ import * as FileSystem from 'expo-file-system';
 import { Video, ResizeMode } from 'expo-av';
 import messageClearingService from '../services/messageClearingService';
 import { filterExpiredMessages, areMessageArraysEquivalent } from '../utils/messageFiltering';
+import { computeMessageStatus } from '../utils/messageStatus';
 
 interface Message {
   id: string;
@@ -91,6 +92,10 @@ export default function FriendChatScreen({ route, navigation }: any) {
   const [shouldCancel, setShouldCancel] = useState(false);
   const [micScale] = useState(new Animated.Value(1));
   const [micPulse] = useState(new Animated.Value(1));
+  const [waveformAnimations] = useState(() => 
+    Array.from({ length: 15 }, () => new Animated.Value(Math.random()))
+  );
+  const [recordButtonGlow] = useState(new Animated.Value(0));
   const [showExpirySelector, setShowExpirySelector] = useState(false);
   const [currentExpiryRule, setCurrentExpiryRule] = useState<ExpiryRule>({ type: 'view', disappear_after_view: true });
   const [messageTypeForExpiry, setMessageTypeForExpiry] = useState<'text' | 'voice' | 'video'>('text');
@@ -304,7 +309,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
           content,
           isMine: msg.sender_id === user?.id,
           timestamp: new Date(msg.created_at),
-          status: 'sent',
+          status: computeMessageStatus(msg, user?.id || ''),
           duration: msg.duration,
           expiryRule: msg.expiry_rule,
           isEphemeral: msg.expiry_rule && msg.expiry_rule.type !== 'none',
@@ -396,7 +401,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
             content,
             isMine: msg.sender_id === user?.id,
             timestamp: new Date(msg.created_at),
-            status: 'sent',
+            status: computeMessageStatus(msg, user?.id || ''),
             duration: msg.duration,
             expiryRule: msg.expiry_rule,
             isEphemeral: msg.expiry_rule && msg.expiry_rule.type !== 'none',
@@ -473,7 +478,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
               content,
               isMine: false,
               timestamp: new Date(payload.new.created_at),
-              status: 'delivered',
+              status: computeMessageStatus(payload.new, user?.id || ''),
               duration: payload.new.duration,
               expiryRule: payload.new.expiry_rule,
               isEphemeral: payload.new.expiry_rule && payload.new.expiry_rule.type !== 'none',
@@ -515,12 +520,17 @@ export default function FriendChatScreen({ route, navigation }: any) {
             setMessages(prev => prev.filter(msg => msg.id !== payload.new.id));
           }
           
-          // For sender: Update message status when recipient views it
-          if (payload.new.sender_id === user?.id && payload.new.viewed_at && !payload.old.viewed_at) {
-            console.log('[FriendChat] Recipient viewed message, updating status:', payload.new.id);
+          // For sender: Update message status when recipient views/reads it
+          const wasRead = payload.new.read_at && !payload.old.read_at;
+          const wasViewed = payload.new.viewed_at && !payload.old.viewed_at;
+          const wasListened = payload.new.listened_at && !payload.old.listened_at;
+          
+          if (payload.new.sender_id === user?.id && (wasRead || wasViewed || wasListened)) {
+            console.log('[FriendChat] Recipient interacted with message, updating status:', payload.new.id);
+            const newStatus = computeMessageStatus(payload.new, user?.id || '');
             setMessages(prev => prev.map(msg => 
               msg.id === payload.new.id 
-                ? { ...msg, status: 'read' as const, hasBeenViewed: true }
+                ? { ...msg, status: newStatus, hasBeenViewed: true }
                 : msg
             ));
             
@@ -632,14 +642,14 @@ export default function FriendChatScreen({ route, navigation }: any) {
         return;
       }
 
-      // Update message with real ID and sent status
+      // Update message with real ID and computed status
       setMessages(prev => 
         prev.map(msg => 
           msg.id === tempMessage.id 
             ? { 
                 ...msg, 
                 id: sentMessage.id,
-                status: 'sent' as const 
+                status: computeMessageStatus(sentMessage, user?.id || '') 
               }
             : msg
         )
@@ -686,7 +696,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
       isRecordingRef.current = true;
       setRecordingDuration(0);
 
-      // Animate mic button
+      // Animate mic button and start waveform
       Animated.parallel([
         Animated.spring(micScale, {
           toValue: 1.5,
@@ -706,7 +716,44 @@ export default function FriendChatScreen({ route, navigation }: any) {
             }),
           ])
         ),
+        // Start glowing effect
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(recordButtonGlow, {
+              toValue: 1,
+              duration: 1500,
+              useNativeDriver: false,
+            }),
+            Animated.timing(recordButtonGlow, {
+              toValue: 0,
+              duration: 1500,
+              useNativeDriver: false,
+            }),
+          ])
+        ),
       ]).start();
+
+      // Start animated waveform
+      const startWaveformAnimation = () => {
+        waveformAnimations.forEach((anim, index) => {
+          Animated.loop(
+            Animated.sequence([
+              Animated.timing(anim, {
+                toValue: Math.random() * 0.8 + 0.2,
+                duration: 150 + (index * 50), // Staggered timing
+                useNativeDriver: false,
+              }),
+              Animated.timing(anim, {
+                toValue: Math.random() * 0.8 + 0.2,
+                duration: 150 + (index * 50),
+                useNativeDriver: false,
+              }),
+            ])
+          ).start();
+        });
+      };
+      
+      startWaveformAnimation();
 
       // Start duration timer
       recordingInterval.current = setInterval(() => {
@@ -755,6 +802,14 @@ export default function FriendChatScreen({ route, navigation }: any) {
     
     micPulse.stopAnimation();
     micPulse.setValue(1);
+    recordButtonGlow.stopAnimation();
+    recordButtonGlow.setValue(0);
+    
+    // Stop waveform animations
+    waveformAnimations.forEach(anim => {
+      anim.stopAnimation();
+      anim.setValue(0.3);
+    });
   };
 
   const stopRecording = async () => {
@@ -808,6 +863,14 @@ export default function FriendChatScreen({ route, navigation }: any) {
       
       micPulse.stopAnimation();
       micPulse.setValue(1);
+      recordButtonGlow.stopAnimation();
+      recordButtonGlow.setValue(0);
+      
+      // Stop waveform animations
+      waveformAnimations.forEach(anim => {
+        anim.stopAnimation();
+        anim.setValue(0.3);
+      });
       
       if (!uri) return;
 
@@ -930,7 +993,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
             ? { 
                 ...msg, 
                 id: sentMessage.id,
-                status: 'sent' as const 
+                status: computeMessageStatus(sentMessage, user?.id || '')
               }
             : msg
         )
@@ -1030,7 +1093,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
             ? { 
                 ...msg, 
                 id: sentMessage.id,
-                status: 'sent' as const 
+                status: computeMessageStatus(sentMessage, user?.id || '')
               }
             : msg
         )
@@ -1158,8 +1221,19 @@ export default function FriendChatScreen({ route, navigation }: any) {
       // Reset expiry rule to default view-once after successful send
       setCurrentExpiryRule({ type: 'view', disappear_after_view: true });
       
-      // Generic error message - don't expose technical details
-      Alert.alert('Error', 'Failed to send video message. Please try again.');
+      // Provide specific error messages based on error type
+      let errorMessage = 'Failed to send video message. Please try again.';
+      if (error.message?.includes('Crypto initialization failed')) {
+        errorMessage = 'Video encryption is not available in Expo Go. Please try using a development build or wait for the full release version.';
+      } else if (error.message?.includes('PRNG') || error.message?.includes('no PRNG')) {
+        errorMessage = 'Encryption setup failed. This is likely due to Expo Go limitations. Please try restarting the app or use a development build.';
+      } else if (error.message?.includes('network') || error.message?.includes('upload')) {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      } else if (error.message?.includes('compression')) {
+        errorMessage = 'Video compression failed. The video file might be corrupted or too large.';
+      }
+      
+      Alert.alert('Video Send Failed', errorMessage);
     }
   };
 
@@ -1641,6 +1715,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
           isExpired={false} // TODO: Add proper expiry logic
           messageType={item.type}
           blurBeforeView={item.expiryRule?.type === 'view' && !item.isMine && item.status !== 'read'}
+          status={item.status}
           onPress={async () => {
             // For view-once messages, mark as read and trigger expiry
             if (item.expiryRule?.type === 'view' && !item.isMine && item.status !== 'read') {
@@ -1687,6 +1762,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
           isExpired={false}
           messageType={item.type}
           blurBeforeView={item.expiryRule?.type === 'view' && !item.isMine && item.status !== 'read'}
+          status={item.status}
           onPress={() => playVoiceMessage(item.id)}
           onExpire={() => {
             // Remove expired message from the list
@@ -1709,6 +1785,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
           isExpired={false}
           messageType={item.type}
           blurBeforeView={item.expiryRule?.type === 'view' && !item.isMine && item.status !== 'read'}
+          status={item.status}
           onPress={() => playVideoMessage(item.id)}
           onExpire={() => {
             // Remove expired message from the list
@@ -1746,9 +1823,16 @@ export default function FriendChatScreen({ route, navigation }: any) {
           </TouchableOpacity>
           
           <View style={styles.headerCenter}>
-            <Text style={[styles.headerTitle, { color: theme.colors.text.primary }]}>{friendName}</Text>
+            <Text style={[styles.headerTitle, { color: theme.colors.text.primary }]}>
+              {friendName}
+            </Text>
             {friendUsername && (
-              <Text style={[styles.headerSubtitle, { color: theme.colors.text.secondary }]}>@{friendUsername}</Text>
+              <Text style={[styles.headerSubtitle, { 
+                color: theme.colors.text.accent,
+                fontWeight: 'bold' 
+              }]}>
+                @{friendUsername}
+              </Text>
             )}
           </View>
 
@@ -1878,40 +1962,81 @@ export default function FriendChatScreen({ route, navigation }: any) {
                   </Text>
                 </View>
                 
-                {/* Waveform visualization */}
+                {/* Enhanced Waveform visualization */}
                 <View style={styles.waveformContainer}>
-                  {[...Array(15)].map((_, i) => (
-                    <View
-                      key={i}
-                      style={[
-                        styles.waveformBar,
-                        {
-                          height: Math.random() * 15 + 10,
-                          opacity: recordingDuration > 0 ? 0.8 : 0.3,
-                          backgroundColor: theme.colors.text.accent
-                        }
-                      ]}
-                    />
-                  ))}
+                  {waveformAnimations.map((anim, i) => {
+                    // Create color gradient effect across the waveform
+                    const getBarColor = (index: number) => {
+                      const colors = [
+                        theme.colors.text.accent, // Electric purple
+                        theme.colors.text.accentSecondary || theme.colors.text.accent, // Neon pink
+                        theme.colors.text.accentTertiary || theme.colors.text.accent, // Cyber blue
+                      ];
+                      return colors[index % colors.length];
+                    };
+                    
+                    return (
+                      <Animated.View
+                        key={i}
+                        style={[
+                          styles.waveformBar,
+                          {
+                            height: anim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [8, 25],
+                            }),
+                            opacity: recordingDuration > 0 ? 0.9 : 0.3,
+                            backgroundColor: getBarColor(i),
+                            shadowColor: getBarColor(i),
+                            shadowOpacity: recordingDuration > 0 ? 0.6 : 0,
+                            shadowRadius: 3,
+                            elevation: recordingDuration > 0 ? 3 : 0,
+                          }
+                        ]}
+                      />
+                    );
+                  })}
                 </View>
                 
                 <Text style={[styles.recordingHint, { color: theme.colors.text.secondary }]}>Tap send when ready</Text>
               </View>
 
-              {/* Send button */}
-              <TouchableOpacity
-                onPress={stopRecording}
-                style={[styles.sendVoiceButton, { backgroundColor: theme.colors.text.accent }]}
-                activeOpacity={0.8}
+              {/* Enhanced Send button with glow effect */}
+              <Animated.View
+                style={[
+                  styles.sendVoiceButton,
+                  {
+                    backgroundColor: theme.colors.text.accent,
+                    shadowColor: theme.colors.text.accent,
+                    shadowOpacity: recordButtonGlow.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.3, 0.8],
+                    }),
+                    shadowRadius: recordButtonGlow.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [4, 12],
+                    }),
+                    elevation: recordButtonGlow.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [3, 8],
+                    }),
+                  }
+                ]}
               >
-                <Animated.View
-                  style={{
-                    transform: [{ scale: micScale }]
-                  }}
+                <TouchableOpacity
+                  onPress={stopRecording}
+                  style={styles.sendVoiceButtonInner}
+                  activeOpacity={0.8}
                 >
-                  <Ionicons name="send" size={24} color={theme.colors.text.inverse} />
-                </Animated.View>
-              </TouchableOpacity>
+                  <Animated.View
+                    style={{
+                      transform: [{ scale: micScale }]
+                    }}
+                  >
+                    <Ionicons name="send" size={24} color={theme.colors.text.inverse} />
+                  </Animated.View>
+                </TouchableOpacity>
+              </Animated.View>
             </View>
           )}
         </View>
@@ -1973,15 +2098,15 @@ export default function FriendChatScreen({ route, navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAFAFA',
+    // backgroundColor removed - now using theme.colors.background.primary
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: '#fff',
+    // backgroundColor removed - now using theme.colors.background.secondary
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    // borderBottomColor removed - now using theme.colors.border.default
   },
   headerCenter: {
     flex: 1,
@@ -1990,11 +2115,11 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1A1A1A',
+    // color removed - now using theme.colors.text.primary
   },
   headerSubtitle: {
     fontSize: 12,
-    color: '#666',
+    // color removed - now using theme.colors.text.secondary
     marginTop: 2,
   },
   headerActions: {
@@ -2018,19 +2143,19 @@ const styles = StyleSheet.create({
   },
   myMessage: {
     alignSelf: 'flex-end',
-    backgroundColor: '#4ECDC4',
+    // backgroundColor removed - now using theme.colors.chat.sent
   },
   theirMessage: {
     alignSelf: 'flex-start',
-    backgroundColor: '#E0E0E0',
+    // backgroundColor removed - now using theme.colors.chat.received
   },
   messageText: {
     fontSize: 16,
-    color: '#000',
+    // color removed - handled by theme in components
     flex: 1,
   },
   myMessageText: {
-    color: '#fff',
+    // color removed - now using theme.colors.chat.sentText
   },
   voiceMessageBubble: {
     minWidth: 200,
@@ -2042,7 +2167,7 @@ const styles = StyleSheet.create({
   },
   videoThumbnailContainer: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: '#000', // Keep black for video background
     borderRadius: 8,
     overflow: 'hidden',
     position: 'relative',
@@ -2055,10 +2180,10 @@ const styles = StyleSheet.create({
   uploadingText: {
     marginTop: 8,
     fontSize: 12,
-    color: '#666',
+    // color removed - now using theme colors
   },
   uploadingTextMine: {
-    color: 'rgba(255, 255, 255, 0.8)',
+    // color removed - now using theme colors with opacity
   },
   videoPlaceholder: {
     flex: 1,
@@ -2142,17 +2267,17 @@ const styles = StyleSheet.create({
   waveformBar: {
     width: 3,
     borderRadius: 1.5,
-    backgroundColor: '#4ECDC4',
+    // backgroundColor removed - now using theme.colors.text.accent
   },
   voiceDuration: {
     fontSize: 12,
     opacity: 0.8,
   },
   voiceDurationMine: {
-    color: '#fff',
+    // color removed - now using theme.colors.chat.sentText
   },
   voiceDurationTheirs: {
-    color: '#666',
+    // color removed - now using theme.colors.chat.receivedText
   },
   sendingIndicator: {
     marginLeft: 8,
@@ -2165,9 +2290,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 16,
-    backgroundColor: '#fff',
+    // backgroundColor removed - now using theme.colors.background.secondary
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    // borderTopColor removed - now using theme.colors.border.default
     minHeight: 68,
   },
   textInput: {
@@ -2176,9 +2301,10 @@ const styles = StyleSheet.create({
     maxHeight: 100,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: '#F5F5F5',
+    // backgroundColor removed - now using theme.colors.background.tertiary
     borderRadius: 20,
     fontSize: 16,
+    // color handled by theme in component
   },
   sendButton: {
     marginLeft: 8,
@@ -2194,7 +2320,7 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    // backgroundColor removed - now using theme.colors.background.tertiary
     borderRadius: 20,
   },
   micButton: {
@@ -2203,11 +2329,11 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    // backgroundColor removed - now using theme.colors.background.tertiary
     borderRadius: 20,
   },
   micButtonPressed: {
-    backgroundColor: '#4ECDC4',
+    // backgroundColor removed - now using theme.colors.text.accent
     transform: [{ scale: 0.95 }],
   },
   recordingBar: {
@@ -2229,7 +2355,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(255, 59, 48, 0.1)',
+    // backgroundColor removed - now using theme.colors.status.error with opacity
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -2243,22 +2369,22 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#FF3B30',
+    // backgroundColor handled by theme in component
   },
   recordingTime: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#000',
+    // color removed - now using theme.colors.text.primary
     minWidth: 45,
   },
   recordingHint: {
     fontSize: 12,
-    color: '#999',
+    // color removed - now using theme.colors.text.secondary
     marginTop: 4,
   },
   slideToCancel: {
     fontSize: 14,
-    color: '#999',
+    // color removed - now using theme.colors.text.secondary
     marginLeft: 16,
   },
   recordingContainer: {
@@ -2272,7 +2398,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#4ECDC4',
+    // backgroundColor removed - now using theme.colors.text.accent
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 16,
@@ -2281,7 +2407,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#FFF3F3',
+    // backgroundColor removed - now using theme.colors.status.error with opacity
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -2300,7 +2426,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#4ECDC4',
+    // backgroundColor removed - now using theme.colors.text.accent
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -2309,16 +2435,23 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  sendVoiceButtonInner: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   loadMoreButton: {
     paddingVertical: 12,
     paddingHorizontal: 20,
-    backgroundColor: '#F5F5F5',
+    // backgroundColor removed - now using theme.colors.background.tertiary
     borderRadius: 20,
     marginVertical: 10,
     alignSelf: 'center',
   },
   loadMoreText: {
-    color: '#4ECDC4',
+    // color removed - now using theme.colors.text.accent
     fontSize: 14,
     fontWeight: '600',
   },
@@ -2327,7 +2460,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   noMoreText: {
-    color: '#999',
+    // color removed - now using theme.colors.text.tertiary
     fontSize: 14,
   },
   viewOnceIndicator: {
