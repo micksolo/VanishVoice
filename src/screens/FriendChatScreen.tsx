@@ -286,6 +286,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
           .map(msg => msg.id);
 
         if (unreadMessageIds.length > 0) {
+          console.log('[FriendChat] Marking messages as read in database:', unreadMessageIds);
           const { error: updateError } = await supabase
             .from('messages')
             .update({ read_at: new Date().toISOString() })
@@ -294,6 +295,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
           if (updateError) {
             console.error('[FriendChat] Error marking messages as read:', updateError);
           } else {
+            console.log('[FriendChat] Successfully marked messages as read - real-time subscription will update sender UI');
             // Handle ephemeral messages for text messages that were just marked as read
             console.log('[FriendChat] Handling ephemeral text messages after marking as read');
             try {
@@ -511,7 +513,27 @@ export default function FriendChatScreen({ route, navigation }: any) {
 
         // Only update if we have different messages (avoid unnecessary re-renders)
         if (!areMessageArraysEquivalent(messages, convertedMessages)) {
-          setMessages(convertedMessages);
+          console.log('[FriendChat] Messages changed, preserving existing status updates');
+          // Preserve existing message statuses when updating from polling
+          setMessages(prev => {
+            const preservedMessages = convertedMessages.map(newMsg => {
+              const existingMsg = prev.find(existing => existing.id === newMsg.id);
+              if (existingMsg) {
+                // Preserve status and hasBeenViewed from existing message if it's more recent
+                const preservedStatus = existingMsg.status === 'read' || existingMsg.hasBeenViewed 
+                  ? existingMsg.status 
+                  : newMsg.status;
+                return {
+                  ...newMsg,
+                  status: preservedStatus,
+                  hasBeenViewed: existingMsg.hasBeenViewed || newMsg.hasBeenViewed
+                };
+              }
+              return newMsg;
+            });
+            console.log('[FriendChat] Preserved message statuses during polling update');
+            return preservedMessages;
+          });
           lastMessageCount.current = currentCount;
           flatListRef.current?.scrollToEnd();
         }
@@ -600,7 +622,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
       setMessages(prev => prev.filter(msg => msg.id !== expiredMessageId));
     });
 
-    // Subscribe to message updates to detect when messages are marked as expired
+    // Subscribe to message updates to detect when messages are marked as expired or read
     const messageUpdateSubscription = supabase
       .channel(`message-updates:${channelName}`)
       .on(
@@ -609,6 +631,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
           event: 'UPDATE',
           schema: 'public',
           table: 'messages',
+          filter: `or(and(sender_id.eq.${user?.id},recipient_id.eq.${friendId}),and(sender_id.eq.${friendId},recipient_id.eq.${user?.id}))`
         },
         async (payload) => {
           console.log('[FriendChat] Message updated:', payload);
@@ -627,12 +650,18 @@ export default function FriendChatScreen({ route, navigation }: any) {
           
           if (payload.new.sender_id === user?.id && (wasRead || wasViewed || wasListened)) {
             console.log('[FriendChat] Recipient interacted with message, updating status:', payload.new.id);
+            console.log('[FriendChat] Message interaction details:', { wasRead, wasViewed, wasListened });
             const newStatus = computeMessageStatus(payload.new, user?.id || '');
-            setMessages(prev => prev.map(msg => 
-              msg.id === payload.new.id 
-                ? { ...msg, status: newStatus, hasBeenViewed: true }
-                : msg
-            ));
+            console.log('[FriendChat] New computed status:', newStatus);
+            setMessages(prev => {
+              const updated = prev.map(msg => 
+                msg.id === payload.new.id 
+                  ? { ...msg, status: newStatus, hasBeenViewed: true }
+                  : msg
+              );
+              console.log('[FriendChat] Updated message with new status:', updated.find(m => m.id === payload.new.id));
+              return updated;
+            });
             
             // For view-once and playback messages, schedule fade out after a delay
             if (payload.new.expiry_rule?.type === 'view' || payload.new.expiry_rule?.type === 'playback') {
