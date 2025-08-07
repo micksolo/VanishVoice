@@ -362,29 +362,29 @@ export default function EphemeralMessageBubble({
                   {status === 'sending' && (
                     <Ionicons
                       name="time-outline"
-                      size={10}
-                      color={getTextColor() + '60'}
+                      size={12}
+                      color={getTextColor() + '80'}
                     />
                   )}
                   {status === 'sent' && (
                     <Ionicons
                       name="checkmark"
-                      size={10}
-                      color={getTextColor() + '60'}
+                      size={12}
+                      color={getTextColor() + '80'}
                     />
                   )}
                   {status === 'delivered' && (
                     <>
                       <Ionicons
                         name="checkmark"
-                        size={10}
-                        color={getTextColor() + '60'}
+                        size={12}
+                        color={getTextColor() + '80'}
                         style={{ marginLeft: -4 }}
                       />
                       <Ionicons
                         name="checkmark"
-                        size={10}
-                        color={getTextColor() + '60'}
+                        size={12}
+                        color={getTextColor() + '80'}
                       />
                     </>
                   )}
@@ -392,13 +392,13 @@ export default function EphemeralMessageBubble({
                     <>
                       <Ionicons
                         name="checkmark"
-                        size={10}
+                        size={12}
                         color={theme.colors.text.accent}
                         style={{ marginLeft: -4 }}
                       />
                       <Ionicons
                         name="checkmark"
-                        size={10}
+                        size={12}
                         color={theme.colors.text.accent}
                       />
                     </>
@@ -406,7 +406,7 @@ export default function EphemeralMessageBubble({
                   {status === 'failed' && (
                     <Ionicons
                       name="alert-circle-outline"
-                      size={10}
+                      size={12}
                       color={theme.colors.text.error || '#ff3b30'}
                     />
                   )}

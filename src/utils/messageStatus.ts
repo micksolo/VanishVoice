@@ -3,6 +3,20 @@ import { Message } from '../types/database';
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
 
 /**
+ * Get a user-friendly description of the message status
+ */
+export function getStatusDescription(status: MessageStatus): string {
+  switch (status) {
+    case 'sending': return 'Sending...';
+    case 'sent': return 'Sent';
+    case 'delivered': return 'Delivered';
+    case 'read': return 'Read';
+    case 'failed': return 'Failed to send';
+    default: return 'Unknown status';
+  }
+}
+
+/**
  * Compute the status of a message based on database fields
  * 
  * Status Logic:
@@ -16,32 +30,42 @@ export function computeMessageStatus(
   message: Message,
   currentUserId: string
 ): MessageStatus {
-  // For messages we received from others, status doesn't apply
+  // For messages we received from others, status doesn't apply to sender UI
   if (message.sender_id !== currentUserId) {
     return 'delivered';
   }
 
   // For messages we sent, determine status based on recipient interaction
   
-  // If the message has been read (text message with read_at set)
+  // Check if message has been read/viewed/listened to in priority order
+  
+  // Text messages: check read_at timestamp
   if (message.type === 'text' && message.read_at) {
     return 'read';
   }
   
-  // If the message has been viewed (any message type with viewed_at set)
-  if (message.viewed_at) {
-    return 'read';
-  }
-  
-  // If the message has been listened to (voice/video with listened_at set)
+  // Voice/video messages: check listened_at timestamp (primary indicator)
   if ((message.type === 'voice' || message.type === 'video') && message.listened_at) {
     return 'read';
   }
   
-  // Message exists in database but hasn't been interacted with yet
-  // For now, we assume all messages in DB are delivered
-  // In the future, this could be enhanced with delivery confirmations
-  return 'delivered';
+  // Fallback: check viewed_at for any message type
+  if (message.viewed_at) {
+    return 'read';
+  }
+  
+  // Check if message has been delivered (received by recipient device)
+  // We'll use created_at timestamp + a reasonable delay as proxy for delivery
+  // In a real production app, this would be based on actual delivery confirmations
+  const messageAge = Date.now() - new Date(message.created_at).getTime();
+  const DELIVERY_DELAY_MS = 2000; // 2 seconds - reasonable time for message to be delivered
+  
+  if (messageAge > DELIVERY_DELAY_MS) {
+    return 'delivered';
+  }
+  
+  // Message was just sent, still in transit
+  return 'sent';
 }
 
 /**
@@ -64,6 +88,16 @@ export function isMessageRead(message: Message): boolean {
 }
 
 /**
+ * Determine if a message has been delivered to the recipient device
+ * This is used for showing double gray ticks before message is read
+ */
+export function isMessageDelivered(message: Message): boolean {
+  const messageAge = Date.now() - new Date(message.created_at).getTime();
+  const DELIVERY_DELAY_MS = 2000; // 2 seconds
+  return messageAge > DELIVERY_DELAY_MS;
+}
+
+/**
  * Get the timestamp when a message was read/viewed
  */
 export function getReadTimestamp(message: Message): Date | null {
@@ -80,6 +114,21 @@ export function getReadTimestamp(message: Message): Date | null {
   // Fallback to viewed_at
   if (message.viewed_at) {
     return new Date(message.viewed_at);
+  }
+  
+  return null;
+}
+
+/**
+ * Get the estimated timestamp when a message was delivered
+ */
+export function getDeliveredTimestamp(message: Message): Date | null {
+  const messageAge = Date.now() - new Date(message.created_at).getTime();
+  const DELIVERY_DELAY_MS = 2000;
+  
+  if (messageAge > DELIVERY_DELAY_MS) {
+    // Return estimated delivery time (created_at + delay)
+    return new Date(new Date(message.created_at).getTime() + DELIVERY_DELAY_MS);
   }
   
   return null;

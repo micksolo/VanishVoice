@@ -112,6 +112,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
   const flatListRef = useRef<FlatList>(null);
   const lastMessageCount = useRef<number>(0);
   const isRecordingRef = useRef<boolean>(false);
+  const statusUpdateTimers = useRef<{ [messageId: string]: NodeJS.Timeout }>({});
 
   // Load user's privacy preference on component mount
   useEffect(() => {
@@ -221,6 +222,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
       return () => {
         unsubscribe();
         unsubscribeClearing();
+        clearAllStatusTimers(); // Clear all pending status update timers
         if (messagePollingInterval.current) {
           clearInterval(messagePollingInterval.current);
         }
@@ -358,18 +360,35 @@ export default function FriendChatScreen({ route, navigation }: any) {
           content = '';
         }
         
+        const messageStatus = computeMessageStatus(msg, user?.id || '');
         convertedMessages.push({
           id: msg.id,
           type: msg.type || 'voice',
           content,
           isMine: msg.sender_id === user?.id,
           timestamp: new Date(msg.created_at),
-          status: computeMessageStatus(msg, user?.id || ''),
+          status: messageStatus,
           duration: msg.duration,
           expiryRule: msg.expiry_rule,
           isEphemeral: msg.expiry_rule && msg.expiry_rule.type !== 'none',
           hasBeenViewed: msg.sender_id === user?.id && msg.viewed_at !== null
         });
+        
+        // Schedule status update for sent messages that should be delivered
+        if (messageStatus === 'sent' && msg.sender_id === user?.id) {
+          // Check if message is old enough to be delivered immediately
+          const messageAge = Date.now() - new Date(msg.created_at).getTime();
+          if (messageAge > 2000) {
+            // Update to delivered immediately
+            convertedMessages[convertedMessages.length - 1].status = 'delivered';
+          } else {
+            // Schedule update for remaining time
+            const remainingTime = 2000 - messageAge;
+            setTimeout(() => {
+              scheduleStatusUpdate(msg.id, 'sent', 'delivered');
+            }, Math.max(0, remainingTime));
+          }
+        }
       }
 
       if (loadMore) {
@@ -394,6 +413,32 @@ export default function FriendChatScreen({ route, navigation }: any) {
       setLoading(false);
       setLoadingMore(false);
     }
+  };
+
+  // Schedule status updates for sent messages to become delivered after 2 seconds
+  const scheduleStatusUpdate = (messageId: string, fromStatus: 'sent', toStatus: 'delivered') => {
+    // Clear any existing timer for this message
+    if (statusUpdateTimers.current[messageId]) {
+      clearTimeout(statusUpdateTimers.current[messageId]);
+    }
+    
+    // Schedule the status update
+    statusUpdateTimers.current[messageId] = setTimeout(() => {
+      setMessages(prev => prev.map(msg => 
+        msg.id === messageId && msg.status === fromStatus 
+          ? { ...msg, status: toStatus }
+          : msg
+      ));
+      
+      // Clean up the timer reference
+      delete statusUpdateTimers.current[messageId];
+    }, 2000); // 2 seconds delay for delivery
+  };
+
+  // Clean up all status update timers
+  const clearAllStatusTimers = () => {
+    Object.values(statusUpdateTimers.current).forEach(timer => clearTimeout(timer));
+    statusUpdateTimers.current = {};
   };
 
   const checkForNewMessages = async () => {
@@ -698,17 +743,23 @@ export default function FriendChatScreen({ route, navigation }: any) {
       }
 
       // Update message with real ID and computed status
+      const newStatus = computeMessageStatus(sentMessage, user?.id || '');
       setMessages(prev => 
         prev.map(msg => 
           msg.id === tempMessage.id 
             ? { 
                 ...msg, 
                 id: sentMessage.id,
-                status: computeMessageStatus(sentMessage, user?.id || '') 
+                status: newStatus
               }
             : msg
         )
       );
+      
+      // Schedule status update from 'sent' to 'delivered' after 2 seconds
+      if (newStatus === 'sent') {
+        scheduleStatusUpdate(sentMessage.id, 'sent', 'delivered');
+      }
       
       // Privacy preference is now persisted - no reset needed
 
@@ -1038,18 +1089,24 @@ export default function FriendChatScreen({ route, navigation }: any) {
       }
 
       // Update message with real ID
+      const newStatus = computeMessageStatus(sentMessage, user?.id || '');
       setMessages(prev => 
         prev.map(msg => 
           msg.id === tempId 
             ? { 
                 ...msg, 
                 id: sentMessage.id,
-                status: computeMessageStatus(sentMessage, user?.id || '')
+                status: newStatus
               }
             : msg
         )
       );
       setUploadingMessageId(null);
+      
+      // Schedule status update from 'sent' to 'delivered' after 2 seconds
+      if (newStatus === 'sent') {
+        scheduleStatusUpdate(sentMessage.id, 'sent', 'delivered');
+      }
       
       // Privacy preference is now persisted - no reset needed
 
@@ -1136,18 +1193,24 @@ export default function FriendChatScreen({ route, navigation }: any) {
       }
 
       // Update message with real ID
+      const newStatus = computeMessageStatus(sentMessage, user?.id || '');
       setMessages(prev => 
         prev.map(msg => 
           msg.id === tempId 
             ? { 
                 ...msg, 
                 id: sentMessage.id,
-                status: computeMessageStatus(sentMessage, user?.id || '')
+                status: newStatus
               }
             : msg
         )
       );
       setUploadingMessageId(null);
+      
+      // Schedule status update from 'sent' to 'delivered' after 2 seconds
+      if (newStatus === 'sent') {
+        scheduleStatusUpdate(sentMessage.id, 'sent', 'delivered');
+      }
       
       // Privacy preference is now persisted - no reset needed
 
