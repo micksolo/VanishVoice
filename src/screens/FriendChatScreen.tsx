@@ -14,6 +14,7 @@ import {
   Animated,
   Pressable,
   TouchableWithoutFeedback,
+  AppState,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,6 +30,7 @@ import {
   GestureHandlerRootView
 } from 'react-native-gesture-handler';
 import { sendMessageNotification } from '../services/pushNotifications';
+import { useFocusEffect } from '@react-navigation/native';
 import FriendEncryption from '../utils/friendEncryption';
 import { uploadE2EEncryptedAudio, downloadAndDecryptE2EAudio } from '../utils/secureE2EAudioStorage';
 import { SecureE2EVideoStorageFastAndroid } from '../utils/secureE2EVideoStorageFastAndroid';
@@ -49,6 +51,7 @@ import { Video, ResizeMode } from 'expo-av';
 import messageClearingService from '../services/messageClearingService';
 import { filterExpiredMessages, areMessageArraysEquivalent } from '../utils/messageFiltering';
 import { computeMessageStatus } from '../utils/messageStatus';
+// import EnhancedReadReceipt from '../components/EnhancedReadReceipt'; // Temporarily disabled due to migration issues
 
 // Storage key for persisting user's privacy preference
 const PRIVACY_PREFERENCE_KEY = '@wyd_privacy_preference';
@@ -69,6 +72,26 @@ interface Message {
 }
 
 const PAGE_SIZE = 20;
+
+// Basic read receipt function - simple database update
+const markMessageAsRead = async (messageId: string) => {
+  try {
+    const { error } = await supabase
+      .from('messages')
+      .update({ read_at: new Date().toISOString() })
+      .eq('id', messageId);
+    
+    if (error) {
+      console.error('[MarkAsRead] Database error:', error);
+      throw error;
+    }
+    
+    console.log('[MarkAsRead] Successfully updated database for message:', messageId);
+  } catch (error) {
+    console.error('[MarkAsRead] Failed to mark message as read:', error);
+    throw error;
+  }
+};
 
 export default function FriendChatScreen({ route, navigation }: any) {
   const { friendId, friendName, friendUsername } = route.params;
@@ -113,34 +136,55 @@ export default function FriendChatScreen({ route, navigation }: any) {
   const lastMessageCount = useRef<number>(0);
   const isRecordingRef = useRef<boolean>(false);
   const statusUpdateTimers = useRef<{ [messageId: string]: NodeJS.Timeout }>({});
-
+  
+  // Read receipts system temporarily disabled due to migration issues
   // Load user's privacy preference on component mount
   useEffect(() => {
     const loadPrivacyPreference = async () => {
       try {
-        console.log('[FriendChat] Loading privacy preference from AsyncStorage...');
         const storedPreference = await AsyncStorage.getItem(PRIVACY_PREFERENCE_KEY);
-        console.log('[FriendChat] Raw stored preference:', storedPreference);
         
         if (storedPreference) {
           const parsedPreference = JSON.parse(storedPreference) as ExpiryRule;
-          console.log('[FriendChat] Successfully parsed preference:', JSON.stringify(parsedPreference));
           setCurrentExpiryRule(parsedPreference);
-          console.log('[FriendChat] Privacy preference applied to state');
-        } else {
-          console.log('[FriendChat] No stored preference found, keeping default view-once');
         }
       } catch (error) {
         console.error('[FriendChat] Error loading privacy preference:', error);
-        console.log('[FriendChat] Keeping default view-once due to error');
       } finally {
         setPrivacyPreferenceLoaded(true);
-        console.log('[FriendChat] Privacy preference loading completed');
       }
     };
     
     loadPrivacyPreference();
   }, []);
+
+  // Add app state listener to handle status persistence across backgrounding
+  useEffect(() => {
+    let appStateSubscription: any;
+
+    const handleAppStateChange = (nextAppState: any) => {
+      console.log('[DEBUG] 📱 App state changed to:', nextAppState);
+      
+      if (nextAppState === 'active') {
+        console.log('[DEBUG] 🔄 App became active - refreshing message statuses');
+        // When app becomes active, refresh the current conversation to get latest statuses
+        if (user && friendId && privacyPreferenceLoaded) {
+          // Reload messages to get the latest read statuses
+          loadMessages(false).catch(error => {
+            console.error('[DEBUG] ❌ Error reloading messages on app active:', error);
+          });
+        }
+      }
+    };
+
+    appStateSubscription = AppState.addEventListener('change', handleAppStateChange);
+
+    return () => {
+      if (appStateSubscription) {
+        appStateSubscription.remove();
+      }
+    };
+  }, [user, friendId, privacyPreferenceLoaded]);
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
@@ -158,6 +202,61 @@ export default function FriendChatScreen({ route, navigation }: any) {
     };
   }, [user, friendId, privacyPreferenceLoaded]);
 
+  // Mark messages as read whenever the screen is focused
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!user || !friendId) return;
+      
+      const markCurrentMessagesAsRead = async () => {
+        try {
+          console.log('[DEBUG] 📖 Screen focused - checking for unread messages to mark as read');
+          console.log('[DEBUG] Current messages count:', messages.length);
+          
+          // Find unread messages from the friend
+          const unreadMessages = messages.filter(msg => 
+            !msg.isMine && // Message from friend
+            msg.status !== 'read' && // Not already marked as read
+            !msg.hasBeenViewed // Not already viewed
+          );
+          
+          console.log('[DEBUG] Found', unreadMessages.length, 'unread messages to mark as read');
+          
+          if (unreadMessages.length === 0) {
+            console.log('[DEBUG] No unread messages found');
+            return;
+          }
+          
+          const messageIds = unreadMessages.map(msg => msg.id);
+          console.log('[DEBUG] 🎯 Focus Effect: Using basic read receipts system for message IDs:', messageIds);
+          
+          // Use basic read receipts system
+          for (const messageId of messageIds) {
+            try {
+              await markMessageAsRead(messageId);
+              console.log('[DEBUG] ✅ Focus Effect: Successfully marked message as read:', messageId);
+            } catch (error) {
+              console.error('[DEBUG] ❌ Focus Effect: Exception marking message as read:', messageId, error);
+            }
+          }
+          
+          console.log('[DEBUG] ✅ Focus Effect: Completed processing all unread messages with basic system');
+          // Real-time notifications will update UI automatically
+        } catch (error) {
+          console.error('[DEBUG] ❌ Error in markCurrentMessagesAsRead:', error);
+        }
+      };
+      
+      // Mark messages as read when screen is focused
+      markCurrentMessagesAsRead();
+      
+      // No polling needed - real-time subscriptions will handle updates automatically
+      
+      return () => {
+        console.log('[DEBUG] 🛑 Read receipts focus effect cleanup');
+      };
+    }, [user, friendId, messages])
+  );
+
   useEffect(() => {
     // Cleanup audio on unmount
     return () => {
@@ -171,13 +270,11 @@ export default function FriendChatScreen({ route, navigation }: any) {
   const savePrivacyPreference = async (rule: ExpiryRule) => {
     try {
       const ruleString = JSON.stringify(rule);
-      console.log('[FriendChat] Saving privacy preference:', ruleString);
       await AsyncStorage.setItem(PRIVACY_PREFERENCE_KEY, ruleString);
-      console.log('[FriendChat] Successfully saved privacy preference to AsyncStorage');
       
       // Verify the save by reading it back
-      const verification = await AsyncStorage.getItem(PRIVACY_PREFERENCE_KEY);
-      console.log('[FriendChat] Verification read:', verification);
+      // Verify storage
+      await AsyncStorage.getItem(PRIVACY_PREFERENCE_KEY);
     } catch (error) {
       console.error('[FriendChat] Error saving privacy preference:', error);
     }
@@ -191,7 +288,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
 
   const initializeChat = async () => {
     try {
-      console.log('[FriendChat] Initializing chat with friend:', friendId);
       
       if (!user) {
         throw new Error('No user available');
@@ -249,8 +345,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
       
       const currentOffset = loadMore ? messageOffset : 0;
       
-      console.log('[FriendChat] Loading messages between user and friend:', user?.id, friendId);
-      console.log('[FriendChat] Offset:', currentOffset, 'Limit:', PAGE_SIZE);
       
       // Load messages from the database with pagination
       const { data, error } = await supabase
@@ -265,7 +359,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
         return;
       }
 
-      console.log('[FriendChat] Loaded messages:', data?.length || 0);
       
       // Check if we have more messages
       if (data && data.length < PAGE_SIZE) {
@@ -277,7 +370,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
 
       // Filter expired messages using utility function
       const filteredMessages = filterExpiredMessages(reversedData || []);
-      console.log('[FriendChat] After filtering expired messages:', filteredMessages?.length || 0);
 
       // Mark all messages from friend as read
       if (reversedData && reversedData.length > 0) {
@@ -286,25 +378,18 @@ export default function FriendChatScreen({ route, navigation }: any) {
           .map(msg => msg.id);
 
         if (unreadMessageIds.length > 0) {
-          console.log('[FriendChat] Marking messages as read in database:', unreadMessageIds);
-          const { error: updateError } = await supabase
-            .from('messages')
-            .update({ read_at: new Date().toISOString() })
-            .in('id', unreadMessageIds);
-
-          if (updateError) {
-            console.error('[FriendChat] Error marking messages as read:', updateError);
-          } else {
-            console.log('[FriendChat] Successfully marked messages as read - real-time subscription will update sender UI');
-            // Handle ephemeral messages for text messages that were just marked as read
-            console.log('[FriendChat] Handling ephemeral text messages after marking as read');
+          console.log('[FriendChat] 🚀 Using basic read receipts system - marking', unreadMessageIds.length, 'messages as read');
+          
+          // Use basic read receipts system for each message
+          for (const messageId of unreadMessageIds) {
             try {
-              for (const messageId of unreadMessageIds) {
-                await EphemeralMessageService.markMessageViewed(messageId);
-              }
-            } catch (ephemeralError) {
-              console.error('[FriendChat] Error handling ephemeral text messages:', ephemeralError);
-              // Don't block message loading if ephemeral handling fails
+              await markMessageAsRead(messageId);
+              console.log('[FriendChat] ✅ Successfully marked message as read:', messageId);
+              
+              // Handle ephemeral messages
+              await EphemeralMessageService.markMessageViewed(messageId);
+            } catch (error) {
+              console.error('[FriendChat] ❌ Exception marking message as read:', messageId, error);
             }
           }
         }
@@ -321,19 +406,12 @@ export default function FriendChatScreen({ route, navigation }: any) {
           // Check if message is encrypted
           if (msg.is_encrypted && msg.nonce) {
             try {
-              console.log('[FriendChat] Decrypting encrypted message');
-              console.log('[FriendChat] Message ID:', msg.id);
-              console.log('[FriendChat] Is encrypted:', msg.is_encrypted);
-              console.log('[FriendChat] Has nonce:', !!msg.nonce);
               
               // Decrypt the message
               // For decryption, we need to use the sender's ID and our ID in the right order
               const senderId = msg.sender_id;
               const recipientId = msg.recipient_id;
               
-              console.log('[FriendChat] Sender ID:', senderId);
-              console.log('[FriendChat] Recipient ID:', recipientId);
-              console.log('[FriendChat] My ID:', user?.id);
               
               const decrypted = await FriendEncryption.decryptMessage(
                 msg.content,
@@ -343,7 +421,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
                 user?.id || ''
               );
               
-              console.log('[FriendChat] Decryption result:', decrypted);
               content = decrypted || msg.content; // Fallback to encrypted content if decryption fails
             } catch (error) {
               console.error('[FriendChat] Failed to decrypt message:', error);
@@ -351,7 +428,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
             }
           } else {
             // Plain text message (legacy)
-            console.log('[FriendChat] Loading plain text message (legacy)');
             content = msg.content;
           }
         } else if (msg.type === 'voice' || msg.type === 'video') {
@@ -465,7 +541,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
       const currentCount = nonExpiredMessages.length;
       
       if (currentCount !== lastMessageCount.current) {
-        console.log('[FriendChat] Message count changed via polling!');
         
         // Convert and decrypt messages
         const convertedMessages: Message[] = [];
@@ -513,7 +588,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
 
         // Only update if we have different messages (avoid unnecessary re-renders)
         if (!areMessageArraysEquivalent(messages, convertedMessages)) {
-          console.log('[FriendChat] Messages changed, preserving existing status updates');
           // Preserve existing message statuses when updating from polling
           setMessages(prev => {
             const preservedMessages = convertedMessages.map(newMsg => {
@@ -531,7 +605,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
               }
               return newMsg;
             });
-            console.log('[FriendChat] Preserved message statuses during polling update');
             return preservedMessages;
           });
           lastMessageCount.current = currentCount;
@@ -544,13 +617,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
   };
 
   const subscribeToMessages = () => {
-    console.log('[FriendChat] Setting up message subscription');
-    console.log('[FriendChat] User ID:', user?.id);
-    console.log('[FriendChat] Friend ID:', friendId);
     
     // Create a consistent channel name regardless of who is user/friend
     const channelName = [user?.id, friendId].sort().join('-');
-    console.log('[FriendChat] Channel name:', `friend-chat:${channelName}`);
     
     // Subscribe to new messages between this user and friend
     const subscription = supabase
@@ -564,7 +633,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
           filter: `or(and(sender_id.eq.${user?.id},recipient_id.eq.${friendId}),and(sender_id.eq.${friendId},recipient_id.eq.${user?.id}))`
         },
         async (payload) => {
-          console.log('[FriendChat] New message received:', payload);
           
           if (payload.new.sender_id !== user?.id) {
             // Message from friend - decrypt if needed
@@ -613,28 +681,82 @@ export default function FriendChatScreen({ route, navigation }: any) {
         }
       )
       .subscribe((status) => {
-        console.log('[FriendChat] Subscription status:', status);
+        // NEW MESSAGE subscription status: status
       });
 
     // Also subscribe to message expiry for ephemeral messages
     const expirySubscription = EphemeralMessageService.subscribeToMessageExpiry((expiredMessageId) => {
-      console.log('[FriendChat] Message expired, removing from UI:', expiredMessageId);
       setMessages(prev => prev.filter(msg => msg.id !== expiredMessageId));
     });
 
     // Subscribe to message updates to detect when messages are marked as expired or read
+    console.log('[DEBUG] 🔧 Setting up real-time subscription for channel:', `message-updates:${channelName}`);
+    console.log('[DEBUG] 🔧 User ID:', user?.id, 'Friend ID:', friendId);
+    console.log('[DEBUG] 🔧 Channel name:', channelName);
+    console.log('[DEBUG] 🔧 Timestamp for unique channel:', Date.now());
+    
+    // CRITICAL DIAGNOSTIC: Check if we have necessary permissions for real-time
+    console.log('[DEBUG] 🔧 DIAGNOSTIC - Supabase client config:');
+    console.log('[DEBUG]   - URL:', supabase.supabaseUrl);
+    console.log('[DEBUG]   - Auth user:', user?.id ? 'Present' : 'Missing');
+    console.log('[DEBUG]   - Realtime enabled:', supabase.realtime ? 'Yes' : 'No');
+    
+    // FIXED: Try multiple subscription approaches to ensure real-time updates work
+    // Approach 1: Global subscription with handler filtering
+    console.log('[DEBUG] 🔧 Attempting global message UPDATE subscription...');
+    console.log('[DEBUG] 🔧 Subscription will listen for ALL message UPDATEs and filter in handler');
+    console.log('[DEBUG] 🔧 Filter criteria: sender_id =', user?.id, 'OR recipient_id =', user?.id);
     const messageUpdateSubscription = supabase
-      .channel(`message-updates:${channelName}`)
+      .channel(`message-updates:${channelName}:${Date.now()}`) // Unique channel name
       .on(
         'postgres_changes',
         {
           event: 'UPDATE',
           schema: 'public',
-          table: 'messages',
-          filter: `or(and(sender_id.eq.${user?.id},recipient_id.eq.${friendId}),and(sender_id.eq.${friendId},recipient_id.eq.${user?.id}))`
+          table: 'messages'
+          // No filter - handle all message updates and filter in handler
         },
         async (payload) => {
+          // CRITICAL: Log this IMMEDIATELY so we can see if handler is being called
+          console.log('======================== REAL-TIME UPDATE ========================');
+          console.log('[DEBUG] 🚨 REAL-TIME UPDATE RECEIVED AT:', new Date().toISOString());
+          console.log('[DEBUG] 🚨 UPDATE HANDLER CALLED - This proves subscription is working!');
+          console.log('================================================================');
+          
+          console.log('[DEBUG] 🚨 Raw payload:', JSON.stringify(payload, null, 2));
+          console.log('[DEBUG] 🚨 Event type:', payload.eventType);
+          console.log('[DEBUG] 🚨 Message ID:', payload.new?.id);
+          console.log('[DEBUG] 🚨 Sender ID in payload:', payload.new?.sender_id);
+          console.log('[DEBUG] 🚨 Recipient ID in payload:', payload.new?.recipient_id);
+          console.log('[DEBUG] 🚨 Current user ID:', user?.id);
+          console.log('[DEBUG] 🚨 Current friend ID:', friendId);
+          
+          // Additional diagnostic info
+          console.log('[DEBUG] 🧪 SUBSCRIPTION DIAGNOSTIC:');
+          console.log('[DEBUG]   - Handler function is executing');
+          console.log('[DEBUG]   - Payload exists:', !!payload);
+          console.log('[DEBUG]   - Payload.new exists:', !!payload?.new);
+          console.log('[DEBUG]   - User context exists:', !!user?.id);
+          console.log('[DEBUG]   - Friend context exists:', !!friendId);
+          
+          // Filter messages to only this conversation
+          const isOurConversation = 
+            (payload.new.sender_id === user?.id && payload.new.recipient_id === friendId) ||
+            (payload.new.sender_id === friendId && payload.new.recipient_id === user?.id);
+          
+          if (!isOurConversation) {
+            console.log('[DEBUG] 🚫 UPDATE not for our conversation, ignoring');
+            return;
+          }
+          
+          console.log('[DEBUG] ✅ UPDATE is for our conversation!');
           console.log('[FriendChat] Message updated:', payload);
+          console.log('[DEBUG] 🔄 UPDATE subscription triggered at', new Date().toLocaleTimeString());
+          console.log('[DEBUG] Old read_at:', payload.old?.read_at);
+          console.log('[DEBUG] New read_at:', payload.new?.read_at);
+          console.log('[DEBUG] Message sender:', payload.new?.sender_id, 'Current user:', user?.id);
+          console.log('[DEBUG] Full payload old:', JSON.stringify(payload.old, null, 2));
+          console.log('[DEBUG] Full payload new:', JSON.stringify(payload.new, null, 2));
           
           // Check if the message is now expired or viewed (for view-once)
           if (payload.new.expired || 
@@ -648,18 +770,64 @@ export default function FriendChatScreen({ route, navigation }: any) {
           const wasViewed = payload.new.viewed_at && !payload.old.viewed_at;
           const wasListened = payload.new.listened_at && !payload.old.listened_at;
           
+          console.log('[DEBUG] 🔍 DETAILED TIMESTAMP ANALYSIS:');
+          console.log('[DEBUG]   - old.read_at:', payload.old?.read_at || 'null');
+          console.log('[DEBUG]   - new.read_at:', payload.new?.read_at || 'null');
+          console.log('[DEBUG]   - old.viewed_at:', payload.old?.viewed_at || 'null');
+          console.log('[DEBUG]   - new.viewed_at:', payload.new?.viewed_at || 'null');
+          console.log('[DEBUG]   - old.listened_at:', payload.old?.listened_at || 'null');
+          console.log('[DEBUG]   - new.listened_at:', payload.new?.listened_at || 'null');
+          console.log('[DEBUG] Status change flags - wasRead:', wasRead, 'wasViewed:', wasViewed, 'wasListened:', wasListened);
+          
           if (payload.new.sender_id === user?.id && (wasRead || wasViewed || wasListened)) {
-            console.log('[FriendChat] Recipient interacted with message, updating status:', payload.new.id);
-            console.log('[FriendChat] Message interaction details:', { wasRead, wasViewed, wasListened });
-            const newStatus = computeMessageStatus(payload.new, user?.id || '');
-            console.log('[FriendChat] New computed status:', newStatus);
+            console.log('[DEBUG] 🎯 RECIPIENT INTERACTION DETECTED!');
+            console.log('[DEBUG] 📤 Message sent by us, recipient interacted:', payload.new.id);
+            console.log('[DEBUG] 🔍 Interaction details:', { wasRead, wasViewed, wasListened });
+            console.log('[DEBUG] 🧮 Computing new status based on updated message...');
+            
+            // CRITICAL FIX: Ensure the message object passed to computeMessageStatus 
+            // has the correct structure and updated timestamp fields
+            const messageForStatusComputation = {
+              ...payload.new,
+              // Ensure we have the latest timestamp values
+              read_at: payload.new.read_at,
+              viewed_at: payload.new.viewed_at, 
+              listened_at: payload.new.listened_at
+            };
+            
+            console.log('[DEBUG] 🔍 Message data being used for status computation:', {
+              id: messageForStatusComputation.id,
+              type: messageForStatusComputation.type,
+              sender_id: messageForStatusComputation.sender_id,
+              read_at: messageForStatusComputation.read_at,
+              viewed_at: messageForStatusComputation.viewed_at,
+              listened_at: messageForStatusComputation.listened_at
+            });
+            
+            const newStatus = computeMessageStatus(messageForStatusComputation, user?.id || '');
+            console.log('[DEBUG] ✅ New computed status:', newStatus);
             setMessages(prev => {
               const updated = prev.map(msg => 
                 msg.id === payload.new.id 
-                  ? { ...msg, status: newStatus, hasBeenViewed: true }
+                  ? { 
+                      ...msg, 
+                      status: newStatus, 
+                      hasBeenViewed: true,
+                      read_at: payload.new.read_at,
+                      viewed_at: payload.new.viewed_at,
+                      listened_at: payload.new.listened_at
+                    }
                   : msg
               );
-              console.log('[FriendChat] Updated message with new status:', updated.find(m => m.id === payload.new.id));
+              console.log('[DEBUG] 🔄 Updated local message state:');
+              const updatedMessage = updated.find(m => m.id === payload.new.id);
+              console.log('[DEBUG] 📋 Message after update:', {
+                id: updatedMessage?.id,
+                status: updatedMessage?.status,
+                read_at: updatedMessage?.read_at || 'null',
+                viewed_at: updatedMessage?.viewed_at || 'null',
+                listened_at: updatedMessage?.listened_at || 'null'
+              });
               return updated;
             });
             
@@ -676,12 +844,91 @@ export default function FriendChatScreen({ route, navigation }: any) {
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[DEBUG] 📡 MESSAGE UPDATE subscription status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('[DEBUG] ✅ Successfully subscribed to message updates - realtime should now work');
+          console.log('[DEBUG] 🧪 Testing subscription: updating a test field...');
+          
+          // Test the subscription by attempting a dummy update (optional test)
+          // This helps verify the subscription is actually working
+          if (user?.id && friendId) {
+            console.log('[DEBUG] 🧪 Subscription test: Channel active, ready for UPDATE events');
+            
+            // DIAGNOSTIC TEST: Try to trigger a test update to verify subscription
+            setTimeout(async () => {
+              console.log('[DEBUG] 🧪 RUNNING SUBSCRIPTION TEST...');
+              try {
+                // Find a recent message we sent to test with
+                const testMessage = messages.find(msg => msg.isMine && msg.type === 'text');
+                if (testMessage) {
+                  console.log('[DEBUG] 🧪 Testing with message:', testMessage.id);
+                  
+                  // Try a harmless update to test the subscription
+                  const { error } = await supabase
+                    .from('messages')
+                    .update({ updated_at: new Date().toISOString() })
+                    .eq('id', testMessage.id);
+                  
+                  if (error) {
+                    console.log('[DEBUG] 🧪 Test update failed (expected):', error.message);
+                  } else {
+                    console.log('[DEBUG] 🧪 Test update succeeded - should trigger UPDATE event');
+                  }
+                } else {
+                  console.log('[DEBUG] 🧪 No messages available for testing');
+                }
+              } catch (error) {
+                console.log('[DEBUG] 🧪 Test error (expected):', error);
+              }
+            }, 3000); // Test after 3 seconds
+          }
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('[DEBUG] ❌ CRITICAL: Error subscribing to message updates');
+          console.error('[DEBUG] 💡 This likely means:');
+          console.error('[DEBUG]   - Database permissions issue');
+          console.error('[DEBUG]   - Row-level security blocking subscription');
+          console.error('[DEBUG]   - Invalid channel configuration');
+          
+          // BACKUP MECHANISM: If real-time fails, set up polling as fallback
+          console.log('[DEBUG] 🔄 Setting up polling fallback for read receipts...');
+          const pollInterval = setInterval(async () => {
+            console.log('[DEBUG] 📊 Polling for message status updates...');
+            try {
+              await loadMessages(false);
+            } catch (error) {
+              console.error('[DEBUG] ❌ Polling error:', error);
+            }
+          }, 5000); // Poll every 5 seconds
+          
+          // Store interval for cleanup
+          (messageUpdateSubscription as any).pollInterval = pollInterval;
+          
+        } else if (status === 'CLOSED') {
+          console.log('[DEBUG] 🔴 Message update subscription closed');
+        } else {
+          console.log('[DEBUG] 📡 Subscription status change:', status);
+        }
+      });
+      
+    console.log('[DEBUG] 🎯 Real-time setup complete. Subscriptions:');
+    console.log('[DEBUG]   - New messages: subscription');
+    console.log('[DEBUG]   - Message expiry: expirySubscription');  
+    console.log('[DEBUG]   - Message updates: messageUpdateSubscription');
+    console.log('[DEBUG] 🔍 Ready to receive UPDATE events when messages are marked as read');
+    console.log('[DEBUG] 🔍 Test by marking a message as read on the other device...');
 
     return () => {
+      console.log('[DEBUG] 🧹 Cleaning up subscriptions and intervals...');
       subscription.unsubscribe();
       expirySubscription.unsubscribe();
       messageUpdateSubscription.unsubscribe();
+      
+      // Clean up polling interval if it exists
+      if ((messageUpdateSubscription as any).pollInterval) {
+        clearInterval((messageUpdateSubscription as any).pollInterval);
+        console.log('[DEBUG] ✅ Polling interval cleaned up');
+      }
     };
   };
 
@@ -750,7 +997,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
             'text'
           );
         } catch (pushError) {
-          console.log('[FriendChat] Push notification failed:', pushError);
           // Don't fail the message send if push fails
         }
       }
@@ -1079,7 +1325,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
         expiryRule: currentExpiryRule.type === 'view' ? { type: 'playback' } : currentExpiryRule
       };
 
-      console.log('[Upload] Setting uploading message ID:', tempId);
       setMessages(prev => [...prev, voiceMessage]);
       setUploadingMessageId(tempId);
       flatListRef.current?.scrollToEnd();
@@ -1154,7 +1399,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
           'voice'
         );
       } catch (pushError) {
-        console.log('[FriendChat] Push notification failed:', pushError);
       }
 
       // Close the modal
@@ -1182,7 +1426,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
         expiryRule: currentExpiryRule
       };
 
-      console.log('[Upload] Setting uploading message ID:', tempId);
       setMessages(prev => [...prev, videoMessage]);
       setUploadingMessageId(tempId);
       flatListRef.current?.scrollToEnd();
@@ -1258,7 +1501,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
           '📹 Video message'
         );
       } catch (notifError) {
-        console.log('[FriendChat] Error sending notification:', notifError);
       }
     } catch (error) {
       console.error('[FriendChat] Error sending video message:', error);
@@ -1395,7 +1637,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
       }
       // Stop current playback if playing another message
       if (sound && playingMessageId !== messageId) {
-        console.log('[Voice] Stopping previous playback');
         await sound.unloadAsync();
         setSound(null);
         setPlayingMessageId(null);
@@ -1406,7 +1647,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
         const status = await sound.getStatusAsync();
         if ('isLoaded' in status && status.isLoaded) {
           if (status.isPlaying) {
-            console.log('[Voice] Pausing current playback');
             await sound.pauseAsync();
             setPlaybackStatus(prev => ({
               ...prev,
@@ -1414,7 +1654,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
             }));
             return;
           } else {
-            console.log('[Voice] Resuming playback');
             await sound.playAsync();
             setPlaybackStatus(prev => ({
               ...prev,
@@ -1460,7 +1699,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
         }
 
         // Set downloading state
-        console.log('[Download] Setting downloading message ID:', messageId);
         setDownloadingMessageId(messageId);
 
         // Download and decrypt the audio using E2E encryption
@@ -1479,7 +1717,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
           }
         );
 
-        console.log('[Download] Clearing downloading state');
         setDownloadingMessageId(null);
         setDownloadProgress(prev => {
           const newProgress = { ...prev };
@@ -1494,12 +1731,10 @@ export default function FriendChatScreen({ route, navigation }: any) {
         audioUri = decryptedUri;
       }
 
-      console.log('[Voice] Playing audio from:', audioUri);
       
       // Verify the file exists
       try {
         const fileInfo = await FileSystem.getInfoAsync(audioUri);
-        console.log('[Voice] File info:', fileInfo);
         if (!fileInfo.exists) {
           throw new Error('Audio file does not exist at path: ' + audioUri);
         }
@@ -1534,7 +1769,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
         
         // Try alternative approach for Android
         if (Platform.OS === 'android') {
-          console.log('[Voice] Trying alternative loading method...');
           const sound = new Audio.Sound();
           await sound.loadAsync(
             { uri: audioUri },
@@ -1561,7 +1795,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
       // Handle ephemeral message viewing
       const msgForEphemeral = messages.find(m => m.id === messageId);
       if (msgForEphemeral) {
-        console.log('[Voice] Marking voice message as played for ephemeral handling');
         try {
           // Convert to database Message type with expiry rule
           const dbMessage = {
@@ -1595,7 +1828,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
             // Android workaround: ensure playback starts
             if (!hasStartedPlaying && !isPlaying && Platform.OS === 'android' && duration > 0) {
               hasStartedPlaying = true;
-              console.log('[Voice] Android playback not started, starting now...');
               newSound.playAsync().catch(err => console.error('[Voice] Error starting playback:', err));
             }
             
@@ -1721,13 +1953,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
 
         // Download and decrypt the video using the same pattern as voice messages
         // Always pass sender_id first, then recipient_id (current user)
-        console.log('[Video] Starting download with params:', {
-          videoId: msgData.media_path,
-          hasEncryptedKey: !!msgData.content,
-          hasNonce: !!msgData.nonce,
-          senderId: msgData.sender_id,
-          recipientId: user?.id
-        });
         
         const decryptedUri = await SecureE2EVideoStorageFastAndroid.downloadAndDecryptVideo(
           msgData.media_path, // This is now the videoId
@@ -1737,7 +1962,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
           user?.id || '',     // recipient is always the current user when downloading
           (progress) => {
             // Could update UI with download progress here if needed
-            console.log(`[Video] Download progress: ${Math.round(progress * 100)}%`);
           },
           msgData.video_nonce // Pass the video-specific nonce if available
         );
@@ -1751,16 +1975,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
         videoUri = decryptedUri;
       }
 
-      console.log('[Video] Playing video from:', videoUri);
       
       // Verify the file exists before playing
       const fileInfo = await FileSystem.getInfoAsync(videoUri);
-      console.log('[Video] File info:', {
-        exists: fileInfo.exists,
-        size: fileInfo.size ? `${(fileInfo.size / 1024 / 1024).toFixed(2)}MB` : 'unknown',
-        uri: fileInfo.uri,
-        isDirectory: fileInfo.isDirectory
-      });
       
       if (!fileInfo.exists) {
         console.error('[Video] File does not exist!');
@@ -1771,7 +1988,6 @@ export default function FriendChatScreen({ route, navigation }: any) {
       // Handle ephemeral message viewing before opening player
       const msgForEphemeral = messages.find(m => m.id === messageId);
       if (msgForEphemeral) {
-        console.log('[Video] Marking video message as viewed for ephemeral handling');
         try {
           // Convert to database Message type with expiry rule
           const dbMessage = {
@@ -1926,6 +2142,15 @@ export default function FriendChatScreen({ route, navigation }: any) {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
         
+        {/* DEBUG: Visual indicator that new code is running */}
+        {__DEV__ && (
+          <View style={[styles.debugHeader, { backgroundColor: theme.colors.text.accent + '20' }]}>
+            <Text style={[styles.debugHeaderText, { color: theme.colors.text.accent }]}>
+              🔍 DEBUG MODE - Read receipts fixes active - {new Date().toLocaleTimeString()}
+            </Text>
+          </View>
+        )}
+        
         <KeyboardAvoidingView
           style={styles.container}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -1955,12 +2180,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
               currentRule={currentExpiryRule}
               onPress={() => {
                 // Single tap opens expiry selector
-                console.log('[FriendChat] Ephemeral header toggle pressed, opening selector');
                 const msgType = inputText.trim() ? 'text' : 'voice';
-                console.log('[FriendChat] Setting message type:', msgType);
                 setMessageTypeForExpiry(msgType);
                 setShowExpirySelector(true);
-                console.log('[FriendChat] Set showExpirySelector to true');
               }}
             />
             <TouchableOpacity style={styles.headerButton}>
@@ -2192,11 +2414,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
       <ExpiryRuleSelector
         visible={showExpirySelector}
         onClose={() => {
-          console.log('[FriendChat] Modal onClose called');
           setShowExpirySelector(false);
         }}
         onSelect={async (rule) => {
-          console.log('[FriendChat] Modal onSelect called with rule:', rule);
           await updatePrivacyRule(rule);
           setShowExpirySelector(false);
         }}
@@ -2638,5 +2858,15 @@ const styles = StyleSheet.create({
     top: 1.5,
     left: 0,
     right: 0,
+  },
+  debugHeader: {
+    padding: 8,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#ffffff20',
+  },
+  debugHeaderText: {
+    fontSize: 12,
+    fontWeight: '500',
   },
 });

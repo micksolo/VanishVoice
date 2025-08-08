@@ -12,6 +12,7 @@ import * as Haptics from 'expo-haptics';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { ExpiryRule } from '../types/database';
 import BlurredMessage from './BlurredMessage';
+import ReadReceipt from './ReadReceipt';
 
 interface EphemeralMessageBubbleProps {
   content?: string;
@@ -356,60 +357,15 @@ export default function EphemeralMessageBubble({
                 {formatTime(timestamp)}
               </Text>
               
-              {/* Read receipt indicators (only for sent messages) */}
+              {/* Basic read receipt indicators */}
               {isMine && (
                 <View style={styles.statusIndicator}>
-                  {status === 'sending' && (
-                    <Ionicons
-                      name="time-outline"
-                      size={12}
-                      color={getTextColor() + '80'}
-                    />
-                  )}
-                  {status === 'sent' && (
-                    <Ionicons
-                      name="checkmark"
-                      size={12}
-                      color={getTextColor() + '80'}
-                    />
-                  )}
-                  {status === 'delivered' && (
-                    <>
-                      <Ionicons
-                        name="checkmark"
-                        size={12}
-                        color={getTextColor() + '80'}
-                        style={{ marginLeft: -4 }}
-                      />
-                      <Ionicons
-                        name="checkmark"
-                        size={12}
-                        color={getTextColor() + '80'}
-                      />
-                    </>
-                  )}
-                  {status === 'read' && (
-                    <>
-                      <Ionicons
-                        name="checkmark"
-                        size={12}
-                        color={theme.colors.text.accent}
-                        style={{ marginLeft: -4 }}
-                      />
-                      <Ionicons
-                        name="checkmark"
-                        size={12}
-                        color={theme.colors.text.accent}
-                      />
-                    </>
-                  )}
-                  {status === 'failed' && (
-                    <Ionicons
-                      name="alert-circle-outline"
-                      size={12}
-                      color={theme.colors.text.error || '#ff3b30'}
-                    />
-                  )}
+                  <ReadReceipt
+                    status={status}
+                    textColor={getTextColor()}
+                    variant={theme.name === 'neon' ? 'neon' : 'traditional'}
+                    size={12}
+                  />
                 </View>
               )}
             </View>
