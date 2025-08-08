@@ -39,12 +39,13 @@ export default function ExpiryRuleSelector({
     currentRule
   });
 
-  // Update selected rule when currentRule prop changes
+  // Update selected rule when currentRule prop changes or when modal opens
   useEffect(() => {
     if (currentRule) {
+      console.log('[ExpiryRuleSelector] Updating selectedRule from currentRule:', currentRule);
       setSelectedRule(currentRule);
     }
-  }, [currentRule]);
+  }, [currentRule, visible]); // Added 'visible' to dependencies to update when modal opens
 
   const handleSelect = () => {
     onSelect(selectedRule);
@@ -55,8 +56,9 @@ export default function ExpiryRuleSelector({
     {
       rule: { type: 'none' } as ExpiryRule,
       icon: 'infinite',
-      title: 'No Expiry',
-      description: 'Message never expires'
+      title: 'Keep Permanently',
+      description: 'Message stays until manually cleared',
+      isPremium: false
     },
     {
       rule: { type: 'view' } as ExpiryRule,
@@ -66,37 +68,25 @@ export default function ExpiryRuleSelector({
         ? 'Disappears after reading' 
         : messageType === 'voice' || messageType === 'video'
         ? 'Disappears after playing'
-        : 'Disappears after viewing'
+        : 'Disappears after viewing',
+      isPremium: false
+    }
+  ];
+
+  const premiumFeatures = [
+    {
+      icon: 'trash',
+      title: 'Clear All Messages',
+      description: 'Clear messages on both your device and recipient\'s device',
+      isPremium: true,
+      feature: 'clear_both_devices'
     },
     {
-      rule: { type: 'time', duration_sec: 60 } as ExpiryRule,
-      icon: 'timer',
-      title: '1 Minute',
-      description: 'Expires in 1 minute'
-    },
-    {
-      rule: { type: 'time', duration_sec: 300 } as ExpiryRule,
-      icon: 'timer',
-      title: '5 Minutes',
-      description: 'Expires in 5 minutes'
-    },
-    {
-      rule: { type: 'time', duration_sec: 3600 } as ExpiryRule,
-      icon: 'timer',
-      title: '1 Hour',
-      description: 'Expires in 1 hour'
-    },
-    {
-      rule: { type: 'time', duration_sec: 86400 } as ExpiryRule,
-      icon: 'timer',
-      title: '24 Hours',
-      description: 'Expires in 24 hours'
-    },
-    {
-      rule: { type: 'time', duration_sec: 604800 } as ExpiryRule,
-      icon: 'timer',
-      title: '7 Days',
-      description: 'Expires in 7 days'
+      icon: 'shield-checkmark',
+      title: 'Screenshot Blocking',
+      description: 'Prevent screenshots of your messages',
+      isPremium: true,
+      feature: 'screenshot_protection'
     }
   ];
 
@@ -132,7 +122,7 @@ export default function ExpiryRuleSelector({
     return (
       <>
             <View style={[styles.header, { borderBottomColor: theme.colors.border.default }]}>
-              <Text style={[styles.title, { color: theme.colors.text.primary }]}>Message Expiry</Text>
+              <Text style={[styles.title, { color: theme.colors.text.primary }]}>Message Privacy</Text>
               <TouchableOpacity onPress={onClose} style={styles.closeButton}>
                 <Ionicons name="close" size={24} color={theme.colors.text.primary} />
               </TouchableOpacity>
@@ -202,6 +192,62 @@ export default function ExpiryRuleSelector({
                   </TouchableOpacity>
                 );
               })}
+              
+              {/* Premium Features Section */}
+              <View style={[styles.premiumSection, { borderTopColor: theme.colors.border.default }]}>
+                <Text style={[styles.premiumSectionTitle, { color: theme.colors.text.accent }]}>
+                  Premium Features
+                </Text>
+                {premiumFeatures.map((feature, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.option, 
+                      { borderBottomColor: theme.colors.border.default },
+                      { opacity: 0.7 } // Disabled appearance
+                    ]}
+                    onPress={() => {
+                      // TODO: Show premium upgrade modal
+                      console.log('Premium feature tapped:', feature.feature);
+                    }}
+                  >
+                    <View style={styles.optionLeft}>
+                      <View style={[
+                        styles.iconContainer, 
+                        { backgroundColor: theme.colors.text.accent + '20' }
+                      ]}>
+                        <Ionicons 
+                          name={feature.icon as any} 
+                          size={24} 
+                          color={theme.colors.text.accent} 
+                        />
+                      </View>
+                      <View style={styles.optionText}>
+                        <View style={styles.premiumTitleRow}>
+                          <Text style={[
+                            styles.optionTitle, 
+                            { color: theme.colors.text.primary }
+                          ]}>
+                            {feature.title}
+                          </Text>
+                          <View style={[styles.premiumBadge, { backgroundColor: theme.colors.text.accent }]}>
+                            <Text style={[styles.premiumBadgeText, { color: theme.colors.text.inverse }]}>
+                              PRO
+                            </Text>
+                          </View>
+                        </View>
+                        <Text style={[
+                          styles.optionDescription, 
+                          { color: theme.colors.text.secondary }
+                        ]}>
+                          {feature.description}
+                        </Text>
+                      </View>
+                    </View>
+                    <Ionicons name="diamond" size={20} color={theme.colors.text.accent} />
+                  </TouchableOpacity>
+                ))}
+              </View>
             </ScrollView>
 
             {showScrollIndicator && (
@@ -334,5 +380,31 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3,
     elevation: 2,
+  },
+  premiumSection: {
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+  },
+  premiumSectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+  },
+  premiumTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  premiumBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+  },
+  premiumBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
 });

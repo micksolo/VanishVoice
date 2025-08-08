@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { ScrollView, View, Text, StyleSheet } from 'react-native';
+import { ScrollView, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { 
@@ -18,11 +18,15 @@ import {
   IconButton
 } from '../components/ui';
 import { ThemeSelector } from '../components/ThemeSelector';
+import ReadReceipt from '../components/ReadReceipt';
+import MessageBubble from '../components/MessageBubble';
 
 export default function ThemeDemo() {
   const theme = useAppTheme();
   const [inputValue, setInputValue] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [readReceiptVariant, setReadReceiptVariant] = useState<'traditional' | 'neon' | 'eye' | 'lightning'>('traditional');
+  const [demoStatus, setDemoStatus] = useState<'sending' | 'sent' | 'delivered' | 'read' | 'failed'>('delivered');
   
   return (
     <SafeAreaView>
@@ -235,6 +239,135 @@ export default function ThemeDemo() {
           </View>
         </Card>
 
+        {/* Read Receipt Demo */}
+        <Card style={styles.section} elevation="small">
+          <Text style={[theme.typography.headlineMedium, { color: theme.colors.text.primary, marginBottom: theme.spacing.lg }]}>
+            Read Receipt Variants
+          </Text>
+          
+          {/* Variant Selector */}
+          <Text style={[theme.typography.bodyMedium, { color: theme.colors.text.secondary, marginBottom: theme.spacing.sm }]}>
+            Variant:
+          </Text>
+          <View style={styles.variantSelector}>
+            {(['traditional', 'neon', 'eye', 'lightning'] as const).map((variant) => (
+              <TouchableOpacity
+                key={variant}
+                style={[
+                  styles.variantButton,
+                  {
+                    backgroundColor: readReceiptVariant === variant 
+                      ? theme.colors.button.primary.background 
+                      : theme.colors.background.tertiary,
+                  }
+                ]}
+                onPress={() => setReadReceiptVariant(variant)}
+              >
+                <Text
+                  style={[
+                    theme.typography.caption,
+                    {
+                      color: readReceiptVariant === variant
+                        ? theme.colors.button.primary.text
+                        : theme.colors.text.primary,
+                    }
+                  ]}
+                >
+                  {variant.charAt(0).toUpperCase() + variant.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Status Selector */}
+          <Text style={[theme.typography.bodyMedium, { color: theme.colors.text.secondary, marginBottom: theme.spacing.sm, marginTop: theme.spacing.md }]}>
+            Status:
+          </Text>
+          <View style={styles.statusSelector}>
+            {(['sending', 'sent', 'delivered', 'read', 'failed'] as const).map((status) => (
+              <TouchableOpacity
+                key={status}
+                style={[
+                  styles.statusButton,
+                  {
+                    backgroundColor: demoStatus === status 
+                      ? theme.colors.button.secondary.background 
+                      : theme.colors.background.tertiary,
+                  }
+                ]}
+                onPress={() => setDemoStatus(status)}
+              >
+                <Text
+                  style={[
+                    theme.typography.caption,
+                    {
+                      color: demoStatus === status
+                        ? theme.colors.button.secondary.text
+                        : theme.colors.text.primary,
+                    }
+                  ]}
+                >
+                  {status}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Demo Message Bubble */}
+          <View style={styles.messageDemo}>
+            <MessageBubble
+              content="Check out the read receipt!"
+              isMine={true}
+              timestamp={new Date()}
+              status={demoStatus}
+              readReceiptVariant={readReceiptVariant}
+            />
+          </View>
+
+          {/* Individual Read Receipt Components */}
+          <Text style={[theme.typography.bodyMedium, { color: theme.colors.text.secondary, marginBottom: theme.spacing.sm, marginTop: theme.spacing.md }]}>
+            Standalone Components:
+          </Text>
+          <View style={styles.readReceiptRow}>
+            <View style={styles.readReceiptDemo}>
+              <Text style={[theme.typography.caption, { color: theme.colors.text.tertiary }]}>Sending</Text>
+              <ReadReceipt
+                status="sending"
+                textColor={theme.colors.text.primary}
+                variant={readReceiptVariant}
+                size={16}
+              />
+            </View>
+            <View style={styles.readReceiptDemo}>
+              <Text style={[theme.typography.caption, { color: theme.colors.text.tertiary }]}>Sent</Text>
+              <ReadReceipt
+                status="sent"
+                textColor={theme.colors.text.primary}
+                variant={readReceiptVariant}
+                size={16}
+              />
+            </View>
+            <View style={styles.readReceiptDemo}>
+              <Text style={[theme.typography.caption, { color: theme.colors.text.tertiary }]}>Delivered</Text>
+              <ReadReceipt
+                status="delivered"
+                textColor={theme.colors.text.primary}
+                variant={readReceiptVariant}
+                size={16}
+              />
+            </View>
+            <View style={styles.readReceiptDemo}>
+              <Text style={[theme.typography.caption, { color: theme.colors.text.tertiary }]}>Read</Text>
+              <ReadReceipt
+                status="read"
+                textColor={theme.colors.text.primary}
+                variant={readReceiptVariant}
+                size={16}
+              />
+            </View>
+          </View>
+        </Card>
+
         {/* Loading States */}
         <Card style={styles.section} elevation="small">
           <Text style={[theme.typography.headlineMedium, { color: theme.colors.text.primary, marginBottom: theme.spacing.lg }]}>
@@ -308,5 +441,46 @@ const styles = StyleSheet.create({
   spacingBar: {
     height: 20,
     borderRadius: 4,
+  },
+  variantSelector: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  variantButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  statusSelector: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  statusButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    minWidth: 60,
+    alignItems: 'center',
+  },
+  messageDemo: {
+    marginVertical: 16,
+    alignItems: 'flex-end',
+  },
+  readReceiptRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    flexWrap: 'wrap',
+    gap: 16,
+  },
+  readReceiptDemo: {
+    alignItems: 'center',
+    gap: 8,
+    minWidth: 60,
   },
 });

@@ -217,9 +217,22 @@ export class SecureE2EVideoStorageFastAndroid {
       const compressedSizeMB = compressionResult.compressedSize / 1024 / 1024;
       console.log(`[Video Upload] Compressed to: ${compressedSizeMB.toFixed(2)}MB (${compressionResult.compressionRatio.toFixed(1)}% reduction)`);
       
-      // Generate keys
-      const videoKey = nacl.randomBytes(32);
-      const videoId = Buffer.from(nacl.randomBytes(16)).toString('hex');
+      // Generate keys - this is where PRNG errors occur
+      console.log('[Video Upload] Generating encryption keys...');
+      let videoKey: Uint8Array;
+      let videoId: string;
+      
+      try {
+        videoKey = nacl.randomBytes(32);
+        videoId = Buffer.from(nacl.randomBytes(16)).toString('hex');
+        console.log('[Video Upload] Keys generated successfully');
+      } catch (keyGenError: any) {
+        console.error('[Video Upload] Key generation failed:', keyGenError);
+        if (keyGenError.message?.includes('PRNG') || keyGenError.message?.includes('no PRNG')) {
+          throw new Error('Crypto initialization failed. This may be due to Expo Go limitations. Please try using a development build for full video functionality.');
+        }
+        throw new Error('Failed to generate encryption keys: ' + keyGenError.message);
+      }
       
       // Read compressed file using fast binary API
       onProgress?.(0.45);

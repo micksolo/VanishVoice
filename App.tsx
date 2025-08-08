@@ -1,3 +1,6 @@
+// CRITICAL: Import react-native-get-random-values FIRST for TweetNaCl compatibility
+import 'react-native-get-random-values';
+
 import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';

@@ -8,6 +8,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Read Receipts System** ✅ COMPLETE (August 8, 2025)
+  - Full read receipt implementation with status progression: sending → sent → delivered → read
+  - Visual indicators: single gray checkmark (sent), double gray (delivered), double blue (read)
+  - WhatsApp-style checkmark spacing with proper overlap (-7px margin)
+  - Works via polling mechanism (3-second intervals) due to Supabase UPDATE event limitations
+  - Automatic marking of messages as read when recipient opens chat
+  - Persistent status across app backgrounding/foregrounding
+  - Blue color (#007AFF) for read receipts matching iOS/WhatsApp standards
+  - Applied to all message types (text, voice, video)
+  - Technical implementation:
+    - Basic database UPDATE for read_at timestamps
+    - Polling-based status synchronization
+    - Local state management to prevent infinite loops
+    - No complex migrations or new tables required
+- **Double-Tap Heart Reactions** ✅ COMPLETE (August 8, 2025)
+  - Instagram/WhatsApp-style double-tap to add heart reaction
+  - Persistent heart icon that stays on messages
+  - Toggle on/off with subsequent double-taps
+  - Haptic feedback on iOS for tactile response
+  - Smooth scale animations with spring physics
+  - Floating heart animation for visual feedback
+  - Works on all message types (text, voice, video)
+
+- **Simplified Ephemeral Messaging System** ✅ COMPLETE (August 5, 2025)
+  - Strategic pivot to just two privacy options: "View Once" and "Keep Permanently"
+  - Removed complex timed message options (1min, 5min, 1hr, 24hr, 7days)
+  - Fixed persistent SVG useInsertionEffect warnings by removing countdown timers
+  - Cleaner ExpiryRuleSelector with simplified user interface
+  - Better user experience with clear, understandable privacy choices
+  - Reduced technical complexity and maintenance burden
+  - Premium feature design for "Clear All Messages" functionality
+  - PRO badge system for future monetization opportunities
+  - Technical fixes:
+    - Removed IntegratedCountdown and FallbackCountdown components
+    - Simplified EphemeralIndicator (no time tracking)
+    - Updated EphemeralDemo with privacy options showcase
+    - Cleaned up all countdown timer references in message bubbles
 - **Ephemeral Messaging System** ✅ COMPLETE
   - Complete UI/UX redesign with dark mysterious aesthetic
   - Tap-to-reveal pattern for ephemeral messages with blur effect

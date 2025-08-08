@@ -130,7 +130,7 @@ async function decryptAudioData(
   
   // If version 1, go straight to legacy decryption
   if (version === 1) {
-    console.log('[E2EAudio] Version 1 message detected, using legacy decryption');
+    // Legacy decryption for version 1 messages
     return decryptAudioDataLegacy(encryptedBase64, key, nonce);
   }
   
@@ -147,7 +147,7 @@ async function decryptAudioData(
     const encryptedData = new Uint8Array(Buffer.from(encryptedBase64, 'base64'));
     const keyData = new Uint8Array(Buffer.from(decryptionKey, 'hex'));
     
-    console.log(`[E2EAudio] Starting XOR decryption of ${(encryptedData.length / 1024 / 1024).toFixed(2)}MB`);
+    // Processing audio decryption...
     
     // Process in chunks to keep UI responsive
     const CHUNK_SIZE = 1024 * 1024; // 1MB chunks

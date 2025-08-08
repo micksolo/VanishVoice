@@ -8,11 +8,11 @@ import {
   TouchableOpacity,
   Switch,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../contexts/ThemeContext';
 import EphemeralMessageBubble from '../components/EphemeralMessageBubble';
 import BlurredMessage from '../components/BlurredMessage';
 import VanishAnimation, { VanishAnimationRef, VanishType } from '../components/VanishAnimation';
-import IntegratedCountdown from '../components/IntegratedCountdown';
 import { ExpiryRule } from '../types/database';
 
 export default function EphemeralDemo() {
@@ -102,28 +102,23 @@ export default function EphemeralDemo() {
           />
         </View>
 
-        {/* Countdown Demo */}
+        {/* Simplified Privacy Demo */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Countdown Timer Demo</Text>
-          <View style={styles.countdownRow}>
-            <IntegratedCountdown
-              duration={30}
-              size={40}
-              strokeWidth={3}
-              showText={true}
-            />
-            <IntegratedCountdown
-              duration={60}
-              size={60}
-              strokeWidth={4}
-              showText={true}
-            />
-            <IntegratedCountdown
-              duration={10}
-              size={80}
-              strokeWidth={5}
-              showText={true}
-            />
+          <Text style={styles.sectionTitle}>Message Privacy Options</Text>
+          <Text style={styles.sectionSubtitle}>
+            Choose how your messages are handled:
+          </Text>
+          <View style={styles.privacyOptions}>
+            <View style={styles.privacyOption}>
+              <Ionicons name="eye" size={24} color={theme.colors.text.accent} />
+              <Text style={styles.privacyOptionText}>View Once</Text>
+              <Text style={styles.privacyOptionDesc}>Disappears after viewing</Text>
+            </View>
+            <View style={styles.privacyOption}>
+              <Ionicons name="infinite" size={24} color={theme.colors.text.accent} />
+              <Text style={styles.privacyOptionText}>Keep Permanently</Text>
+              <Text style={styles.privacyOptionDesc}>Until manually cleared</Text>
+            </View>
           </View>
         </View>
 
@@ -241,10 +236,31 @@ const getStyles = (theme: any) => StyleSheet.create({
   typeButtonTextActive: {
     color: theme.colors.text.inverse,
   },
-  countdownRow: {
+  sectionSubtitle: {
+    ...theme.typography.bodyMedium,
+    color: theme.colors.text.secondary,
+    marginBottom: theme.spacing.lg,
+  },
+  privacyOptions: {
+    gap: theme.spacing.md,
+  },
+  privacyOption: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
     alignItems: 'center',
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.background.tertiary,
+    borderRadius: theme.borderRadius.md,
+    gap: theme.spacing.md,
+  },
+  privacyOptionText: {
+    ...theme.typography.bodyMedium,
+    color: theme.colors.text.primary,
+    fontWeight: '600',
+  },
+  privacyOptionDesc: {
+    ...theme.typography.bodySmall,
+    color: theme.colors.text.secondary,
+    marginLeft: 'auto',
   },
   vanishDemo: {
     padding: theme.spacing.lg,

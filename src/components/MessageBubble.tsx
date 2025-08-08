@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../contexts/ThemeContext';
 import EphemeralIndicator from './EphemeralIndicator';
 import CountdownTimer from './CountdownTimer';
+import ReadReceipt from './ReadReceipt';
 import { ExpiryRule } from '../types/database';
 
 interface MessageBubbleProps {
@@ -26,6 +27,8 @@ interface MessageBubbleProps {
   showAvatar?: boolean;
   senderName?: string;
   messageType?: 'text' | 'voice' | 'video' | 'image';
+  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+  readReceiptVariant?: 'traditional' | 'neon' | 'eye' | 'lightning';
 }
 
 export default function MessageBubble({
@@ -41,6 +44,8 @@ export default function MessageBubble({
   showAvatar = false,
   senderName,
   messageType = 'text',
+  status = 'sent',
+  readReceiptVariant = 'traditional',
 }: MessageBubbleProps) {
   const theme = useAppTheme();
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -201,16 +206,30 @@ export default function MessageBubble({
           </Text>
         )}
 
-        {/* Timestamp */}
-        <Text
-          style={[
-            styles.timestamp,
-            theme.typography.labelSmall,
-            { color: getTextColor() + '80' },
-          ]}
-        >
-          {formatTime(timestamp)}
-        </Text>
+        {/* Timestamp and status row */}
+        <View style={styles.timestampRow}>
+          <Text
+            style={[
+              styles.timestamp,
+              theme.typography.labelSmall,
+              { color: getTextColor() + '80' },
+            ]}
+          >
+            {formatTime(timestamp)}
+          </Text>
+          
+          {/* Read receipt indicators (only for sent messages) */}
+          {isMine && (
+            <View style={styles.statusIndicator}>
+              <ReadReceipt
+                status={status}
+                textColor={getTextColor()}
+                variant={readReceiptVariant}
+                size={12}
+              />
+            </View>
+          )}
+        </View>
 
         {/* Privacy indicator for anonymous messages */}
         {!isMine && !senderName && (
@@ -308,9 +327,19 @@ const styles = StyleSheet.create({
   messageText: {
     marginBottom: 4,
   },
-  timestamp: {
-    alignSelf: 'flex-end',
+  timestampRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginTop: 2,
+  },
+  timestamp: {
+    flex: 1,
+  },
+  statusIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 8,
   },
   privacyIndicator: {
     flexDirection: 'row',

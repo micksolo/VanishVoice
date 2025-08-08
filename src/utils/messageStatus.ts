@@ -30,27 +30,50 @@ export function computeMessageStatus(
   message: Message,
   currentUserId: string
 ): MessageStatus {
+  console.log(`[MessageStatus] 🔍 Computing status for message ${message.id}`);
+  console.log(`[MessageStatus] 📋 Message details:`, {
+    id: message.id,
+    type: message.type,
+    sender_id: message.sender_id,
+    recipient_id: message.recipient_id,
+    read_at: message.read_at || 'null',
+    viewed_at: message.viewed_at || 'null',
+    listened_at: message.listened_at || 'null',
+    created_at: message.created_at
+  });
+  console.log(`[MessageStatus] 👤 Current user: ${currentUserId}, Message sender: ${message.sender_id}`);
+  
   // For messages we received from others, status doesn't apply to sender UI
   if (message.sender_id !== currentUserId) {
+    console.log(`[MessageStatus] ↩️ Message from others - returning 'delivered'`);
     return 'delivered';
   }
 
+  console.log(`[MessageStatus] 📤 Message sent by us - checking recipient interaction...`);
   // For messages we sent, determine status based on recipient interaction
   
   // Check if message has been read/viewed/listened to in priority order
   
   // Text messages: check read_at timestamp
-  if (message.type === 'text' && message.read_at) {
-    return 'read';
+  if (message.type === 'text') {
+    console.log(`[MessageStatus] Text message ${message.id} - checking read_at:`, message.read_at);
+    if (message.read_at) {
+      console.log(`[MessageStatus] ✅ Message ${message.id} marked as READ - has read_at:`, message.read_at);
+      return 'read';
+    } else {
+      console.log(`[MessageStatus] ❌ Message ${message.id} NOT read - read_at is null/undefined`);
+    }
   }
   
   // Voice/video messages: check listened_at timestamp (primary indicator)
   if ((message.type === 'voice' || message.type === 'video') && message.listened_at) {
+    console.log(`[MessageStatus] Message ${message.id} marked as READ - has listened_at:`, message.listened_at);
     return 'read';
   }
   
   // Fallback: check viewed_at for any message type
   if (message.viewed_at) {
+    console.log(`[MessageStatus] Message ${message.id} marked as READ - has viewed_at:`, message.viewed_at);
     return 'read';
   }
   
@@ -61,10 +84,12 @@ export function computeMessageStatus(
   const DELIVERY_DELAY_MS = 2000; // 2 seconds - reasonable time for message to be delivered
   
   if (messageAge > DELIVERY_DELAY_MS) {
+    console.log(`[MessageStatus] Message ${message.id} status: DELIVERED (age: ${messageAge}ms)`);
     return 'delivered';
   }
   
   // Message was just sent, still in transit
+  console.log(`[MessageStatus] Message ${message.id} status: SENT (age: ${messageAge}ms)`);
   return 'sent';
 }
 

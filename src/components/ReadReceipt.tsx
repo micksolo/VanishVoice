@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated } from 'react-native';
+import { View, StyleSheet, Animated, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../contexts/ThemeContext';
 
@@ -32,6 +32,11 @@ export default function ReadReceipt({
   const theme = useAppTheme();
   const glowAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  
+  // Log status changes for read receipt debugging
+  useEffect(() => {
+    console.log('[ReadReceipt] Status changed to:', status, 'at', new Date().toLocaleTimeString());
+  }, [status]);
 
   useEffect(() => {
     if (variant === 'neon' && status === 'read') {
@@ -73,7 +78,11 @@ export default function ReadReceipt({
     if (variant === 'neon') {
       return theme.colors.neon?.neonPink || '#FF1B8D'; // Use neon pink for read state per design specs
     }
-    return theme.colors.text.accent; // Blue for traditional style (like WhatsApp)
+    // Use proper blue color for read receipts (like WhatsApp/Telegram)
+    // Don't use theme.colors.text.accent as it's purple in this app
+    const blueColor = '#007AFF'; // iOS blue / WhatsApp blue
+    // console.log('[ReadReceipt] Read color:', blueColor, 'for status:', status);
+    return blueColor;
   };
 
   const getDeliveredColor = () => {
@@ -82,11 +91,11 @@ export default function ReadReceipt({
 
   if (variant === 'traditional') {
     return (
-      <Animated.View 
-        style={[styles.container, { transform: [{ scale: scaleAnim }] }]}
-        accessibilityLabel={getStatusAccessibilityLabel(status)}
-        accessibilityRole="text"
-      >
+        <Animated.View 
+          style={[styles.container, { transform: [{ scale: scaleAnim }] }]}
+          accessibilityLabel={getStatusAccessibilityLabel(status)}
+          accessibilityRole="text"
+        >
         {status === 'sending' && (
           <Ionicons
             name="time-outline"
@@ -107,12 +116,13 @@ export default function ReadReceipt({
               name="checkmark"
               size={size}
               color={getDeliveredColor()}
-              style={{ marginLeft: -6 }} // Tighter spacing for better visual alignment
+              style={styles.firstCheck}
             />
             <Ionicons
               name="checkmark"
               size={size}
               color={getDeliveredColor()}
+              style={styles.secondCheck}
             />
           </View>
         )}
@@ -122,12 +132,13 @@ export default function ReadReceipt({
               name="checkmark"
               size={size}
               color={getReadColor()}
-              style={{ marginLeft: -6 }} // Tighter spacing for better visual alignment
+              style={styles.firstCheck}
             />
             <Ionicons
               name="checkmark"
               size={size}
               color={getReadColor()}
+              style={styles.secondCheck}
             />
           </View>
         )}
@@ -138,7 +149,7 @@ export default function ReadReceipt({
             color={theme.colors.text.error || '#ff3b30'}
           />
         )}
-      </Animated.View>
+        </Animated.View>
     );
   }
 
@@ -173,12 +184,13 @@ export default function ReadReceipt({
               name="checkmark"
               size={size}
               color={getDeliveredColor()}
-              style={{ marginLeft: -6 }}
+              style={styles.firstCheck}
             />
             <Ionicons
               name="checkmark"
               size={size}
               color={getDeliveredColor()}
+              style={styles.secondCheck}
             />
           </View>
         )}
@@ -209,12 +221,13 @@ export default function ReadReceipt({
               name="checkmark"
               size={size}
               color={getReadColor()}
-              style={{ marginLeft: -6 }}
+              style={styles.firstCheck}
             />
             <Ionicons
               name="checkmark"
               size={size}
               color={getReadColor()}
+              style={styles.secondCheck}
             />
           </Animated.View>
         )}
@@ -337,6 +350,15 @@ const styles = StyleSheet.create({
   doubleCheck: {
     flexDirection: 'row',
     alignItems: 'center',
+    width: 18, // Fixed width to prevent layout shifts
+  },
+  firstCheck: {
+    marginLeft: -2, // Position for first checkmark
+    zIndex: 1,
+  },
+  secondCheck: {
+    marginLeft: -7, // Moderate overlap for WhatsApp-style spacing (was -12 which fully overlapped)
+    zIndex: 2, // Second check appears on top
   },
   neonContainer: {
     flexDirection: 'row',
@@ -345,5 +367,14 @@ const styles = StyleSheet.create({
   lightningContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  debugContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  debugText: {
+    marginRight: 4,
+    fontSize: 8,
+    opacity: 0.6,
   },
 });

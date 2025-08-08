@@ -209,8 +209,8 @@ export default function FriendChatScreen({ route, navigation }: any) {
       
       const markCurrentMessagesAsRead = async () => {
         try {
-          console.log('[DEBUG] 📖 Screen focused - checking for unread messages to mark as read');
-          console.log('[DEBUG] Current messages count:', messages.length);
+          // console.log('[DEBUG] 📖 Screen focused - checking for unread messages to mark as read');
+          // console.log('[DEBUG] Current messages count:', messages.length);
           
           // Find unread messages from the friend
           const unreadMessages = messages.filter(msg => 
@@ -219,28 +219,34 @@ export default function FriendChatScreen({ route, navigation }: any) {
             !msg.hasBeenViewed // Not already viewed
           );
           
-          console.log('[DEBUG] Found', unreadMessages.length, 'unread messages to mark as read');
-          
+          // Only log if there are unread messages
           if (unreadMessages.length === 0) {
-            console.log('[DEBUG] No unread messages found');
+            // console.log('[DEBUG] No unread messages found');
             return;
           }
           
+          console.log('[DEBUG] Found', unreadMessages.length, 'unread messages to mark as read');
           const messageIds = unreadMessages.map(msg => msg.id);
-          console.log('[DEBUG] 🎯 Focus Effect: Using basic read receipts system for message IDs:', messageIds);
+          // console.log('[DEBUG] 🎯 Focus Effect: Using basic read receipts system for message IDs:', messageIds);
           
           // Use basic read receipts system
           for (const messageId of messageIds) {
             try {
               await markMessageAsRead(messageId);
               console.log('[DEBUG] ✅ Focus Effect: Successfully marked message as read:', messageId);
+              
+              // Update local state to reflect the read status
+              setMessages(prev => prev.map(msg => 
+                msg.id === messageId 
+                  ? { ...msg, status: 'read' as const, hasBeenViewed: true }
+                  : msg
+              ));
             } catch (error) {
               console.error('[DEBUG] ❌ Focus Effect: Exception marking message as read:', messageId, error);
             }
           }
           
           console.log('[DEBUG] ✅ Focus Effect: Completed processing all unread messages with basic system');
-          // Real-time notifications will update UI automatically
         } catch (error) {
           console.error('[DEBUG] ❌ Error in markCurrentMessagesAsRead:', error);
         }
@@ -523,7 +529,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
     if (!user) return;
     
     try {
-      // Check for new messages since last check
+      // Check for ALL messages to get updated read statuses (not just new ones)
       const { data, error } = await supabase
         .from('messages')
         .select('*')
@@ -540,7 +546,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
       
       const currentCount = nonExpiredMessages.length;
       
-      if (currentCount !== lastMessageCount.current) {
+      // Always process messages to update read statuses (not just when count changes)
+      // This ensures read receipts update even if no new messages
+      if (true) { // Changed from: if (currentCount !== lastMessageCount.current)
         
         // Convert and decrypt messages
         const convertedMessages: Message[] = [];
@@ -578,7 +586,14 @@ export default function FriendChatScreen({ route, navigation }: any) {
             content,
             isMine: msg.sender_id === user?.id,
             timestamp: new Date(msg.created_at),
-            status: computeMessageStatus(msg, user?.id || ''),
+            status: (() => {
+              const computedStatus = computeMessageStatus(msg, user?.id || '');
+              // Only log status changes for messages we sent
+              if (msg.sender_id === user?.id && computedStatus === 'read') {
+                console.log(`[DEBUG] ✅ Message ${msg.id} marked as READ by recipient`);
+              }
+              return computedStatus;
+            })(),
             duration: msg.duration,
             expiryRule: msg.expiry_rule,
             isEphemeral: msg.expiry_rule && msg.expiry_rule.type !== 'none',
@@ -586,28 +601,13 @@ export default function FriendChatScreen({ route, navigation }: any) {
           });
         }
 
-        // Only update if we have different messages (avoid unnecessary re-renders)
-        if (!areMessageArraysEquivalent(messages, convertedMessages)) {
-          // Preserve existing message statuses when updating from polling
-          setMessages(prev => {
-            const preservedMessages = convertedMessages.map(newMsg => {
-              const existingMsg = prev.find(existing => existing.id === newMsg.id);
-              if (existingMsg) {
-                // Preserve status and hasBeenViewed from existing message if it's more recent
-                const preservedStatus = existingMsg.status === 'read' || existingMsg.hasBeenViewed 
-                  ? existingMsg.status 
-                  : newMsg.status;
-                return {
-                  ...newMsg,
-                  status: preservedStatus,
-                  hasBeenViewed: existingMsg.hasBeenViewed || newMsg.hasBeenViewed
-                };
-              }
-              return newMsg;
-            });
-            return preservedMessages;
-          });
-          lastMessageCount.current = currentCount;
+        // Update messages with new read statuses from database
+        // IMPORTANT: Use the NEW status from database, not the old one!
+        setMessages(convertedMessages);
+        lastMessageCount.current = currentCount;
+        
+        // Only scroll if there are actually new messages (not just status updates)
+        if (currentCount > messages.length) {
           flatListRef.current?.scrollToEnd();
         }
       }

@@ -11,25 +11,21 @@ import { Message as DBMessage } from '../types/database';
 export function shouldFilterExpiredMessage(msg: DBMessage): boolean {
   // Skip hard-expired messages 
   if (msg.expired) {
-    console.log('[MessageFilter] Filtering hard-expired message:', msg.id);
     return true;
   }
   
   // Skip view-once messages that have been viewed
   if (msg.expiry_rule?.type === 'view' && msg.viewed_at) {
-    console.log('[MessageFilter] Filtering viewed view-once message:', msg.id);
     return true;
   }
   
   // Skip read-once messages that have been read
   if (msg.expiry_rule?.type === 'read' && msg.read_at) {
-    console.log('[MessageFilter] Filtering read read-once message:', msg.id);
     return true;
   }
   
   // Skip playback-once messages that have been listened to
   if (msg.expiry_rule?.type === 'playback' && msg.listened_at) {
-    console.log('[MessageFilter] Filtering played playback-once message:', msg.id);
     return true;
   }
   
@@ -45,7 +41,6 @@ export function shouldFilterExpiredMessage(msg: DBMessage): boolean {
     const graceTime = new Date(expiryTime.getTime() + gracePeriod);
     
     if (now > graceTime) {
-      console.log('[MessageFilter] Filtering time-expired message after grace period:', msg.id);
       return true;
     }
   }

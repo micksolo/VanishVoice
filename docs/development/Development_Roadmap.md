@@ -1,4 +1,4 @@
-# WYD - Anonymous Chat App Development Roadmap
+# WYD - Anonymous Chat App Sprint Development Roadmap
 
 ## Project Overview
 **WYD** (What You Doing) is an anonymous chat app for young adults that connects strangers for ephemeral conversations through text, voice, and video messages. Think "Omegle meets Snapchat" with a fun, casual vibe.
@@ -10,141 +10,247 @@
 - Fun, young adult-focused branding
 - Mobile-only (iOS and Android) - no web version
 
-## Development Philosophy
-**Core Features First**: Complete the essential user experience before adding account management. Users can't miss features they haven't experienced yet, but they will immediately notice missing core functionality.
+## Sprint Development Philosophy
+**Iterative Delivery**: Ship valuable features every 1-2 weeks with continuous user feedback. Focus on time-boxed iterations that deliver complete, testable functionality.
 
-## Phase 1: MVP - Anonymous Chat ✅ COMPLETED
-*All features documented in CHANGELOG.md*
+## Sprint Structure
+- **Sprint Length**: 1 week (7 days)
+- **Sprint Ceremonies**: Planning (Mon), Daily Standups, Review (Fri), Retrospective (Fri)
+- **Definition of Done**: Feature tested on both iOS/Android, documented, merged to main
+- **Velocity Tracking**: Story points and completion rates tracked per sprint
 
-## Phase 2: Core Features Completion (1-2 weeks)
+## Sprint Backlog
 
-### Current Priority: Make the App Fun! 🎉
-*Core messaging features completed - Now focusing on fun UI/UX*
+### ✅ COMPLETED WORK
+*All MVP and core features documented in CHANGELOG.md - representing approximately 15-20 sprints of work*
 
-### Implementation Priority Order:
-1. **CRITICAL: Video/Voice Message Performance Optimization** (1 week) ✅ COMPLETED
-   - ✅ Achieved: 3-5MB videos (88% reduction), 3-5s uploads
-   - ✅ Voice messages: 20-30x faster processing
-   - ⚠️ Known issue: Video decryption 10-15s (future optimization needed)
-   
-2. **Video Messages** (2-3 days) ✅ COMPLETED
-   - Complete the core messaging triad (text/voice/video)
-   - Essential for competitive parity
-   - 30-second limit for both anonymous and friend chat
-   - E2E encrypted like voice messages
-   
-3. **Fun UI Quick Wins** (1-2 days) 🎨 NEW PRIORITY!
-   - Fix dark theme in FriendChatScreen
-   - Implement "Neon Nights" color scheme
-   - Add message animations and reactions
-   - Make recording UI more playful
-   - See detailed design docs in /docs/design/
-   
-4. **Ephemeral Message System** ✅ COMPLETED
-   - Auto-delete after viewing implemented
-   - Time-based expiry options
-   - Beautiful vanishing animations and effects
-   - Dark mysterious UI redesign
-   - Tap-to-reveal pattern for ephemeral messages
-   - Backend cleanup job with deletion logs
-   - Fixed critical bug: viewed messages no longer reappear
-   - Sender-side fade animation when recipient views message
-   - View-once messages as default for all message types
-   - Inline experience without modal overlays
-   - See CHANGELOG.md for details
-   
-5. **Screenshot Prevention** (1 day)
-   - Critical for ephemeral messaging trust
-   - Android: actual prevention
-   - iOS: detection and notification
-   
-6. **Account Recovery System** (3-4 days)
-   - Important for retention but not blocking core UX
-   - Users need complete experience first
+## COMPLETED SPRINT: Sprint N+1 (Week of August 5-8, 2025) ✅
+### Sprint Goal: "Simplified Ephemeral Messaging - Better UX & Monetization" 🚀
 
-### Video Messages Implementation Details ✅ COMPLETED
-*All video message features have been implemented - see CHANGELOG.md for details*
+**Actual Story Points Completed**: 10 points
+**Sprint Theme**: Strategic simplification for better user experience and premium features
+**Sprint Outcome**: Successfully completed all planned features plus additional read receipts fix
 
-### Video/Voice Message Performance Optimization ✅ COMPLETED
-*All performance optimization features have been implemented - see CHANGELOG.md for details*
+### Sprint Achievements:
 
-### Remaining Core Features
-- [x] **Ephemeral Messaging System** ✅ COMPLETED
-  - All technical fixes applied (SVG crashes, timer icons, modal UX)
-  - Critical bugs resolved (no more reappearing messages)
-  - View-once messages working across all types (text/voice/video)
-  - Real-time sync and database tracking functioning properly
-  - Ready for production testing
-  - See CHANGELOG.md for complete implementation details
-
-- [ ] **Screenshot Detection/Prevention**
-  - Critical for ephemeral messaging trust
-  - Android: actual prevention using FLAG_SECURE
-  - iOS: detection and notification to sender
+#### HIGH PRIORITY (Must-Have) ✅ COMPLETED
+- [x] **Simplify Ephemeral Messaging System** (5 points) ✅ COMPLETED
+  - Remove complex timed message options (1min, 5min, 1hr, 24hr, 7days)
+  - Simplify to just "View Once" and "Keep Permanently" options
+  - Remove IntegratedCountdown and FallbackCountdown components
+  - Fix persistent SVG useInsertionEffect warnings
+  - Update ExpiryRuleSelector with cleaner two-option interface
+  - Remove all countdown timer logic from message bubbles
+  - Simplify EphemeralIndicator component (no more time tracking)
   
-- [ ] **Anonymous Chat Enhancements**
-  - [ ] Better stranger matching
-  - [ ] Skip/Next functionality
-  - [ ] Report/Block system
+- [x] **Premium Feature Design** (2 points) ✅ COMPLETED
+  - Design "Clear All Messages" premium feature
+  - Add premium section to ExpiryRuleSelector modal
+  - Create monetization opportunity with "clear on both devices" feature
+  - Add screenshot blocking as future premium feature
+  - Beautiful PRO badges and premium UI elements
 
-### Remaining Technical Tasks
-- [ ] **Comprehensive UX/UI Redesign** (Priority: HIGH - 8 weeks)
-  - [x] **Phase 1: Foundation (Weeks 1-2)** ✅ COMPLETED
-    - [x] Set up theme system with light/dark mode support ✅
-    - [x] Create base UI component library (buttons, inputs, cards) ✅
-    - [x] Fix critical UX issues (touch targets, loading states) ✅
-    - [x] Implement color system with semantic tokens ✅
-  - [ ] **Phase 2: Core Components (Weeks 3-4)** IN PROGRESS
-    - [x] Migrate all screens to use theme system (FriendsListScreen completed ✅)
-    - [x] Redesign message bubbles with proper status indicators ✅
-    - [ ] Improve recording interface (tap-to-start, visual feedback)
-    - [x] Create empty state components ✅
-    - [x] Implement consistent spacing system (4px grid) ✅
-  - [ ] **Phase 3: Visual Polish - "Make It Fun Like Snapchat" (Weeks 5-6)** 🎨
-    - [ ] **Neon Nights Theme Implementation** (Recommended Design)
-      - [ ] Electric purple (#B026FF) as primary accent
-      - [ ] Neon pink, cyber blue, laser green accents
-      - [ ] Glowing message bubbles with gradient effects
-      - [ ] Dark theme fixes for FriendChatScreen
-    - [ ] **Fun Animations & Micro-interactions**
-      - [ ] Bouncing send button with spring physics
-      - [ ] Message bubble pop-in effects
-      - [ ] Colorful recording waveforms
-      - [ ] Confetti celebration effects
-      - [ ] Swipe-to-reply gestures
-    - [ ] **Interactive Elements**
-      - [ ] Double-tap heart reactions
-      - [ ] Emoji reaction system
-      - [ ] Ephemeral timer rings with particle effects
-      - [ ] Floating action buttons
-    - [ ] **Platform-Specific Polish**
-      - [ ] Haptic feedback on all interactions
-      - [ ] Sound effects for messages
-      - [ ] iOS: Smooth elastic scrolling
-      - [ ] Android: Material-style ripple effects
-  - [ ] **Phase 4: Accessibility (Weeks 7-8)**
-    - [ ] Add screen reader support
-    - [ ] Ensure WCAG AA color contrast
-    - [ ] Support reduced motion preferences
-    - [ ] Test with accessibility tools
-  - [ ] **Key Improvements** PARTIALLY COMPLETE
-    - [x] Modern color palette (Purple accent: #6C63FF) ✅
-    - [x] Standardized typography system ✅
-    - [x] Reusable component patterns ✅
-    - [ ] **Fun UI Quick Wins** (Priority: HIGH - 1-2 days)
-      - [ ] Fix dark theme in FriendChatScreen (hardcoded colors)
-      - [ ] Upgrade colors: #6C63FF → #B026FF (electric purple)
-      - [ ] Add message animations (bouncing, pop-in)
-      - [ ] Colorful recording UI (rainbow waveforms)
-      - [ ] Double-tap reactions (hearts, emojis)
-    - [ ] Consistent animation guidelines
-    - [ ] Improved ephemeral indicators
-    - [ ] Better error handling and feedback
+#### COMPLETED FEATURES
+- [x] **Double-Tap Reactions** (1 point) ✅ COMPLETED
+  - Heart animation on message double-tap (sticky like Instagram/WhatsApp)
+  - Persistent heart reactions that stay on messages
+  - Haptic feedback integration
+  - Toggle reaction on/off with double-tap
 
-- [ ] **Additional UX Enhancements**
-  - [ ] Add typing indicators
-  - [ ] Handle offline message queue
-  - [ ] Add read receipts (optional)
+- [x] **Voice Message Error Cleanup** (0.5 point) ✅ COMPLETED
+  - Reduced debug console logs for cleaner development experience
+  - Improved error handling in audio encryption pipeline
+  
+- [x] **Message Read Receipts - FIXED** (3 points) ✅ COMPLETED
+  - Complete re-implementation after initial system had issues
+  - Visual status indicators working correctly: sending, sent, delivered, read
+  - Single gray checkmark for sent, double gray for delivered
+  - Double BLUE checkmarks (#007AFF) for read messages (fixed purple color issue)
+  - Fixed checkmark overlap issue (adjusted from -12px to -7px for proper visibility)
+  - Implemented polling-based synchronization (3-second intervals)
+  - Fixed infinite loop bug where messages kept being marked as read
+  - Persistent status across app backgrounding/foregrounding
+  - Local state management prevents redundant database updates
+  - Applied to all message types (text, voice, video)
+
+### Sprint Retrospective:
+**What Went Well:**
+- Successfully simplified ephemeral messaging from 7 options to 2
+- Fixed critical read receipts functionality with pragmatic approach
+- Delivered double-tap reactions feature enhancing user engagement
+- Maintained code quality despite technical challenges
+
+**What Could Be Improved:**
+- Initial read receipts implementation caused Supabase issues
+- Need better testing infrastructure before database migrations
+- Supabase real-time UPDATE events don't work - need workarounds
+
+**Action Items:**
+- Always test database migrations locally first
+- Document Supabase limitations (UPDATE events) in CLAUDE.md
+- Use polling as fallback when real-time features fail
+
+---
+
+## CURRENT SPRINT: Sprint N+2 (Starting August 9, 2025)
+### Sprint Goal: "Screenshot Prevention & Security"
+
+## UPCOMING SPRINTS (Next 3 weeks)
+
+### Sprint N+2: Screenshot Prevention & Security
+**Theme**: Complete ephemeral messaging trust model
+- [ ] Screenshot detection/prevention implementation
+- [ ] Trust indicators in UI
+- [ ] Security audit and testing
+
+### Sprint N+3: Account Recovery System  
+**Theme**: User retention and account management
+- [ ] Username + password recovery system
+- [ ] Device migration workflow
+- [ ] Account recovery UI flow
+
+### Sprint N+4: Anonymous Chat Enhancements
+**Theme**: Improve stranger matching experience  
+- [ ] Better matching algorithm
+- [ ] Skip/Next functionality
+- [ ] Report/Block system implementation
+
+---
+
+## PRODUCT BACKLOG (Prioritized Features)
+
+### Epic 1: Safety & Trust (Sprint N+2 - N+3)
+**Business Value**: Critical for user safety and ephemeral messaging trust
+
+#### Sprint N+2 Stories:
+- [ ] **Screenshot Detection/Prevention** (5 points)
+  - Android: FLAG_SECURE implementation  
+  - iOS: screenshot detection with notifications
+  - User education about screenshot policies
+  - Trust indicators in ephemeral message UI
+
+#### Sprint N+3 Stories:  
+- [ ] **Report/Block System** (3 points)
+  - Report user functionality
+  - Block user with local storage
+  - Safety guidelines and education
+
+### Epic 2: User Retention (Sprint N+3 - N+4)
+**Business Value**: Reduce churn and improve user lifetime value
+
+#### Sprint N+3 Stories:
+- [ ] **Account Recovery System** (8 points)
+  - Username + password authentication
+  - Device migration workflow  
+  - Account recovery UI/UX
+  - Security considerations for E2E encryption
+
+#### Sprint N+4 Stories:
+- [ ] **Enhanced Matching** (5 points)
+  - Improved stranger matching algorithm
+  - Skip/Next functionality
+  - Connection quality metrics
+
+### Epic 3: Premium Features (Sprint N+5 - N+6)
+**Business Value**: Revenue generation and user segmentation
+
+#### Sprint N+5 Stories:
+- [ ] **Premium Tier Foundation** (5 points)
+  - Payment integration (Apple Pay, Google Play)
+  - Premium UI indicators
+  - User tier management
+
+#### Sprint N+6 Stories:
+- [ ] **Premium Features** (8 points)
+  - Gender filter (male/female/any)
+  - Location filter (country/continent)
+  - Premium user experience enhancements
+
+### Epic 4: Polish & Launch Preparation (Sprint N+7 - N+8)
+**Business Value**: Production readiness and user onboarding
+
+#### Sprint N+7 Stories:
+- [ ] **Onboarding Flow** (5 points)
+  - Age verification (18+)
+  - Community guidelines
+  - Quick tutorial
+
+#### Sprint N+8 Stories:
+- [ ] **Performance & Analytics** (3 points)
+  - Performance optimization
+  - Analytics setup (anonymous usage metrics)
+  - Connection indicators and error handling
+
+---
+
+## SPRINT CEREMONIES & GUIDELINES
+
+### Sprint Planning (Every Monday, 1-2 hours)
+**Participants**: Full development team
+**Agenda**:
+1. Review previous sprint velocity and outcomes
+2. Prioritize backlog items based on business value
+3. Break down user stories into development tasks  
+4. Estimate story points using planning poker
+5. Commit to sprint goal and backlog items
+6. Identify dependencies and risks
+
+### Daily Standups (Every day, 15 minutes)
+**Format**: What I did / What I'm doing / Any blockers
+**Focus**: Collaboration, impediment identification, progress sharing
+
+### Sprint Review (Every Friday, 1 hour)  
+**Participants**: Development team + stakeholders
+**Agenda**:
+1. Demo completed features on real devices
+2. Review sprint goal achievement
+3. Gather feedback on deliverables
+4. Update product backlog based on feedback
+
+### Sprint Retrospective (Every Friday, 1 hour)
+**Focus**: Continuous improvement
+**Format**: Start/Stop/Continue or What went well/What didn't/Action items
+**Output**: Concrete action items for next sprint
+
+### Definition of Done
+**Technical Requirements**:
+- [ ] Feature works on both iOS and Android
+- [ ] Code reviewed and approved by team member
+- [ ] Unit tests written and passing
+- [ ] E2E encryption verified (if applicable)
+- [ ] No console errors or warnings
+- [ ] Performance tested on slower devices
+
+**Documentation Requirements**:
+- [ ] Feature documented in CHANGELOG.md
+- [ ] User-facing changes documented
+- [ ] Technical decisions documented in CLAUDE.md
+- [ ] Breaking changes or migrations noted
+
+**Quality Assurance**:
+- [ ] Manual testing completed on both platforms
+- [ ] Accessibility considerations addressed
+- [ ] Error handling and edge cases tested
+- [ ] Feature demonstrates on development build
+
+---
+
+## VELOCITY TRACKING & METRICS
+
+### Sprint Metrics to Track:
+- **Story Points Committed vs Completed**
+- **Sprint Goal Achievement Rate**
+- **Defect Rate (bugs found post-sprint)**
+- **Cycle Time (story start to completion)**
+- **Team Satisfaction Scores**
+
+### Success Criteria:
+- 80%+ sprint goal achievement rate
+- Consistent velocity over 3+ sprints
+- Decreasing defect rates over time
+- High team satisfaction (4/5 or higher)
+
+---
 
 ### ✅ SECURITY STATUS UPDATE
 **Text Messages**: ✅ E2E encrypted via SharedSecretEncryption

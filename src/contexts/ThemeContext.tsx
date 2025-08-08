@@ -76,6 +76,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
 
   // Determine which theme to use
   const getActiveTheme = (): Theme => {
+    
     if (themeMode === 'system') {
       return systemColorScheme === 'dark' ? darkTheme : lightTheme;
     }

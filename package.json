@@ -4,6 +4,7 @@
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
+    "start:persistent": "while true; do npx expo start; echo 'Metro crashed, restarting in 2 seconds...'; sleep 2; done",
     "start:dev": "expo start --dev-client",
     "android": "expo run:android",
     "ios": "expo run:ios",

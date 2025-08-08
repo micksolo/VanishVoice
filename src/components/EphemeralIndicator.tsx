@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ExpiryRule } from '../types/database';
@@ -19,27 +19,6 @@ export default function EphemeralIndicator({
   hasBeenViewed = false 
 }: EphemeralIndicatorProps) {
   const theme = useAppTheme();
-  const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
-  
-  // Update countdown for time-based expiry
-  useEffect(() => {
-    if (expiryRule.type === 'time') {
-      const updateCountdown = () => {
-        const now = new Date();
-        const expiryTime = new Date(createdAt.getTime() + (expiryRule.duration_sec * 1000));
-        const remaining = Math.max(0, expiryTime.getTime() - now.getTime());
-        setTimeRemaining(remaining);
-      };
-      
-      // Update immediately
-      updateCountdown();
-      
-      // Update every second
-      const interval = setInterval(updateCountdown, 1000);
-      
-      return () => clearInterval(interval);
-    }
-  }, [expiryRule, createdAt]);
 
   if (expiryRule.type === 'none') {
     return null; // No indicator for non-ephemeral messages
@@ -53,28 +32,14 @@ export default function EphemeralIndicator({
         return hasBeenViewed ? 'mail-open' : 'mail';
       case 'playback':
         return hasBeenViewed ? 'play-circle' : 'play-circle-outline';
-      case 'time':
-        return 'timer';
-      case 'location':
-        return 'location';
-      case 'event':
-        return 'calendar';
       default:
-        return 'time';
+        return 'eye';
     }
   };
 
   const getColor = () => {
     if (hasBeenViewed && EphemeralMessageService.disappearsAfterViewing(expiryRule)) {
       return theme.colors.status.error + 'CC'; // Semi-transparent error color
-    }
-    
-    if (expiryRule.type === 'time' && timeRemaining !== null) {
-      if (timeRemaining < 60000) { // Less than 1 minute
-        return theme.colors.status.error + 'CC';
-      } else if (timeRemaining < 300000) { // Less than 5 minutes
-        return theme.colors.status.warning + 'CC';
-      }
     }
     
     return isMine 
@@ -94,26 +59,6 @@ export default function EphemeralIndicator({
         return 'Read once';
       case 'playback':
         return 'Play once';
-      case 'time':
-        if (timeRemaining !== null) {
-          const seconds = Math.floor(timeRemaining / 1000);
-          const hours = Math.floor(seconds / 3600);
-          const minutes = Math.floor((seconds % 3600) / 60);
-          const remainingSeconds = seconds % 60;
-          
-          if (hours > 0) {
-            return `${hours}h ${minutes}m`;
-          } else if (minutes > 0) {
-            return `${minutes}m ${remainingSeconds}s`;
-          } else {
-            return `${remainingSeconds}s`;
-          }
-        }
-        return 'Expires soon';
-      case 'location':
-        return 'Location';
-      case 'event':
-        return 'Event';
       default:
         return 'Ephemeral';
     }
@@ -122,12 +67,6 @@ export default function EphemeralIndicator({
   const getTextColor = () => {
     if (hasBeenViewed && EphemeralMessageService.disappearsAfterViewing(expiryRule)) {
       return theme.colors.text.inverse;
-    }
-    
-    if (expiryRule.type === 'time' && timeRemaining !== null) {
-      if (timeRemaining < 60000 || timeRemaining < 300000) {
-        return theme.colors.text.inverse;
-      }
     }
     
     return isMine 

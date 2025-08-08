@@ -362,7 +362,12 @@ export default function EphemeralMessageBubble({
                 <View style={styles.statusIndicator}>
                   <ReadReceipt
                     status={status}
-                    textColor={getTextColor()}
+                    textColor={
+                      // Use solid color for read receipts (not faded)
+                      isMine 
+                        ? theme.colors.chat.sentText 
+                        : theme.colors.chat.receivedText
+                    }
                     variant={theme.name === 'neon' ? 'neon' : 'traditional'}
                     size={12}
                   />
