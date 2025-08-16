@@ -8,6 +8,9 @@ module.exports = ({ config }) => {
       // react-native-compressor for video compression
       'react-native-compressor',
       // react-native-svg doesn't need a config plugin, it works natively in development builds
+      // Screenshot prevention plugin for Android FLAG_SECURE
+      // Disabled in favor of Expo module approach (modules/screenshot-prevent)
+      // ['./plugins/withScreenshotPrevention', { enabled: true }],
     ],
     // Configure iOS-specific settings for development builds
     ios: {
