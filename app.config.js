@@ -4,6 +4,9 @@ module.exports = ({ config }) => {
     // Add plugins for native module support
     plugins: [
       ...(config.plugins || []),
+      // Expo plugins detected by install --fix
+      'expo-audio',
+      'expo-secure-store', 
       // expo-dev-client plugin is automatically included when installed
       // react-native-compressor for video compression
       'react-native-compressor',

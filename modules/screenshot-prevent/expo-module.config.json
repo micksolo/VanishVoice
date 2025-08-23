@@ -1,0 +1,9 @@
+{
+  "platforms": ["ios", "android"],
+  "ios": {
+    "modules": ["ScreenshotPreventModule"]
+  },
+  "android": {
+    "modules": ["ScreenshotPreventModule"]
+  }
+}

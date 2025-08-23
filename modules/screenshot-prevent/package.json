@@ -1,0 +1,24 @@
+{
+  "name": "screenshot-prevent",
+  "version": "1.0.0",
+  "description": "Native module for screenshot prevention using Android FLAG_SECURE",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepare": "tsc"
+  },
+  "keywords": ["expo", "react-native", "screenshot", "security"],
+  "author": "VanishVoice",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.1.3"
+  },
+  "peerDependencies": {
+    "expo-modules-core": "*"
+  },
+  "expo": {
+    "name": "screenshot-prevent",
+    "currentFullName": "@expo-modules/screenshot-prevent"
+  }
+}
