@@ -19,10 +19,11 @@ if (!isExpoGo) {
 }
 
 export interface MessageNotificationData {
-  type: 'new_message' | 'friend_request';
+  type: 'new_message' | 'friend_request' | 'screenshot_detected';
   sender_id?: string;
   message_id?: string;
   sender_name?: string;
+  screenshot_user_id?: string;
 }
 
 // Send push notification via Supabase Edge Function
@@ -56,6 +57,39 @@ export async function sendMessageNotification(
     }
   } catch (error) {
     console.error('Failed to send push notification:', error);
+  }
+}
+
+// Send screenshot detection notification to message owner
+export async function sendScreenshotNotification(
+  messageOwnerId: string,
+  screenshotUserId: string,
+  messageId: string
+) {
+  try {
+    // Call Edge Function to send push
+    const { data, error } = await supabase.functions.invoke('send-push-notification', {
+      body: {
+        recipient_id: messageOwnerId,
+        title: 'Screenshot Detected',
+        body: 'Someone took a screenshot of your message',
+        data: {
+          type: 'screenshot_detected',
+          screenshot_user_id: screenshotUserId,
+          message_id: messageId,
+        },
+      },
+    });
+
+    if (error) {
+      console.error('[Push] Error sending screenshot notification:', error);
+      console.error('[Push] Error details:', error.message);
+    } else {
+      console.log('[Push] Screenshot notification sent successfully to:', messageOwnerId);
+      console.log('[Push] Response:', data);
+    }
+  } catch (error) {
+    console.error('Failed to send screenshot notification:', error);
   }
 }
 
@@ -107,6 +141,9 @@ export function setupNotificationHandlers(navigation: any) {
       if (data.type === 'new_message') {
         // Update unread counts in UI
         // The component will handle this via state updates
+      } else if (data.type === 'screenshot_detected') {
+        // Show screenshot detection alert
+        // This will be handled by the component's realtime subscription
       }
     }
   );
@@ -127,6 +164,10 @@ export function setupNotificationHandlers(navigation: any) {
       } else if (data.type === 'friend_request') {
         // Navigate to friends list to see pending requests
         navigation.navigate('Friends');
+      } else if (data.type === 'screenshot_detected') {
+        // Navigate to security dashboard or show alert
+        // For now, just log it - could navigate to security screen later
+        console.log('Screenshot notification tapped for message:', data.message_id);
       }
     }
   );
@@ -221,6 +262,7 @@ export default {
   setupNotificationListeners: setupNotificationHandlers,
   sendMessageNotification,
   sendFriendRequestNotification,
+  sendScreenshotNotification,
   updateBadgeCount,
 };
 

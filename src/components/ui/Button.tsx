@@ -5,21 +5,21 @@
 
 import React from 'react';
 import {
-  TouchableOpacity,
+  Pressable,
   Text,
   StyleSheet,
   ActivityIndicator,
   View,
   ViewStyle,
   TextStyle,
-  TouchableOpacityProps,
+  PressableProps,
 } from 'react-native';
 import { useAppTheme } from '../../contexts/ThemeContext';
 
 type ButtonVariant = 'primary' | 'secondary' | 'tertiary' | 'ghost' | 'danger';
 type ButtonSize = 'small' | 'medium' | 'large';
 
-interface ButtonProps extends TouchableOpacityProps {
+interface ButtonProps extends Omit<PressableProps, 'style'> {
   children: React.ReactNode;
   variant?: ButtonVariant;
   size?: ButtonSize;
@@ -27,6 +27,8 @@ interface ButtonProps extends TouchableOpacityProps {
   loading?: boolean;
   icon?: React.ReactNode;
   iconPosition?: 'left' | 'right';
+  style?: ViewStyle;
+  testID?: string;
 }
 
 export function Button({
@@ -39,7 +41,8 @@ export function Button({
   icon,
   iconPosition = 'left',
   style,
-  ...touchableProps
+  testID,
+  ...pressableProps
 }: ButtonProps) {
   const theme = useAppTheme();
 
@@ -123,16 +126,24 @@ export function Button({
   const variantStyles = getVariantStyles();
 
   return (
-    <TouchableOpacity
-      {...touchableProps}
+    <Pressable
+      {...pressableProps}
+      testID={testID}
       disabled={disabled || loading}
-      activeOpacity={0.8}
-      style={[
+      accessibilityRole="button"
+      accessibilityLabel={typeof children === 'string' ? children : undefined}
+      accessibilityState={{ disabled: disabled || loading }}
+      style={({ pressed }) => [
         styles.container,
         sizeStyles.container,
         variantStyles.container,
         fullWidth && styles.fullWidth,
         style,
+        {
+          opacity: process.env.EXPO_PUBLIC_TESTING_MODE === 'true'
+            ? 1
+            : pressed ? 0.8 : 1,
+        },
       ]}
     >
       <View style={styles.content}>
@@ -155,7 +166,7 @@ export function Button({
           </>
         )}
       </View>
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 

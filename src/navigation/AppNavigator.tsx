@@ -16,6 +16,7 @@ import AnonymousLobbyScreen from '../screens/AnonymousLobbyScreen';
 import AnonymousChatScreen from '../screens/AnonymousChatScreen';
 import ThemeDemo from '../screens/ThemeDemo';
 import EphemeralDemo from '../screens/EphemeralDemo';
+// import SecurityOnboardingScreen from '../screens/SecurityOnboardingScreen'; // SHELVED: Screenshot prevention feature
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -100,6 +101,16 @@ function ProfileStack() {
         component={EphemeralDemo}
         options={{ title: 'Ephemeral Demo' }}
       />
+      {/* SHELVED: Screenshot prevention feature
+      <Stack.Screen 
+        name="SecurityOnboarding" 
+        component={SecurityOnboardingScreen}
+        options={{ 
+          title: 'Security Setup',
+          presentation: 'modal'
+        }}
+      />
+      */}
     </Stack.Navigator>
   );
 }

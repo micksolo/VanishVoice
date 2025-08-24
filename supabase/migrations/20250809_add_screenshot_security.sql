@@ -1,0 +1,181 @@
+-- Screenshot Security Feature Migration
+-- Sprint N+2: Screenshot Prevention & Security
+
+-- Create table for tracking screenshot attempts (iOS only, since Android prevents them)
+CREATE TABLE IF NOT EXISTS screenshot_attempts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  message_id UUID REFERENCES messages(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL CHECK (platform IN ('ios', 'android')),
+  detected_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  context JSONB DEFAULT '{}',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Add indexes for efficient querying
+CREATE INDEX IF NOT EXISTS idx_screenshot_attempts_user_id ON screenshot_attempts(user_id);
+CREATE INDEX IF NOT EXISTS idx_screenshot_attempts_message_id ON screenshot_attempts(message_id);
+CREATE INDEX IF NOT EXISTS idx_screenshot_attempts_detected_at ON screenshot_attempts(detected_at);
+
+-- Enable RLS
+ALTER TABLE screenshot_attempts ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies
+-- Users can only view their own screenshot attempts
+CREATE POLICY "Users can view own screenshot attempts" 
+  ON screenshot_attempts
+  FOR SELECT 
+  USING (auth.uid() = user_id);
+
+-- Users can log their own screenshot attempts
+CREATE POLICY "Users can log screenshot attempts" 
+  ON screenshot_attempts
+  FOR INSERT 
+  WITH CHECK (auth.uid() = user_id);
+
+-- Create table for user subscription status (for premium features)
+CREATE TABLE IF NOT EXISTS user_subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL CHECK (status IN ('active', 'cancelled', 'expired', 'trial')),
+  tier TEXT NOT NULL DEFAULT 'free' CHECK (tier IN ('free', 'premium', 'ultra')),
+  started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  expires_at TIMESTAMP WITH TIME ZONE,
+  features JSONB DEFAULT '{"screenshot_prevention": false, "analytics_dashboard": false}',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  
+  UNIQUE(user_id)
+);
+
+-- Add indexes
+CREATE INDEX IF NOT EXISTS idx_user_subscriptions_user_id ON user_subscriptions(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_subscriptions_status ON user_subscriptions(status);
+
+-- Enable RLS
+ALTER TABLE user_subscriptions ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies for subscriptions
+CREATE POLICY "Users can view own subscription" 
+  ON user_subscriptions
+  FOR SELECT 
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "System can manage subscriptions" 
+  ON user_subscriptions
+  FOR ALL 
+  USING (auth.role() = 'service_role');
+
+-- Function to check if user is premium
+CREATE OR REPLACE FUNCTION is_premium_user(p_user_id UUID)
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 
+    FROM user_subscriptions 
+    WHERE user_id = p_user_id 
+    AND status = 'active' 
+    AND tier IN ('premium', 'ultra')
+    AND (expires_at IS NULL OR expires_at > NOW())
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to log screenshot attempt
+CREATE OR REPLACE FUNCTION log_screenshot_attempt(
+  p_message_id UUID DEFAULT NULL,
+  p_context JSONB DEFAULT '{}'
+)
+RETURNS UUID AS $$
+DECLARE
+  v_attempt_id UUID;
+BEGIN
+  INSERT INTO screenshot_attempts (
+    user_id,
+    message_id,
+    platform,
+    context
+  ) VALUES (
+    auth.uid(),
+    p_message_id,
+    COALESCE(p_context->>'platform', 'ios'),
+    p_context
+  ) RETURNING id INTO v_attempt_id;
+  
+  RETURN v_attempt_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to get screenshot analytics for premium users
+CREATE OR REPLACE FUNCTION get_screenshot_analytics(
+  p_days INTEGER DEFAULT 7
+)
+RETURNS TABLE (
+  attempt_date DATE,
+  attempt_count BIGINT,
+  unique_users BIGINT,
+  platforms JSONB
+) AS $$
+BEGIN
+  -- Check if user is premium
+  IF NOT is_premium_user(auth.uid()) THEN
+    RAISE EXCEPTION 'Premium subscription required for analytics';
+  END IF;
+  
+  RETURN QUERY
+  SELECT 
+    DATE(detected_at) as attempt_date,
+    COUNT(*) as attempt_count,
+    COUNT(DISTINCT user_id) as unique_users,
+    jsonb_object_agg(platform, platform_count) as platforms
+  FROM (
+    SELECT 
+      detected_at,
+      user_id,
+      platform,
+      COUNT(*) OVER (PARTITION BY DATE(detected_at), platform) as platform_count
+    FROM screenshot_attempts
+    WHERE user_id = auth.uid()
+    AND detected_at >= NOW() - INTERVAL '1 day' * p_days
+  ) t
+  GROUP BY DATE(detected_at)
+  ORDER BY attempt_date DESC;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Add security-related columns to messages table for tracking
+ALTER TABLE messages 
+ADD COLUMN IF NOT EXISTS screenshot_protected BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS screenshot_attempts INTEGER DEFAULT 0;
+
+-- Update trigger for screenshot attempt count
+CREATE OR REPLACE FUNCTION update_message_screenshot_count()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE messages 
+  SET screenshot_attempts = screenshot_attempts + 1
+  WHERE id = NEW.message_id;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER increment_screenshot_attempts
+AFTER INSERT ON screenshot_attempts
+FOR EACH ROW
+WHEN (NEW.message_id IS NOT NULL)
+EXECUTE FUNCTION update_message_screenshot_count();
+
+-- Insert default free tier subscription for existing users
+INSERT INTO user_subscriptions (user_id, status, tier)
+SELECT id, 'active', 'free'
+FROM auth.users
+WHERE id NOT IN (SELECT user_id FROM user_subscriptions)
+ON CONFLICT DO NOTHING;
+
+-- Add comment for documentation
+COMMENT ON TABLE screenshot_attempts IS 'Tracks screenshot detection events for security analytics';
+COMMENT ON TABLE user_subscriptions IS 'Manages user subscription tiers for premium features';
+COMMENT ON FUNCTION is_premium_user IS 'Checks if a user has an active premium subscription';
+COMMENT ON FUNCTION log_screenshot_attempt IS 'Records a screenshot detection event';
+COMMENT ON FUNCTION get_screenshot_analytics IS 'Returns screenshot analytics for premium users';

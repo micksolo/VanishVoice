@@ -2,13 +2,14 @@
   "expo": {
     "name": "VanishVoice",
     "slug": "VanishVoice",
-    "owner": "micksolo",
+    "owner": "generictech",
     "version": "1.0.0",
     "main": "index.js",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "scheme": "vanishvoice",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -20,7 +21,16 @@
       "infoPlist": {
         "NSMicrophoneUsageDescription": "VanishVoice needs access to your microphone to record voice messages.",
         "NSCameraUsageDescription": "VanishVoice needs access to your camera to record video messages.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLName": "vanishvoice",
+            "CFBundleURLSchemes": [
+              "vanishvoice",
+              "exp+vanishvoice"
+            ]
+          }
+        ]
       },
       "entitlements": {
         "aps-environment": "development"
@@ -49,7 +59,7 @@
     },
     "extra": {
       "eas": {
-        "projectId": "40517f57-f67f-46ae-b512-923fd48d239a"
+        "projectId": "1c797ee2-fc1f-4b6d-bc64-15f675b57367"
       }
     }
   }

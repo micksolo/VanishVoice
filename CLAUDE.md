@@ -30,6 +30,41 @@ Since this is an Expo/React Native project, expected commands would be:
 - `npm test` or `yarn test` - Run Jest tests
 - `npx expo build` - Create production builds via EAS
 
+## Mobile Testing Infrastructure
+
+**MCP Mobile Testing**: All agents have access to mobile device testing via MCP mobile server.
+
+### Setup Requirements
+- MCP mobile server configured in `~/.claude.json`
+- See `MOBILE_TESTING_PLAYBOOK.md` for complete procedures
+
+### Device Testing Rules (MANDATORY)
+- **iOS Testing**: MUST use iPhone SE 3rd generation simulator (NOT iPhone SE 2nd generation)
+- **Android Testing**: Use emulator-5554 or available Android emulator
+- **Device Selection**: Always verify device selection before testing
+- **Exclusion Rule**: iPhone SE 2nd generation is reserved for other Claude sessions
+
+### Core Testing Commands
+```bash
+# Launch VanishVoice app for testing
+mcp__mobile-mcp__mobile_launch_app("host.exp.Exponent")
+
+# Take screenshot for visual verification
+mcp__mobile-mcp__mobile_take_screenshot()
+
+# List interactive elements with coordinates
+mcp__mobile-mcp__mobile_list_elements_on_screen()
+
+# Test user interactions
+mcp__mobile-mcp__mobile_click_on_screen_at_coordinates(x, y)
+```
+
+### When to Use Mobile Testing
+- **vv-engineer**: Validate technical implementations on real devices
+- **vv-designer**: Test UI/UX changes immediately after implementation
+- **monetization-specialist**: Verify premium flows and conversion funnels
+- **All agents**: Before marking features as complete
+
 ## Architecture
 
 ### Key Components
@@ -62,20 +97,19 @@ Since this is an Expo/React Native project, expected commands would be:
 
 ## Agent Orchestration Rule
 
-**SINGLE POINT OF CONTACT**: The vv-pm agent serves as the single point of contact for all user interactions. Users communicate directly with vv-pm, who then coordinates with other agents as needed.
+**DIRECT AGENT ACCESS**: Users can work directly with specialized agents based on their needs. Each agent has specific expertise and responsibilities.
+
+**Available Agents**:
+- **vv-engineer**: Technical implementation, architecture, and code development
+- **vv-designer**: UI/UX design, user experience, and visual design systems
+- **monetization-specialist**: Revenue optimization, premium features, and conversion strategies
+- **vv-mobile-tester**: Mobile app testing specialist using MCP infrastructure for regression testing, performance monitoring, and multi-device validation
 
 **User Experience**:
-- All requests, questions, and updates go through vv-pm
-- vv-pm provides comprehensive responses incorporating expertise from all relevant agents
-- Consistent communication style and full project context maintained
-- No need for users to manage multiple agent relationships
-
-**Behind the Scenes Coordination**:
-- vv-pm analyzes requests and determines which agents to involve
-- Technical implementation: coordinates with vv-engineer
-- Sprint planning and ceremonies: works with vv-sprint-master
-- UI/UX work: collaborates with vv-designer
-- vv-pm synthesizes agent expertise into cohesive responses and action plans
+- Work directly with the agent that matches your current need
+- Each agent maintains their domain expertise
+- Agents can coordinate when cross-functional work is needed
+- Clear, focused responses from domain experts
 
 **Benefits**:
 - Streamlined communication and better project continuity
@@ -94,41 +128,9 @@ The vv-pm agent will:
 
 To work directly with Claude Code without agent coordination, users can explicitly state "without agents" or "no agents" in their request.
 
-## Agent Workflow & Handoff Guidelines
+## Agent Workflow & Guidelines
 
 ### When to Use Each Agent
-
-#### vv-pm (Project Manager) - Strategic Orchestrator
-**PRIMARY USE**: Overall project coordination and strategic planning
-**INVOKE WHEN**:
-- User provides high-level feature requests or project goals
-- Need to coordinate work across multiple agents
-- Creating long-term roadmaps or project phases
-- Managing cross-cutting concerns that affect multiple areas
-- Initial triage of complex multi-component requests
-
-**EXAMPLES**:
-- "Add payment system to the app"
-- "Plan the next major feature release"
-- "How should we approach user onboarding?"
-- "Coordinate dark theme implementation across all screens"
-
-#### vv-sprint-master (Sprint Execution) - Agile Facilitator
-**PRIMARY USE**: Sprint-specific planning, execution, and ceremonies
-**INVOKE WHEN**:
-- Planning or managing individual sprints
-- Breaking down features into sprint-sized stories
-- Estimating story points and velocity tracking
-- Facilitating sprint ceremonies (planning, retrospectives, reviews)
-- Identifying and removing sprint impediments
-- Managing sprint backlogs and commitments
-
-**EXAMPLES**:
-- "Plan our next sprint"
-- "We're hitting impediments with the video feature"
-- "Run a sprint retrospective for last week"
-- "Estimate story points for the authentication epic"
-- "Our sprint velocity is dropping, help analyze why"
 
 #### vv-engineer (Technical Implementation) - Code Specialist
 **PRIMARY USE**: Technical implementation and architecture decisions
@@ -250,13 +252,13 @@ User Request → vv-engineer OR vv-designer
 **Route**: User → vv-sprint-master → vv-engineer/vv-designer
 **Why**: Sprint-specific planning for defined scope
 
-## Sprint-Based Development Process
+## Development Process
 
 ### Agent Team Structure
-- **vv-pm**: Overall project strategy, long-term planning, and agent coordination
-- **vv-sprint-master**: Sprint execution, velocity tracking, ceremony facilitation, and continuous improvement
 - **vv-engineer**: Technical implementation, code quality, and architecture decisions
 - **vv-designer**: UI/UX design, user experience, and visual design systems
+- **monetization-specialist**: Revenue optimization, premium features, and conversion tracking
+- **vv-mobile-tester**: Dedicated mobile app testing using MCP infrastructure, regression testing, performance monitoring, and multi-device validation
 
 ### Sprint Workflow
 **Sprint Length**: 1 week (7 days)
@@ -316,17 +318,27 @@ User Request → vv-engineer OR vv-designer
 - No console errors or warnings
 - Performance tested on slower devices
 
+**Mobile Testing Requirements** (MANDATORY):
+- ✅ **MCP Mobile Testing Completed**: All features tested on actual devices using MCP mobile tools
+- ✅ **UI/UX Validation**: Visual and interaction testing verified on target devices
+- ✅ **Cross-Device Testing**: Multi-user features tested between devices (if applicable)
+- ✅ **Performance Baseline Met**: App meets performance standards defined in MOBILE_TESTING_PLAYBOOK.md
+- ✅ **Navigation Flow Verified**: All user flows tested end-to-end on mobile devices
+- ✅ **Accessibility Testing**: Screen reader and accessibility features verified on mobile
+
 **Documentation Requirements**:
 - Feature documented in CHANGELOG.md
 - User-facing changes documented
 - Technical decisions documented in CLAUDE.md
 - Breaking changes or migrations noted
+- Mobile testing results documented (screenshots, performance metrics)
 
 **Quality Assurance**:
 - Manual testing completed on both platforms
 - Accessibility considerations addressed
 - Error handling and edge cases tested
 - Feature demonstrates properly on development build
+- **Mobile regression tests pass**: Core app functionality verified via MCP mobile testing
 
 ### Sprint Success Metrics:
 - 80%+ sprint goal achievement rate
@@ -360,6 +372,7 @@ User Request → vv-engineer OR vv-designer
 - ✅ Text messages: Properly E2E encrypted using SharedSecretEncryption
 - ✅ Voice messages: Properly E2E encrypted using secureE2EAudioStorage module
 - ✅ Video messages: Properly E2E encrypted using secureE2EVideoStorageFastAndroid module
+- ✅ Screenshot prevention: Complete native module implementation for Android FLAG_SECURE
 
 ## Git Commit Guidelines
 
@@ -404,6 +417,27 @@ When creating a git commit, ALWAYS follow this sequence:
 - **CLAUDE.md**: Living document that captures learnings and evolves with the project
 
 ## Lessons Learned
+
+### Screenshot Prevention Implementation COMPLETE (August 2025) ✅
+- **Platform Limitations**: iOS cannot prevent screenshots, only detect them via expo-screen-capture
+- **Android FLAG_SECURE**: Successfully implemented with complete native module for screenshot blocking
+- **Expo Config Plugins**: Confirmed as best way to modify native code in managed Expo projects
+- **Native Module Structure**: Successfully created separate implementations for iOS (stub) and Android (actual)
+- **Security UI/UX**: Visual indicators successfully implemented to show protection level differences
+- **Premium Differentiation**: Platform-specific features create clear value proposition for monetization
+- **User Education**: Essential to explain why security features differ between platforms
+- **Testing Strategy**: Development builds successfully created and operational for native module testing
+- **Module Architecture SUCCESS**: 
+  - ✅ TypeScript interface implemented for JavaScript side
+  - ✅ Mock implemented for when native module unavailable
+  - ✅ Android Java implementation complete with runtime toggle
+  - ✅ iOS stub implementation for API consistency
+  - ✅ Expo config plugin enabled and working
+- **Security Context**: Global state management for security preferences and premium status
+- **Onboarding Flow**: Multi-step carousel helps users understand security features
+- **Production Ready**: Complete FLAG_SECURE implementation ready for app store deployment
+- **Development Builds**: Both platforms operational (Android: a8c62c55, iOS: d06b88eb)
+- **Key Achievement**: Android users can now completely prevent screenshots when premium feature is enabled
 
 ### Voice Message Implementation
 - **Platform Differences**: iOS and Android handle audio differently. Always test on both platforms.
@@ -506,3 +540,15 @@ When creating a git commit, ALWAYS follow this sequence:
 - **Polling Strategy**: Only poll when chat screen is focused and active
 - **Database Design**: Simple read_at timestamp sufficient, no complex tables needed
 - **Migration Caution**: Test ALL database migrations locally before production
+
+### Native Module Development Best Practices (August 2025)
+- **Expo Config Plugins**: Essential for managed workflow native module integration
+- **Development Builds**: Required for testing native modules - cannot use Expo Go
+- **Cross-Platform API**: Always implement consistent TypeScript interface across platforms
+- **Platform-Specific Implementation**: Android can have full functionality, iOS may have limitations
+- **Runtime Toggles**: Implement feature toggles for premium/subscription-based native features
+- **Mock Implementations**: Provide fallbacks when native modules unavailable (development)
+- **Build Management**: Use EAS Build for consistent development build creation
+- **Testing Strategy**: Always test on both platforms before considering complete
+- **Plugin Configuration**: Enable plugins in app.config.js for proper native code integration
+- always use   eas build --platform ios --profile development-device for development builds (we never us simulator for development builds)

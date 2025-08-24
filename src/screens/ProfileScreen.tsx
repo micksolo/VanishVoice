@@ -554,6 +554,7 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={20} color={theme.colors.text.tertiary} />
           </TouchableOpacity>
           
+          
           <TouchableOpacity 
             style={[styles.settingItem, { minHeight: theme.touchTargets.medium }]}
             onPress={handleClearAllChats}

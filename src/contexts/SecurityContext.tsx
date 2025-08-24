@@ -231,27 +231,32 @@ export function SecurityProvider({ children }: { children: ReactNode }) {
             
             console.log('[Security] Screenshot notification sent to message owner:', messageOwnerId);
             
-            // Also try to send a real-time notification via Supabase
-            // This will show up immediately on the other device
-            const { error: realtimeError } = await supabase
-              .from('notifications')
-              .insert({
-                user_id: messageOwnerId,
-                type: 'screenshot_detected',
-                title: 'Screenshot Detected',
-                body: 'Someone took a screenshot of your message',
-                data: {
-                  screenshotter_id: user.id,
-                  message_id: messageId,
-                },
-                created_at: new Date().toISOString(),
-                read: false,
-              });
-            
-            if (realtimeError) {
-              console.error('[Security] Failed to send realtime notification:', realtimeError);
-            } else {
-              console.log('[Security] Realtime notification sent to:', messageOwnerId);
+            // Send real-time notification via Supabase using service role function
+            // This ensures immediate delivery across devices
+            try {
+              const { data: notificationData, error: realtimeError } = await supabase
+                .rpc('send_cross_device_notification', {
+                  p_user_id: messageOwnerId,
+                  p_type: 'screenshot_detected',
+                  p_title: 'Screenshot Detected 📸',
+                  p_body: 'Someone took a screenshot of your message',
+                  p_data: {
+                    screenshotter_id: user.id,
+                    message_id: messageId,
+                    screenshot_time: new Date().toISOString(),
+                    context: context || {}
+                  }
+                });
+              
+              if (realtimeError) {
+                console.error('[Security] Failed to send cross-device notification:', realtimeError);
+                console.error('[Security] Error details:', realtimeError.message);
+              } else {
+                console.log('[Security] ✅ Cross-device notification sent successfully');
+                console.log('[Security] Notification ID:', notificationData);
+              }
+            } catch (notificationError) {
+              console.error('[Security] Exception sending cross-device notification:', notificationError);
             }
           } catch (notificationError) {
             console.error('[Security] Failed to send screenshot notification:', notificationError);

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import {
   View,
-  TouchableOpacity,
+  Pressable,
   StyleSheet,
   Animated,
   ViewStyle,
@@ -16,6 +16,7 @@ interface RecordButtonProps {
   isRecording: boolean;
   size?: number;
   style?: ViewStyle;
+  testID?: string;
 }
 
 export default function RecordButton({
@@ -24,6 +25,7 @@ export default function RecordButton({
   isRecording,
   size = 140,
   style,
+  testID = 'record_button',
 }: RecordButtonProps) {
   const theme = useAppTheme();
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -114,8 +116,12 @@ export default function RecordButton({
       />
 
       {/* Main button */}
-      <TouchableOpacity
-        style={[
+      <Pressable
+        testID={testID}
+        accessibilityRole="button"
+        accessibilityLabel={isRecording ? "Stop recording" : "Start recording"}
+        accessibilityState={{ pressed: isRecording }}
+        style={({ pressed }) => [
           styles.button,
           {
             width: size,
@@ -125,11 +131,14 @@ export default function RecordButton({
               ? theme.colors.recording.active
               : theme.colors.background.elevated,
             ...theme.shadows.large,
+            // Testing mode: no opacity animation
+            opacity: process.env.EXPO_PUBLIC_TESTING_MODE === 'true' 
+              ? 1 
+              : pressed ? 0.8 : 1,
           },
         ]}
         onPressIn={onPressIn}
         onPressOut={onPressOut}
-        activeOpacity={0.8}
       >
         <Animated.View
           style={{
@@ -166,7 +175,7 @@ export default function RecordButton({
             ]}
           />
         )}
-      </TouchableOpacity>
+      </Pressable>
 
       {/* Ephemeral particles effect */}
       {isRecording && (

@@ -12,7 +12,11 @@ import { useAppTheme } from '../contexts/ThemeContext';
 import EphemeralIndicator from './EphemeralIndicator';
 import CountdownTimer from './CountdownTimer';
 import ReadReceipt from './ReadReceipt';
+// SHELVED: Screenshot prevention feature
+// import SecurityShield from './SecurityShield';
+// import SecurityTrustScore from './SecurityTrustScore';
 import { ExpiryRule } from '../types/database';
+// import { useSecurity } from '../contexts/SecurityContext';
 
 interface MessageBubbleProps {
   content?: string;
@@ -29,6 +33,8 @@ interface MessageBubbleProps {
   messageType?: 'text' | 'voice' | 'video' | 'image';
   status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
   readReceiptVariant?: 'traditional' | 'neon' | 'eye' | 'lightning';
+  screenshotAttempts?: number;
+  showSecurityTrustScore?: boolean;
 }
 
 export default function MessageBubble({
@@ -46,8 +52,14 @@ export default function MessageBubble({
   messageType = 'text',
   status = 'sent',
   readReceiptVariant = 'traditional',
+  screenshotAttempts = 0,
+  showSecurityTrustScore = false,
 }: MessageBubbleProps) {
   const theme = useAppTheme();
+  // SHELVED: Screenshot prevention feature
+  // const { isSecureModeEnabled, isPremiumUser } = useSecurity();
+  const isSecureModeEnabled = false; // Disabled
+  const isPremiumUser = false; // Disabled
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
@@ -274,6 +286,33 @@ export default function MessageBubble({
           />
         </View>
       )}
+      
+      {/* SHELVED: Screenshot prevention feature */}
+      {/* Security indicator for sensitive messages */}
+      {/* {isSecureModeEnabled && (messageType === 'voice' || messageType === 'video' || isEphemeral) && (
+        <View style={[styles.securityIndicator, { alignSelf: isMine ? 'flex-end' : 'flex-start' }]}>
+          <SecurityShield
+            size="small"
+            isActive={true}
+            showLabel={false}
+            messageType={messageType}
+          />
+        </View>
+      )} */}
+      
+      {/* SHELVED: Screenshot prevention feature */}
+      {/* Security Trust Score (shows screenshot attempts) */}
+      {/* {showSecurityTrustScore && screenshotAttempts > 0 && (
+        <View style={[styles.trustScoreContainer, { alignSelf: isMine ? 'flex-end' : 'flex-start' }]}>
+          <SecurityTrustScore
+            screenshotAttempts={screenshotAttempts}
+            messageType={messageType}
+            variant="inline"
+            size="small"
+            showLabel={true}
+          />
+        </View>
+      )} */}
     </Animated.View>
   );
 }
@@ -354,5 +393,13 @@ const styles = StyleSheet.create({
   },
   timerContainer: {
     marginTop: 2,
+  },
+  securityIndicator: {
+    marginTop: 4,
+    marginHorizontal: 8,
+  },
+  trustScoreContainer: {
+    marginTop: 4,
+    marginHorizontal: 8,
   },
 });

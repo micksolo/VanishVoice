@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { debugLog } from '../utils/debugConfig';
 
 // These will be filled in when you create your Supabase project
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
@@ -29,17 +30,17 @@ export const debugRealtimeConnection = () => {
   
   channel
     .on('system', { event: '*' }, (payload) => {
-      console.log('[Realtime Debug] System event:', payload);
+      debugLog('REALTIME', 'System event:', payload);
     })
     .on('presence', { event: 'sync' }, () => {
-      console.log('[Realtime Debug] Presence sync');
+      debugLog('REALTIME', 'Presence sync');
     })
     .subscribe((status, err) => {
-      console.log('[Realtime Debug] Channel status:', status);
-      if (err) console.error('[Realtime Debug] Channel error:', err);
+      debugLog('REALTIME', 'Channel status:', status);
+      if (err) debugLog('REALTIME', 'Channel error:', err);
       
       if (status === 'SUBSCRIBED') {
-        console.log('[Realtime Debug] Successfully connected to realtime!');
+        debugLog('REALTIME', 'Successfully connected to realtime!');
         // Clean up test channel
         setTimeout(() => {
           channel.unsubscribe();

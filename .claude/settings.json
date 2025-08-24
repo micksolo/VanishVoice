@@ -22,7 +22,22 @@
       "Bash(true)",
       "Bash(ls)",
       "Bash(cat)",
-      "Bash(kill)"
+      "Bash(kill)",
+      "mcp__mobile-mcp__mobile_list_available_devices",
+      "mcp__mobile-mcp__mobile_use_device",
+      "mcp__mobile-mcp__mobile_list_apps",
+      "mcp__mobile-mcp__mobile_launch_app",
+      "mcp__mobile-mcp__mobile_take_screenshot",
+      "mcp__mobile-mcp__mobile_click_on_screen_at_coordinates",
+      "mcp__mobile-mcp__mobile_press_button",
+      "mcp__mobile-mcp__mobile_open_url",
+      "mcp__mobile-mcp__mobile_save_screenshot",
+       "mcp__mobile-mcp__mobile_use_default_device"
+
+
+    
+      
+      
 
 
     ],

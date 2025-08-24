@@ -2,14 +2,25 @@ import { useEffect, useRef, useCallback } from 'react';
 import { Platform, AppState, AppStateStatus } from 'react-native';
 import * as ScreenCapture from 'expo-screen-capture';
 import { useSecurity } from '../contexts/SecurityContext';
-import { enableScreenshotPrevention, disableScreenshotPrevention } from '../modules/ScreenshotPreventModule';
+import { enableScreenshotPrevention, disableScreenshotPrevention } from 'screenshot-prevent';
+import { 
+  createScreenshotContext, 
+  detectPrimaryMessageForScreenshot, 
+  messageToVisibleMessage,
+  logScreenshotContext 
+} from '../utils/screenshotContext';
+import { useAuth } from '../contexts/AnonymousAuthContext';
+import { screenshotLog, screenshotWarn, screenshotError } from '../utils/debugConfig';
 
 interface UseScreenshotSecurityOptions {
   enabled?: boolean;
-  onScreenshotDetected?: (timestamp: Date) => void;
+  onScreenshotDetected?: (timestamp: Date, context?: any) => void;
   sensitiveContent?: boolean;
   messageId?: string;
   screenName?: string;
+  visibleMessages?: any[]; // Array of currently visible messages
+  currentlyViewingMessageId?: string; // ID of message being actively viewed/played
+  friendId?: string; // ID of the friend in chat context
 }
 
 export function useScreenshotSecurity({
@@ -18,6 +29,9 @@ export function useScreenshotSecurity({
   sensitiveContent = false,
   messageId,
   screenName,
+  visibleMessages = [],
+  currentlyViewingMessageId,
+  friendId,
 }: UseScreenshotSecurityOptions = {}) {
   const { 
     isSecureModeEnabled, 
@@ -26,6 +40,8 @@ export function useScreenshotSecurity({
     canPreventScreenshots,
     canDetectScreenshots,
   } = useSecurity();
+  
+  const { user } = useAuth();
   
   const screenshotListenerRef = useRef<any>(null);
   const lastScreenshotTimeRef = useRef<number>(0);
@@ -39,33 +55,96 @@ export function useScreenshotSecurity({
     const now = Date.now();
     
     // ALWAYS log screenshot detection for debugging
-    console.log('[Screenshot] 📸 SCREENSHOT DETECTED! Time:', new Date().toISOString());
-    console.log('[Screenshot] Context:', { messageId, screenName, sensitiveContent });
+    screenshotLog('📸 SCREENSHOT DETECTED! Time:', new Date().toISOString());
     
     // Debounce rapid screenshot events
     if (now - lastScreenshotTimeRef.current < SCREENSHOT_DEBOUNCE_MS) {
-      console.log('[Screenshot] Debounced - too soon after last screenshot');
+      screenshotLog('Debounced - too soon after last screenshot');
       return;
     }
     
     lastScreenshotTimeRef.current = now;
     const timestamp = new Date();
     
-    console.log('[Screenshot] Recording screenshot attempt for messageId:', messageId);
-    
-    // Record attempt in database
-    await recordScreenshotAttempt(messageId, {
-      screenName,
-      sensitiveContent,
-      timestamp: timestamp.toISOString(),
-    });
-    
-    // Call custom handler if provided
-    if (onScreenshotDetected) {
-      console.log('[Screenshot] Calling custom handler');
-      onScreenshotDetected(timestamp);
+    if (!user?.id) {
+      screenshotLog('No user found, cannot process screenshot');
+      return;
     }
-  }, [messageId, screenName, sensitiveContent, onScreenshotDetected, recordScreenshotAttempt]);
+
+    // Create comprehensive screenshot context
+    const visibleMessageObjects = visibleMessages.map(messageToVisibleMessage);
+    const screenshotContext = createScreenshotContext(
+      visibleMessageObjects,
+      user.id,
+      screenName || 'unknown',
+      friendId,
+      currentlyViewingMessageId
+    );
+    
+    logScreenshotContext(screenshotContext, 'Screenshot Detection');
+    
+    // Determine which message to report (if any)
+    const primaryMessage = detectPrimaryMessageForScreenshot(
+      visibleMessageObjects,
+      user.id,
+      currentlyViewingMessageId
+    );
+    
+    if (primaryMessage) {
+      screenshotLog('🎯 Will notify message owner:', {
+        messageId: primaryMessage.id,
+        messageOwner: primaryMessage.senderId,
+        screenshotter: user.id,
+        messageType: primaryMessage.type
+      });
+      
+      // Record attempt in database with enhanced context
+      await recordScreenshotAttempt(primaryMessage.id, {
+        screenName: screenName || 'unknown',
+        sensitiveContent,
+        friendId,
+        messageType: primaryMessage.type,
+        timestamp: timestamp.toISOString(),
+        context: screenshotContext.chatContext,
+        visibleMessagesCount: visibleMessageObjects.length,
+        currentlyViewing: currentlyViewingMessageId
+      });
+      
+      // Call custom handler with enhanced context
+      if (onScreenshotDetected) {
+        screenshotLog('Calling custom handler with context');
+        onScreenshotDetected(timestamp, {
+          primaryMessage,
+          screenshotContext,
+          messageOwner: primaryMessage.senderId
+        });
+      }
+    } else {
+      screenshotLog('⚠️ No messages from other people found - screenshot will be ignored');
+      screenshotLog('Context:', {
+        totalMessages: visibleMessages.length,
+        currentUserId: user.id,
+        visibleMessages: visibleMessageObjects.map(m => ({ id: m.id, senderId: m.senderId }))
+      });
+      
+      // Still call handler to let UI know a screenshot was taken (even if ignored)
+      if (onScreenshotDetected) {
+        onScreenshotDetected(timestamp, {
+          ignored: true,
+          reason: 'No messages from other users visible'
+        });
+      }
+    }
+  }, [
+    user?.id,
+    visibleMessages, 
+    screenName, 
+    sensitiveContent, 
+    friendId,
+    currentlyViewingMessageId,
+    onScreenshotDetected, 
+    recordScreenshotAttempt
+  ]);
   
   // Enable/disable screenshot prevention (Android)
   const setAndroidSecureMode = useCallback(async (secure: boolean) => {
@@ -75,42 +154,42 @@ export function useScreenshotSecurity({
       if (secure) {
         const success = await enableScreenshotPrevention();
         if (!success && __DEV__) {
-          console.warn('[Screenshot] Failed to enable FLAG_SECURE');
+          screenshotWarn('Failed to enable FLAG_SECURE');
         }
       } else {
         const success = await disableScreenshotPrevention();
         if (!success && __DEV__) {
-          console.warn('[Screenshot] Failed to disable FLAG_SECURE');
+          screenshotWarn('Failed to disable FLAG_SECURE');
         }
       }
     } catch (error) {
-      console.error('[Screenshot] Failed to set Android secure mode:', error);
+      screenshotError('Failed to set Android secure mode:', error);
     }
   }, []); // Removed isPremiumUser dependency since screenshot prevention is now free
   
   // Setup iOS screenshot detection
   const setupIOSScreenshotDetection = useCallback(async () => {
     if (Platform.OS !== 'ios') {
-      console.log('[Screenshot] Not iOS platform, skipping setup');
+      screenshotLog('Not iOS platform, skipping setup');
       return;
     }
     
     try {
-      console.log('[Screenshot] Setting up iOS screenshot detection...');
+      screenshotLog('Setting up iOS screenshot detection...');
       
       // Add screenshot listener for iOS
       // Note: expo-screen-capture only provides detection, not prevention on iOS
       const subscription = ScreenCapture.addScreenshotListener(() => {
-        console.log('[Screenshot] 🚨 Screenshot listener triggered!');
+        screenshotLog('🚨 Screenshot listener triggered!');
         handleScreenshotDetected();
       });
       
       screenshotListenerRef.current = subscription;
       
-      console.log('[Screenshot] ✅ iOS screenshot detection enabled successfully');
-      console.log('[Screenshot] Subscription object:', subscription);
+      screenshotLog('✅ iOS screenshot detection enabled successfully');
+      screenshotLog('Subscription object:', subscription);
     } catch (error) {
-      console.error('[Screenshot] ❌ Failed to setup iOS screenshot detection:', error);
+      screenshotError('❌ Failed to setup iOS screenshot detection:', error);
     }
   }, [handleScreenshotDetected]);
   
@@ -122,7 +201,7 @@ export function useScreenshotSecurity({
       ScreenCapture.removeScreenshotListener(screenshotListenerRef.current);
       screenshotListenerRef.current = null;
       if (__DEV__) {
-        console.log('[Screenshot] iOS screenshot detection disabled');
+        screenshotLog('iOS screenshot detection disabled');
       }
     }
   }, []);
@@ -136,7 +215,7 @@ export function useScreenshotSecurity({
       // Premium users get blur protection
       // This will be implemented with the blur overlay component
       if (__DEV__ && isPremiumUser) {
-        console.log('[Screenshot] App backgrounded - blur overlay would activate for premium user');
+        screenshotLog('App backgrounded - blur overlay would activate for premium user');
       }
     }
     

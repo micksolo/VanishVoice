@@ -33,7 +33,8 @@
       "ios": {
         "simulator": false,
         "resourceClass": "m-medium",
-        "credentialsSource": "remote"
+        "credentialsSource": "remote",
+        "buildConfiguration": "Debug"
       }
     },
     "preview": {
