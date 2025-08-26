@@ -79,3 +79,4 @@ CLAUDE.md
 docs/archive/
 src/components/archive/
 src/utils/archive/
+*.apk
