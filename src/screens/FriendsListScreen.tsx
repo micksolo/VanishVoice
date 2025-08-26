@@ -19,11 +19,11 @@ import { Theme } from '../theme';
 import { supabase, debugRealtimeConnection } from '../services/supabase';
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFocusEffect } from '@react-navigation/native';
-import RealtimeDebugger from '../components/RealtimeDebugger';
 import * as Notifications from 'expo-notifications';
 import { MessageNotificationData, sendFriendRequestNotification } from '../services/pushNotifications';
 import FriendEncryption from '../utils/friendEncryption';
 import { SafeAreaView, Button, Card, IconButton, Input, Loading, EmptyState } from '../components/ui';
+import FloatingActionMenu from '../components/FloatingActionMenu';
 
 interface Friend {
   id: string;
@@ -53,6 +53,7 @@ export default function FriendsListScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [addFriendModalVisible, setAddFriendModalVisible] = useState(false);
+  const usernameInputRef = useRef<any>(null);
   const [searchUsername, setSearchUsername] = useState('');
   const [searchError, setSearchError] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -491,6 +492,17 @@ export default function FriendsListScreen({ navigation }: any) {
       };
     }
   }, [user]);
+
+  // Focus username input when Add Friend modal opens
+  useEffect(() => {
+    if (addFriendModalVisible) {
+      // Delay slightly to ensure modal is mounted
+      const t = setTimeout(() => {
+        usernameInputRef.current?.focus?.();
+      }, 100);
+      return () => clearTimeout(t);
+    }
+  }, [addFriendModalVisible]);
 
   const loadFriends = async () => {
     if (!user) return;
@@ -1104,20 +1116,6 @@ export default function FriendsListScreen({ navigation }: any) {
             </View>
           )}
         </View>
-        <View style={styles.headerActions}>
-          <IconButton
-            icon={<Ionicons name="shuffle-outline" size={24} color={theme.colors.text.secondary} />}
-            onPress={() => navigation.navigate('AnonymousLobby')}
-            size="medium"
-            variant="ghost"
-          />
-          <IconButton
-            icon={<Ionicons name="person-add" size={24} color={theme.colors.text.accent} />}
-            onPress={() => setAddFriendModalVisible(true)}
-            size="medium"
-            variant="ghost"
-          />
-        </View>
       </View>
 
       {/* Friends List */}
@@ -1214,6 +1212,8 @@ export default function FriendsListScreen({ navigation }: any) {
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="off"
+              autoFocus
+              ref={usernameInputRef}
               error={searchError}
               helperText={!searchError ? "Search for friends by their username" : undefined}
             />
@@ -1232,14 +1232,14 @@ export default function FriendsListScreen({ navigation }: any) {
         </SafeAreaView>
       </Modal>
       
-      {/* Push/Polling Status Indicator */}
-      <View style={styles.statusIndicator}>
-        <View style={[styles.statusDot, { backgroundColor: theme.colors.status.success }]} />
-        <Text style={styles.statusText}>Push Notifications Active</Text>
-      </View>
-      
-      {/* Realtime Debugger */}
-      <RealtimeDebugger />
+      {/* Floating Action Menu */}
+      <FloatingActionMenu
+        onAddFriend={() => setAddFriendModalVisible(true)}
+        onRandomChat={() => navigation.navigate('AnonymousLobby')}
+        onNavigateToAnonymousChat={(conversationId, partnerId) => 
+          navigation.navigate('AnonymousChat', { conversationId, partnerId })
+        }
+      />
       </SafeAreaView>
     </GestureHandlerRootView>
   );
@@ -1251,14 +1251,11 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
+    paddingTop: theme.spacing.lg, // Increased top padding for Android safe area
+    paddingBottom: theme.spacing.md,
     backgroundColor: theme.colors.background.primary,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border.subtle,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
   },
   friendItem: {
     flexDirection: 'row',
@@ -1462,27 +1459,5 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     color: theme.colors.text.inverse,
     ...theme.typography.labelSmall,
     fontWeight: 'bold',
-  },
-  statusIndicator: {
-    position: 'absolute',
-    bottom: 150,
-    alignSelf: 'center',
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs,
-    borderRadius: 20,
-    gap: theme.spacing.xs,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  statusText: {
-    color: theme.colors.text.inverse,
-    ...theme.typography.labelSmall,
-    fontWeight: '600',
   },
 });

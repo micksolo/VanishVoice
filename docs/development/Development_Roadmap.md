@@ -1,479 +1,310 @@
-# WYD - Anonymous Chat App Sprint Development Roadmap
+# VanishVoice - Development Roadmap
 
 ## Project Overview
-**WYD** (What You Doing) is an anonymous chat app for young adults that connects strangers for ephemeral conversations through text, voice, and video messages. Think "Omegle meets Snapchat" with a fun, casual vibe.
+**VanishVoice** is an anonymous chat app that connects strangers for ephemeral conversations through text, voice, and video messages. Built with privacy-first principles and end-to-end encryption.
 
-## Core Concept
+## Core Features
 - Anonymous stranger chat with optional friend connections
-- All messages are ephemeral (disappear after viewing)
-- Simple E2E encryption for privacy
-- Fun, young adult-focused branding
-- Mobile-only (iOS and Android) - no web version
+- All messages are ephemeral with E2E encryption
+- Premium filters for enhanced matching (location, gender, safety)
+- Trust-based safety system with anonymous reporting
+- Mobile-only (iOS and Android)
 
-## Sprint Development Philosophy
-**Iterative Delivery**: Ship valuable features every 1-2 weeks with continuous user feedback. Focus on time-boxed iterations that deliver complete, testable functionality.
+## Development Focus
+**Revenue-First Development**: Prioritize monetization features that provide immediate user value while maintaining privacy principles.
 
-## Sprint Structure
-- **Sprint Length**: 1 week (7 days)
-- **Sprint Ceremonies**: Planning (Mon), Daily Standups, Review (Fri), Retrospective (Fri)
-- **Definition of Done**: Feature tested on both iOS/Android, documented, merged to main
-- **Velocity Tracking**: Story points and completion rates tracked per sprint
+## Current Status: Ready for Monetization
 
-## Sprint Backlog
+### ✅ COMPLETED FOUNDATION
+**Core Platform**: ✅ Complete - E2E encryption, voice/video messages, anonymous chat, friend system
+**Security**: ✅ Complete - All message types E2E encrypted
+**Infrastructure**: ✅ Complete - Supabase backend, push notifications, development builds
 
-### ✅ COMPLETED WORK
-*All MVP and core features documented in CHANGELOG.md - representing approximately 15-20 sprints of work*
+## NEXT PRIORITY: Security Remediation (Uphold “Even From Us” Pledge)
 
-## COMPLETED SPRINT: Sprint N+1 (Week of August 5-8, 2025) ✅
-### Sprint Goal: "Simplified Ephemeral Messaging - Better UX & Monetization" 🚀
+Goal: Eliminate server-decryptable paths, add authenticity and AEAD to all media, lock down key storage, and enforce immediate ephemerality.
 
-**Actual Story Points Completed**: 10 points
-**Sprint Theme**: Strategic simplification for better user experience and premium features
-**Sprint Outcome**: Successfully completed all planned features plus additional read receipts fix
+### Key Gaps Identified
+- Friend chats decryptable by server: ID‑derived “shared secret” (`sharedSecretEncryption.ts`) used by `friendEncryption.ts`, `secureE2EAudioStorage.ts`, `secureE2EVideoStorageFastAndroid.ts` allows the backend to compute the same secret and decrypt content.
+- Anonymous chat MITM risk: DB‑mediated key exchange in `anonymousEncryption.ts` has no user verification, enabling potential key substitution by server.
+- Audio payload integrity: `secureE2EAudioStorage.ts` uses XOR for audio blobs without AEAD; tampering undetectable.
+- Non‑standard crypto: `sharedSecretEncryption.ts` uses XOR + ad‑hoc tag instead of AEAD/HMAC.
+- Key storage: Private keys in `AsyncStorage` (e.g., `secureKeyStorage.ts`, `useAnonymousSession.ts`) instead of Keychain/Keystore.
+- Logging: Secrets/nonces appear in logs in some utils; risk of sensitive leakage.
+- Ephemeral semantics: Server cleanup windows (24–48h) and client cache writes mean content may persist beyond “view/playback”.
+- Metadata/linkability: Push payloads include `sender_id`/`sender_name`; a durable `deviceHash` links sessions.
 
-### Sprint Achievements:
+### Remediation Plan (High Priority Tasks)
+1. Friend chats → NaCl public‑key model
+   - Replace ID‑derived secrets with `nacl.box` key wrapping to recipient public key.
+   - Files: `src/utils/friendEncryption.ts`, `src/utils/secureE2EAudioStorage.ts`, `src/utils/secureE2EVideoStorageFastAndroid.ts`.
 
-#### HIGH PRIORITY (Must-Have) ✅ COMPLETED
-- [x] **Simplify Ephemeral Messaging System** (5 points) ✅ COMPLETED
-  - Remove complex timed message options (1min, 5min, 1hr, 24hr, 7days)
-  - Simplify to just "View Once" and "Keep Permanently" options
-  - Remove IntegratedCountdown and FallbackCountdown components
-  - Fix persistent SVG useInsertionEffect warnings
-  - Update ExpiryRuleSelector with cleaner two-option interface
-  - Remove all countdown timer logic from message bubbles
-  - Simplify EphemeralIndicator component (no more time tracking)
-  
-- [x] **Premium Feature Design** (2 points) ✅ COMPLETED
-  - Design "Clear All Messages" premium feature
-  - Add premium section to ExpiryRuleSelector modal
-  - Create monetization opportunity with "clear on both devices" feature
-  - Add screenshot blocking as future premium feature
-  - Beautiful PRO badges and premium UI elements
+2. Audio AEAD
+   - Encrypt audio blobs with `nacl.secretbox` (per‑message key + 24‑byte nonce). Remove XOR for payloads.
+   - File: `src/utils/secureE2EAudioStorage.ts`.
 
-#### COMPLETED FEATURES
-- [x] **Double-Tap Reactions** (1 point) ✅ COMPLETED
-  - Heart animation on message double-tap (sticky like Instagram/WhatsApp)
-  - Persistent heart reactions that stay on messages
-  - Haptic feedback integration
-  - Toggle reaction on/off with double-tap
+3. Anonymous chat authenticity
+   - Add key verification (SAS/emoji/QR) or TOFU with safety numbers + key‑change alerts.
+   - File: `src/utils/anonymousEncryption.ts` (+ minimal UI in AnonymousChat).
 
-- [x] **Voice Message Error Cleanup** (0.5 point) ✅ COMPLETED
-  - Reduced debug console logs for cleaner development experience
-  - Improved error handling in audio encryption pipeline
-  
-- [x] **Message Read Receipts - FIXED** (3 points) ✅ COMPLETED
-  - Complete re-implementation after initial system had issues
-  - Visual status indicators working correctly: sending, sent, delivered, read
-  - Single gray checkmark for sent, double gray for delivered
-  - Double BLUE checkmarks (#007AFF) for read messages (fixed purple color issue)
-  - Fixed checkmark overlap issue (adjusted from -12px to -7px for proper visibility)
-  - Implemented polling-based synchronization (3-second intervals)
-  - Fixed infinite loop bug where messages kept being marked as read
-  - Persistent status across app backgrounding/foregrounding
-  - Local state management prevents redundant database updates
-  - Applied to all message types (text, voice, video)
+4. Key storage hardening
+   - Move private keys to `react-native-keychain`; keep `AsyncStorage` for non‑secrets only.
+   - Files: `src/utils/secureKeyStorage.ts`, `src/hooks/useAnonymousSession.ts`.
 
-### Sprint Retrospective:
-**What Went Well:**
-- Successfully simplified ephemeral messaging from 7 options to 2
-- Fixed critical read receipts functionality with pragmatic approach
-- Delivered double-tap reactions feature enhancing user engagement
-- Maintained code quality despite technical challenges
+5. Logging hygiene
+   - Strip secret/nonces/session logs; guard any debug with compile‑time flags; never log secrets in production.
+   - Files: `src/utils/nacl/naclEncryption.ts`, `src/utils/e2eEncryptionFixed.ts`, media utils.
 
-**What Could Be Improved:**
-- Initial read receipts implementation caused Supabase issues
-- Need better testing infrastructure before database migrations
-- Supabase real-time UPDATE events don't work - need workarounds
+6. Ephemeral enforcement
+   - Server: synchronous delete on view/read/play via RPC; cron only as short fail‑safe (minutes).
+   - Client: delete decrypted files immediately after playback; avoid persisting plaintext in cache.
+   - Files: Supabase RPC/Edge Functions (`supabase/functions/expire-messages`), client playback paths.
 
-**Action Items:**
-- Always test database migrations locally first
-- Document Supabase limitations (UPDATE events) in CLAUDE.md
-- Use polling as fallback when real-time features fail
+7. Metadata/linkability minimization
+   - Reduce identifiers in push payloads; consider opaque handles/local mapping.
+   - Document or rotate/expire `deviceHash` if non‑linkability is desired.
 
----
+### Acceptance Criteria
+- Friend messages (text/audio/video) are unreadable by the server at rest and in transit.
+- All media uses AEAD; tampering is detected (decryption fails).
+- Anonymous chat offers a user‑verifiable key check or TOFU with safety numbers.
+- No private keys in `AsyncStorage`; production builds contain no secret logs.
+- On view/play, content is deleted server‑side immediately; client plaintext is removed after use.
 
-## ⚠️ SHELVED SPRINT: Sprint N+2 (August 9, 2025) - SCREENSHOT PREVENTION SHELVED
-### Sprint Goal: "Screenshot Prevention & Security" - FEATURE SHELVED FOR MVP
+### Test/Validation
+- Unit tests for encrypt/decrypt round‑trips, tamper detection, versioning.
+- Manual tests for key verification flow and ephemeral deletion timing.
+- Documentation updates: threat model, guarantees, and limits.
 
-**Story Points Completed**: 0 of 13 points (SHELVED - Feature removed from app)
-**FEATURE STATUS**: 🚧 SHELVED - Screenshot prevention removed to unblock MVP progress
-**Sprint Theme**: Feature shelved due to native module complexity blocking MVP launch
-**Sprint Outcome**: Feature temporarily removed from app, code preserved for future implementation
+### Key Assets Ready for Monetization:
+- Monetization analytics service - functional 
+- Payment integration foundation - exists in codebase
+- Trust score system - operational for safety features
+- Anonymous reporting system - implemented
 
-### Why Feature Was Shelved:
+## IMMEDIATE PRIORITIES: Revenue Generation
+**Target**: $6,000-12,000 MRR within 90 days, 15%+ premium conversion rate
 
-#### TECHNICAL CHALLENGES IDENTIFIED:
-- [ ] **Native Module Complexity** (High Complexity) 🚧 SHELVED
-  - Android FLAG_SECURE implementation requires complex native module architecture
-  - Expo config plugins causing development build issues
-  - Cross-platform API consistency difficult to maintain
-  - Native module debugging challenging in Expo environment
+### Phase 1: Payment Infrastructure (Week 1)
+**Goal**: Enable premium subscriptions and revenue pipeline
 
-- [ ] **Development Build Dependencies** (Medium Complexity) 🚧 SHELVED
-  - Screenshot prevention requires development builds (not Expo Go)
-  - Native module changes require full rebuild cycles
-  - Testing complexity increases significantly with native code
-  - App store submission complexity with native modules
+#### CRITICAL TASKS:
+- [ ] **Payment Integration Setup**
+  - Apple Pay/In-App Purchase setup (iOS)
+  - Google Play Billing integration (Android) 
+  - Premium subscription management ($4.99/month)
+  - User tier tracking and feature enforcement
 
-- [ ] **MVP Launch Priority** (Business Decision) 🚧 SHELVED
-  - Feature adds significant complexity without core user value
-  - MVP needs to launch quickly without advanced security features
-  - Core messaging functionality more important than screenshot prevention
-  - Can be implemented post-launch as premium feature
+### Phase 2: Premium Discovery Features (Week 2-3)
+**Goal**: Launch high-conversion premium features
+**Business Value**: Age/gender/location filtering proven 20%+ conversion in anonymous chat apps
 
-#### PRESERVED CODE ASSETS:
-- [x] **Complete Implementation Available** 📦 PRESERVED
-  - All security components coded and functional (/modules/screenshot-prevent/)
-  - SecurityContext, useScreenshotSecurity hook implemented
-  - UI components (SecurityShield, SecurityTrustScore, etc.) ready
-  - Database schema and real-time notification system complete
-  - Native module architecture documented and buildable
+#### HIGH PRIORITY FEATURES:
+- [ ] **Age Filter Premium Feature**
+  - Age range selection: 18-25, 26-35, 36-45, 46+ (all users must be 18+)
+  - Premium-only feature with clear legal compliance messaging
+  - Expected: 70% of users interested in age-based matching
 
-### Decision Outcome:
-**Current Status**: All screenshot prevention code has been disabled but preserved
-**Future Implementation**: Code can be re-enabled when native module issues are resolved
-**Business Impact**: MVP can launch faster without complex security feature blocking progress
-**User Impact**: Core messaging remains fully functional, premium security features delayed
+- [ ] **Gender Filter Premium Feature**
+  - Male/Female/Any filtering in anonymous lobby
+  - Premium paywall with freemium model (3 free filtered matches/day)
+  - Expected: 60% of users try gender filtering in first session
 
-## UPCOMING SPRINTS (Next 3 weeks)
-**Theme**: Core MVP Features & Polish
-- [ ] Account recovery system implementation
-- [ ] Anonymous chat improvements  
-- [ ] Performance optimization and bug fixes
+- [ ] **Location-Based Premium Filtering**
+  - Country/continent exclusion preferences 
+  - Distance-based matching for premium users
+  - Privacy-first location collection (IP geolocation + optional GPS)
+  - Expected: 45% premium conversion among location-engaged users
 
-### Sprint N+3: Account Recovery System  
-**Theme**: User retention and account management
-- [ ] Username + password recovery system
-- [ ] Device migration workflow
-- [ ] Account recovery UI flow
+### Phase 3: Onboarding & Analytics (Week 4)
+**Goal**: Optimize conversion funnel and user data collection
 
-### Sprint N+4: Anonymous Chat Enhancements
-**Theme**: Improve stranger matching experience  
-- [ ] Better matching algorithm
-- [ ] Skip/Next functionality
-- [ ] Report/Block system implementation
+#### CONVERSION OPTIMIZATION:
+- [ ] **Enhanced 5-Screen Onboarding Flow**
+  - Welcome/Privacy → Age Verification (18+) → Username (optional) → Gender/Age Preferences → Premium Preview
+  - Age verification screen for legal compliance (required, no skip)
+  - Gender and age preference collection for premium filter targeting
+  - Every other screen has skip option to maintain low barrier
+  - Soft premium introduction emphasizing privacy benefits
 
----
+- [ ] **Privacy-First Analytics Infrastructure**
+  - Replace Sentry with anonymous analytics
+  - Enhanced monetizationAnalytics service integration
+  - A/B testing framework for premium messaging optimization
 
-## PRODUCT BACKLOG (Prioritized Features)
+### Phase 4: Safety System Enhancement (Week 5)
+**Goal**: Complete safety infrastructure for premium differentiation
 
-### Epic 1: Safety & Trust (Sprint N+2 - N+3)
-**Business Value**: Critical for user safety and ephemeral messaging trust
+#### SAFETY & TRUST FEATURES:
+- [ ] **Enhanced Anonymous Reporting System**
+  - Complete database schema implementation
+  - Admin dashboard for report review and moderation
+  - Trust score integration with premium features
 
-#### Sprint N+2 Stories:
-- [ ] **Screenshot Detection/Prevention** (5 points)
-  - Android: FLAG_SECURE implementation  
-  - iOS: screenshot detection with notifications
-  - User education about screenshot policies
-  - Trust indicators in ephemeral message UI
+- [ ] **Premium Safety Features**
+  - "Chat Partner Report History" premium feature
+  - Trust-based matching improvements (premium users get higher trust matches)
+  - Safety education and user guidelines
 
-#### Sprint N+3 Stories:  
-- [ ] **Report/Block System** (3 points)
-  - Report user functionality
-  - Block user with local storage
-  - Safety guidelines and education
-
-### Epic 2: User Retention (Sprint N+3 - N+4)
-**Business Value**: Reduce churn and improve user lifetime value
-
-#### Sprint N+3 Stories:
-- [ ] **Account Recovery System** (8 points)
-  - Username + password authentication
-  - Device migration workflow  
-  - Account recovery UI/UX
-  - Security considerations for E2E encryption
-
-#### Sprint N+4 Stories:
-- [ ] **Enhanced Matching** (5 points)
-  - Improved stranger matching algorithm
-  - Skip/Next functionality
-  - Connection quality metrics
-
-### Epic 3: Premium Features (Sprint N+5 - N+6)
-**Business Value**: Revenue generation and user segmentation
-
-#### Sprint N+5 Stories:
-- [ ] **Premium Tier Foundation** (5 points)
-  - Payment integration (Apple Pay, Google Play)
-  - Premium UI indicators
-  - User tier management
-
-#### Sprint N+6 Stories:
-- [ ] **Premium Features** (8 points)
-  - Gender filter (male/female/any)
-  - Location filter (country/continent)
-  - Premium user experience enhancements
-
-### Epic 4: Polish & Launch Preparation (Sprint N+7 - N+8)
-**Business Value**: Production readiness and user onboarding
-
-#### Sprint N+7 Stories:
-- [ ] **Onboarding Flow** (5 points)
-  - Age verification (18+)
-  - Community guidelines
-  - Quick tutorial
-
-#### Sprint N+8 Stories:
-- [ ] **Performance & Analytics** (3 points)
-  - Performance optimization
-  - Analytics setup (anonymous usage metrics)
-  - Connection indicators and error handling
+- [ ] **Push Notification System Enhancement**
+  - Verify Expo Push Service integration is fully operational
+  - Premium notification preferences (priority notifications, match alerts)
+  - Anonymous chat connection notifications
+  - Safety alert notifications for reported users
 
 ---
 
-## SPRINT CEREMONIES & GUIDELINES
+## FUTURE FEATURES (After Revenue Established)
 
-### Sprint Planning (Every Monday, 1-2 hours)
-**Participants**: Full development team
-**Agenda**:
-1. Review previous sprint velocity and outcomes
-2. Prioritize backlog items based on business value
-3. Break down user stories into development tasks  
-4. Estimate story points using planning poker
-5. Commit to sprint goal and backlog items
-6. Identify dependencies and risks
+### Phase 5: Advanced Security Features (Week 6-7)
+**Goal**: Re-implement premium security features for enhanced privacy
+**Business Value**: Security-focused premium features for privacy-conscious users
 
-### Daily Standups (Every day, 15 minutes)
-**Format**: What I did / What I'm doing / Any blockers
-**Focus**: Collaboration, impediment identification, progress sharing
+#### PREMIUM SECURITY FEATURES:
+- [ ] **Screenshot Prevention System (Re-implementation)**
+  - Android FLAG_SECURE implementation for premium users
+  - iOS screenshot detection with premium notifications
+  - Premium paywall integration for enhanced privacy
+  - User education about screenshot protection benefits
+  - Trust indicators showing security level to chat partners
 
-### Sprint Review (Every Friday, 1 hour)  
-**Participants**: Development team + stakeholders
-**Agenda**:
-1. Demo completed features on real devices
-2. Review sprint goal achievement
-3. Gather feedback on deliverables
-4. Update product backlog based on feedback
+- [ ] **Enhanced Privacy Controls**
+  - Premium-only "Disappearing Mode" with advanced deletion
+  - Encrypted backup options for premium subscribers
+  - Advanced encryption indicators in chat interface
+  - Premium privacy analytics (anonymized usage patterns)
 
-### Sprint Retrospective (Every Friday, 1 hour)
-**Focus**: Continuous improvement
-**Format**: Start/Stop/Continue or What went well/What didn't/Action items
-**Output**: Concrete action items for next sprint
+### Account Recovery System (Post-Monetization)
+**Priority**: MEDIUM - After revenue is established
+**Rationale**: User retention improvement, but not revenue-critical
 
-### Definition of Done
-**Technical Requirements**:
-- [ ] Feature works on both iOS and Android
-- [ ] Code reviewed and approved by team member
-- [ ] Unit tests written and passing
-- [ ] E2E encryption verified (if applicable)
-- [ ] No console errors or warnings
-- [ ] Performance tested on slower devices
+- [ ] Username + password authentication system
+- [ ] Device migration workflow for account recovery
+- [ ] Security considerations for E2E encrypted message recovery
+- [ ] Account recovery UI/UX flows
 
-**Documentation Requirements**:
-- [ ] Feature documented in CHANGELOG.md
-- [ ] User-facing changes documented
-- [ ] Technical decisions documented in CLAUDE.md
-- [ ] Breaking changes or migrations noted
+### Advanced Matching Features (Future Enhancement)
+**Priority**: LOW - Engagement optimization after core monetization
 
-**Quality Assurance**:
-- [ ] Manual testing completed on both platforms
-- [ ] Accessibility considerations addressed
-- [ ] Error handling and edge cases tested
-- [ ] Feature demonstrates on development build
+- [ ] Interest/topic-based matching algorithms
+- [ ] Enhanced skip/next functionality  
+- [ ] Connection quality metrics and optimization
+- [ ] Geographic network effects and viral features
+
+### Content & Community Features (Growth Phase)
+**Priority**: FUTURE - After sustainable revenue established
+
+- [ ] Voice filters and audio effects
+- [ ] Group chat rooms and community features
+- [ ] Enhanced privacy features (blur backgrounds, watermarks)
+- [ ] AR filters for video messages
+- [ ] Verified badges for content creators
 
 ---
 
-## VELOCITY TRACKING & METRICS
+## Technical Foundation
+**Frontend**: React Native (Expo) - iOS & Android
+**Backend**: Supabase (PostgreSQL + Edge Functions + Realtime + Storage)
+**Encryption**: NaCl (TweetNaCl) - All message types ✅ Complete
+**Push Notifications**: Expo Push Service ✅ Implemented (needs verification and enhancement)
+**Payments**: Native IAP (Apple Pay/Google Play) - Ready for implementation
+**Analytics**: Custom privacy-first service (replacing Sentry)
 
-### Sprint Metrics to Track:
-- **Story Points Committed vs Completed**
-- **Sprint Goal Achievement Rate**
-- **Defect Rate (bugs found post-sprint)**
-- **Cycle Time (story start to completion)**
-- **Team Satisfaction Scores**
+### ✅ ENCRYPTION STATUS (COMPLETE)
+**All Message Types**: ✅ E2E encrypted and production-ready
+- **Text Messages**: SharedSecretEncryption with authentication
+- **Voice Messages**: secureE2EAudioStorage with unique keys per message  
+- **Video Messages**: secureE2EVideoStorageFastAndroid with XOR encryption
+- **Anonymous Chat**: NaCl box encryption with ephemeral keys
 
-### Success Criteria:
-- 80%+ sprint goal achievement rate
-- Consistent velocity over 3+ sprints
-- Decreasing defect rates over time
-- High team satisfaction (4/5 or higher)
+**Privacy Guarantee**: Server cannot decrypt any user content
 
----
+## Monetization-Focused Design Strategy
 
-### ✅ SECURITY STATUS UPDATE
-**Text Messages**: ✅ E2E encrypted via SharedSecretEncryption
-**Voice Messages**: ✅ E2E encrypted via secureE2EAudioStorage
-**Video Messages**: ✅ E2E encrypted via secureE2EVideoStorageFastAndroid
-**Anonymous Chat**: ✅ E2E encrypted via NaCl
+### Premium Visual Language
+- **Premium Colors**: Electric Purple (#B026FF) for premium badges and features
+- **Value Indicators**: Gold accents (#FFD700) for premium tier differentiation
+- **Trust Signals**: Cyber Blue (#00D9FF) for safety and encryption indicators
+- **Conversion Elements**: Neon Pink (#FF1B8D) for upgrade prompts and CTAs
 
-All message types now have proper E2E encryption:
-- Text: Shared secret encryption with authentication
-- Voice: Unique key per message, encrypted with recipient's key
-- Video: XOR encryption with unique keys, encrypted with shared secret
-- Anonymous: NaCl box encryption with ephemeral keys
-- Server cannot decrypt any message content, audio, or video
+### Premium UX Patterns
+- **Progressive Disclosure**: Reveal premium value through usage
+- **Soft Paywalls**: Context-aware premium prompts after positive engagement
+- **Value Demonstration**: Interactive previews of premium filter results
+- **Trust Building**: Clear privacy explanations for data collection
 
+## Key Success Metrics
 
-### Account Recovery System (Priority: MEDIUM)
-**Why Important**: Users losing accounts = bad retention
-**When to Implement**: After core features are complete and polished
+### Revenue Metrics (Primary)
+- **Monthly Recurring Revenue (MRR)**: Target $6K-12K within 90 days
+- **Premium conversion rate**: Target 15%+ (industry standard)
+- **Average Revenue Per User (ARPU)**: Track monthly progression
+- **Customer Lifetime Value (LTV)**: Monitor premium user retention
+- **Churn rate**: Target <30% monthly churn for premium subscribers
 
-- [ ] **Username + Password Recovery**
-  - [ ] Add password_hash field to users table (nullable)
-  - [ ] "Set Password" UI in Profile screen (optional but encouraged)
-  - [ ] Password validation (min 8 chars, strong password rules)
-  - [ ] Secure password hashing (bcrypt/argon2)
-  - [ ] Remove old recovery code system (recoveryCode.ts)
-  
-- [ ] **Account Recovery Flow**
-  - [ ] "Sign In" option on auth screen
-  - [ ] Username + password login form
-  - [ ] Recover: identity, friends list, settings, premium status
-  - [ ] Generate new encryption keys on new device
-  - [ ] Clear messaging: "Messages are end-to-end encrypted and cannot be recovered"
-  - [ ] Store new device keys in key_storage table
+### User Engagement Metrics (Secondary)
+- **Premium feature adoption rate**: Target 80% of premium users use filters
+- **Daily/Weekly Active Users**: Track growth alongside revenue
+- **Session length**: Monitor premium vs free user engagement
+- **Conversion funnel**: Track onboarding → trial → premium → retention
 
-- [ ] **Default Username System** ✅
-  - [x] Auto-generate fun usernames (CoolPanda123)
-  - [x] Ensure uniqueness on creation
-  - [ ] Show username prominently in UI (home screen welcome)
-  - [ ] Encourage password setup in onboarding flow
+### Safety & Trust Metrics (Supporting)
+- **Report rate**: Monitor safety without fear-inducing increases
+- **Trust score distribution**: Track safety system effectiveness  
+- **User satisfaction**: Survey-based trust and safety perception
 
-- [ ] **Security Considerations**
-  - [ ] Hybrid approach: password recovers identity, not messages
-  - [ ] Each device gets unique encryption keys
-  - [ ] Friends can re-establish secure connections
-  - [ ] Optional: backup encryption keys to cloud (future feature)
-
-### Friend System Enhancements  
-- [ ] Enhanced friend features
-  - [ ] Optional profile photo upload
-  - [ ] Phone number hashing for discovery
-  - [ ] QR code/link sharing
-  - [ ] Online/offline status
-  - [ ] Last seen timestamps
-  - [ ] Friend list organization
-
-### Premium Tier ($4.99/month)
-- [ ] Gender filter (male/female/any)
-- [ ] Location filter (country/continent)
-- [ ] Payment integration
-  - [ ] Apple Pay / In-App Purchase (iOS)
-  - [ ] Google Play Billing (Android)
-- [ ] Premium UI indicators
-
-## Phase 3: Safety & Polish (1 week)
-
-### Safety System
-- [ ] Automated strike system
-  - [ ] Report tracking
-  - [ ] Progressive bans (1 day → 7 days → permanent)
-  - [ ] Shadow banning for bad actors
-- [ ] Trust-based matching
-  - [ ] Match by trust scores
-  - [ ] Separate pools for reported users
-- [ ] Device fingerprinting for ban enforcement
-
-### Polish & Launch
-- [ ] Onboarding flow
-  - [ ] Age verification (18+)
-  - [ ] Community guidelines
-  - [ ] Quick tutorial
-- [ ] Performance optimization
-  - [ ] Message queueing
-  - [ ] Connection indicators
-  - [ ] Error handling
-- [x] Dark/Light mode ✅ COMPLETED
-  - [x] System preference detection ✅
-  - [x] Manual toggle in settings ✅
-  - [x] Persist user preference ✅
-- [ ] Analytics setup
-  - [ ] Anonymous usage metrics
-  - [ ] Conversion tracking
-  - [ ] Safety monitoring
-
-## Technical Stack
-- **Frontend**: React Native (Expo) - iOS & Android only
-- **Backend**: Supabase (PostgreSQL + Edge Functions + Realtime)
-- **Encryption**: NaCl (TweetNaCl) - Both anonymous and friend chat ✅
-- **Push Notifications**: Expo Push Service ✅ (Implemented)
-- **Payments**: Native IAP only (no Stripe needed) - Pending
-- **Analytics**: Mixpanel/Amplitude - Pending
-
-## Design Guidelines
-
-### Brand Identity
-- **Core**: Fun, casual, young adult focused (18-25)
-- **Personality**: Spontaneous, mysterious, playful
-- **Tone**: Casual, friendly, never serious
-
-### Visual Design - "Neon Nights" Theme (Recommended)
-- **Primary Colors**: 
-  - Electric Purple (#B026FF) - Main accent
-  - Neon Pink (#FF1B8D) - Highlights
-  - Cyber Blue (#00D9FF) - Secondary
-  - Laser Green (#00FF88) - Success states
-- **Dark Theme**: Rich black (#0A0A0F) with neon accents
-- **Effects**: Glowing elements, gradient message bubbles, neon trails
-
-### Interactions & Animations
-- **Messages**: Spring physics, pop-in effects, dissolve on expiry
-- **Recording**: Colorful waveforms, pulsing buttons, progress rings
-- **Reactions**: Double-tap hearts, emoji explosions, haptic feedback
-- **Transitions**: Smooth 60fps, elastic scrolling, ripple effects
-- **Sound**: Subtle UI sounds for send/receive/reactions
-
-### Key Differentiators from Snapchat
-- More anonymous/mysterious aesthetic
-- Neon cyberpunk vibes vs bright yellow
-- Focus on ephemeral connections, not social network
-- Glowing UI elements emphasizing temporary nature
-
-## Success Metrics
-- Daily active users
-- Average session length
-- Messages per conversation
-- Premium conversion rate
-- Report rate (lower is better)
-- User retention (1-day, 7-day)
-
-## Future Features (Post-Launch)
-- **Screenshot Prevention & Security** (SHELVED - Re-implement Post-Launch)
-  - Complete screenshot prevention system with Android FLAG_SECURE
-  - iOS screenshot detection with notifications
-  - Premium security features and monetization
-  - Trust scoring and security analytics
-  - All code preserved in /modules/screenshot-prevent/ and security components
-  - Native module challenges need resolution before re-implementation
-- **Performance: Native Crypto Optimization** (High Priority)
+## Performance Optimization (Future)
+- **Native Crypto Optimization** (Post-Revenue Priority)
   - Video decryption currently 10-15s (nacl.secretbox limitation)
-  - Implement native crypto libraries or streaming decryption
-  - Target: <3s total download time for videos
-- Interest/topic matching
-- Voice filters (fun effects)
-- Group chat rooms
-- React to messages
-- Enhanced privacy features (blur on background, watermarks)
-- Verified badges for content creators
-- AR filters for video messages
+  - Implement native crypto libraries for faster decryption
+  - Target: <3s total download time for large video files
 
-## Key Decisions
-- Simple E2E encryption (not Signal-level)
-- No message history by default
-- Device-based identity (not accounts)
-- Gender + location as primary paid features
-- Focus on 18-25 age demographic
-- English-first, expand languages later
+## Strategic Decisions
+- **Monetization-first roadmap**: Revenue features prioritized over engagement features
+- **Privacy-preserving premium**: Premium features maintain anonymity principles
+- **Freemium model**: Basic features free, enhanced discovery/safety premium
+- **Trust-based safety**: Device fingerprinting and reputation system over account-based
+- **Platform-native payments**: Apple Pay/Google Play only (no Stripe complexity)
+- **Anonymous analytics**: Privacy-first metrics that don't compromise user trust
 
-## Repository
-- GitHub: https://github.com/micksolo/WYD
-- Will need new app store listings
-- New privacy policy for anonymous chat
-- Updated terms of service
+---
 
-## Tagline Ideas (Security-Focused)
-- "WYD? Chat anonymously. Actually anonymously."
-- "Anonymous chat that even we can't read"
-- "WYD? Find out. Securely."
-- "Real privacy. Real conversations. WYD?"
-- "Chat like Snap. Secure like Signal. WYD?"
-- "Your chats. Your keys. WYD?"
-- "E2E encrypted. Actually ephemeral. WYD?"
-- "They can't read it. We can't read it. WYD?"
+## Business Positioning & Launch Strategy
 
-## Key Differentiator
-Unlike Snapchat and other "anonymous" apps, WYD features:
-- True end-to-end encryption (messages are encrypted on your device)
-- No server-side message access (we literally cannot read your messages)
-- Ephemeral by design (messages truly disappear)
-- No data mining or ad targeting (because we can't see your content)
+### Revenue-Focused Value Proposition
+**VanishVoice Premium**: "Anonymous chat with smart filters for safer connections"
+- **Free Tier**: Basic anonymous chat with E2E encryption
+- **Premium Tier**: Enhanced discovery (gender/location filters) + safety features
+- **Value Messaging**: "Connect with the right people while staying completely anonymous"
+
+### Competitive Differentiation
+- **Privacy-First Premium**: Premium features that enhance privacy rather than compromise it
+- **Trust-Based Safety**: Anonymous reporting and reputation system without identity tracking
+- **True Anonymity**: E2E encryption standard for all users, enhanced filters for premium
+- **Mobile-Optimized**: Native mobile experience with platform-appropriate payment integration
+
+### Launch Readiness Checklist
+- [ ] Premium subscription infrastructure operational
+- [ ] Payment integration complete (Apple Pay/Google Play)
+- [ ] Age verification system implemented (18+ legal compliance)
+- [ ] Push notification system verified and enhanced
+- [ ] Privacy-compliant analytics for conversion tracking
+- [ ] Anonymous safety reporting system functional
+- [ ] Premium feature differentiation clear and valuable (age/gender/location filters)
+- [ ] Customer support prepared for premium subscriber inquiries
+
+---
+
+---
+
+## NEXT STEPS: Start Monetization Implementation
+
+### Immediate Task (This Week):
+1. **Payment Integration Setup**: Apple Pay and Google Play Billing integration
+2. **Premium Subscription Management**: User tier tracking and feature enforcement
+3. **Age Verification System**: Legal compliance for 18+ requirement
+4. **Push Notification Verification**: Ensure Expo Push Service is fully operational
+5. **Success Metrics Implementation**: Track premium conversion rates and revenue
+
+### Success Target: 
+First premium subscribers within 30-45 days, foundation for $6K-12K MRR within 90 days

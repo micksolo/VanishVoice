@@ -230,7 +230,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     borderBottomColor: theme.colors.border.light,
   },
   title: {
-    ...theme.typography.heading.h4,
+    ...theme.typography.headlineMedium,
     color: theme.colors.text.primary,
   },
   content: {
@@ -244,12 +244,12 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     marginBottom: theme.spacing.lg,
   },
   label: {
-    ...theme.typography.body.small,
+    ...theme.typography.bodySmall,
     color: theme.colors.text.secondary,
     marginBottom: theme.spacing.xs,
   },
   recipientName: {
-    ...theme.typography.heading.h3,
+    ...theme.typography.headlineLarge,
     color: theme.colors.text.primary,
   },
   audioCard: {
@@ -274,11 +274,11 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     flex: 1,
   },
   duration: {
-    ...theme.typography.heading.h2,
+    ...theme.typography.displaySmall,
     color: theme.colors.text.inverse,
   },
   audioLabel: {
-    ...theme.typography.body.small,
+    ...theme.typography.bodySmall,
     color: theme.colors.text.muted,
     marginTop: theme.spacing.xs,
   },
@@ -286,7 +286,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     marginTop: theme.spacing.sm,
   },
   sectionTitle: {
-    ...theme.typography.heading.h4,
+    ...theme.typography.headlineMedium,
     color: theme.colors.text.primary,
     marginBottom: theme.spacing.md,
   },
@@ -309,7 +309,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     marginLeft: theme.spacing.md,
   },
   optionTitle: {
-    ...theme.typography.body.medium,
+    ...theme.typography.bodyMedium,
     color: theme.colors.text.primary,
     fontWeight: '600',
   },
@@ -317,7 +317,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     color: theme.colors.accent.teal,
   },
   optionDescription: {
-    ...theme.typography.body.small,
+    ...theme.typography.bodySmall,
     color: theme.colors.text.secondary,
     marginTop: theme.spacing.xs,
   },

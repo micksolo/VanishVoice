@@ -1,8 +1,10 @@
 import React from 'react';
+import { Platform } from 'react-native';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AnonymousAuthContext';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { Loading } from '../components/ui';
@@ -117,6 +119,7 @@ function ProfileStack() {
 
 function TabNavigator() {
   const theme = useAppTheme();
+  const insets = useSafeAreaInsets();
   
   return (
     <Tab.Navigator
@@ -139,9 +142,11 @@ function TabNavigator() {
         tabBarStyle: {
           backgroundColor: theme.colors.background.primary,
           borderTopColor: theme.colors.border.subtle,
-          minHeight: theme.touchTargets.large,
-          paddingBottom: theme.spacing.sm,
+          paddingBottom: Platform.OS === 'android' ? Math.max(insets.bottom, theme.spacing.md) : insets.bottom + theme.spacing.sm,
           paddingTop: theme.spacing.sm,
+          height: Platform.OS === 'android' 
+            ? theme.touchTargets.large + theme.spacing.sm + Math.max(insets.bottom, theme.spacing.md)
+            : theme.touchTargets.large + theme.spacing.sm * 2 + insets.bottom,
         },
         tabBarLabelStyle: theme.typography.labelMedium,
         headerStyle: {

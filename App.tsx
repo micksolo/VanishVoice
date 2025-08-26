@@ -4,6 +4,7 @@ import 'react-native-get-random-values';
 import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/contexts/AnonymousAuthContext';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 // import { SecurityProvider } from './src/contexts/SecurityContext'; // SHELVED: Screenshot prevention feature
@@ -45,15 +46,17 @@ function AppContent() {
 
 export default function App() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider>
-        <AuthProvider>
-          {/* SHELVED: Screenshot prevention feature */}
-          {/* <SecurityProvider> */}
-            <AppContent />
-          {/* </SecurityProvider> */}
-        </AuthProvider>
-      </ThemeProvider>
-    </GestureHandlerRootView>
+    <SafeAreaProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <ThemeProvider>
+          <AuthProvider>
+            {/* SHELVED: Screenshot prevention feature */}
+            {/* <SecurityProvider> */}
+              <AppContent />
+            {/* </SecurityProvider> */}
+          </AuthProvider>
+        </ThemeProvider>
+      </GestureHandlerRootView>
+    </SafeAreaProvider>
   );
 }

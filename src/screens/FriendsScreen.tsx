@@ -252,12 +252,12 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     flex: 1,
   },
   friendCode: {
-    ...theme.typography.body.medium,
+    ...theme.typography.bodyMedium,
     color: theme.colors.text.primary,
     fontWeight: '600',
   },
   friendDate: {
-    ...theme.typography.body.small,
+    ...theme.typography.bodySmall,
     color: theme.colors.text.secondary,
     marginTop: theme.spacing.xs,
   },
@@ -271,12 +271,12 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     paddingHorizontal: theme.spacing.xl,
   },
   emptyText: {
-    ...theme.typography.heading.h3,
+    ...theme.typography.headlineLarge,
     color: theme.colors.text.primary,
     marginTop: theme.spacing.lg,
   },
   emptySubtext: {
-    ...theme.typography.body.medium,
+    ...theme.typography.bodyMedium,
     color: theme.colors.text.secondary,
     marginTop: theme.spacing.sm,
     textAlign: 'center',
@@ -307,7 +307,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     ...theme.shadows.large,
   },
   modalTitle: {
-    ...theme.typography.heading.h3,
+    ...theme.typography.headlineLarge,
     color: theme.colors.text.primary,
     marginBottom: theme.spacing.lg,
     textAlign: 'center',
@@ -318,7 +318,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     borderRadius: theme.borderRadius.md,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
-    ...theme.typography.body.medium,
+    ...theme.typography.bodyMedium,
     color: theme.colors.text.primary,
     backgroundColor: theme.colors.surface.primary,
     marginBottom: theme.spacing.lg,

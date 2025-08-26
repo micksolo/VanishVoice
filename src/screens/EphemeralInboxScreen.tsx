@@ -862,7 +862,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    ...theme.typography.body.medium,
+    ...theme.typography.bodyMedium,
     color: theme.colors.text.primary,
   },
   messageCounter: {
@@ -883,12 +883,12 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     marginBottom: theme.spacing.md,
   },
   counterText: {
-    ...theme.typography.heading.h1,
+    ...theme.typography.displayLarge,
     color: theme.colors.text.inverse,
     marginBottom: theme.spacing.xs,
   },
   tapToReveal: {
-    ...theme.typography.body.medium,
+    ...theme.typography.bodyMedium,
     color: theme.colors.text.muted,
   },
   messagesSection: {
@@ -903,7 +903,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
   },
   sectionTitle: {
-    ...theme.typography.heading.h3,
+    ...theme.typography.headlineLarge,
     color: theme.colors.text.primary,
   },
   messagesList: {
@@ -923,12 +923,12 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     marginLeft: theme.spacing.sm,
   },
   senderName: {
-    ...theme.typography.body.medium,
+    ...theme.typography.bodyMedium,
     color: theme.colors.text.primary,
     fontWeight: '600',
   },
   messageTime: {
-    ...theme.typography.body.small,
+    ...theme.typography.bodySmall,
     color: theme.colors.text.secondary,
     marginTop: theme.spacing.xs,
   },
@@ -937,7 +937,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     marginTop: theme.spacing.xl,
   },
   friendsCount: {
-    ...theme.typography.body.small,
+    ...theme.typography.bodySmall,
     color: theme.colors.text.tertiary,
     fontWeight: '500',
   },

@@ -59,7 +59,9 @@
     "screenshot-prevent": "file:./modules/screenshot-prevent",
     "tweetnacl": "^1.0.3",
     "tweetnacl-util": "^0.15.1",
-    "zustand": "^5.0.5"
+    "zustand": "^5.0.5",
+    "expo-font": "~13.3.2",
+    "expo-modules-core": "~2.5.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

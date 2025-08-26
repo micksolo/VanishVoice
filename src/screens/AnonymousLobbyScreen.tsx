@@ -100,7 +100,7 @@ export default function AnonymousLobbyScreen({ navigation }: any) {
   if (sessionLoading) {
     return (
       <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color={theme.colors.accent.teal} />
+        <ActivityIndicator size="large" color={theme.colors.text.accent} />
         <Text style={styles.loadingText}>Initializing...</Text>
       </SafeAreaView>
     );
@@ -143,7 +143,7 @@ export default function AnonymousLobbyScreen({ navigation }: any) {
                   onPress={showPremiumAlert}
                 >
                   <View style={styles.premiumBadge}>
-                    <Ionicons name="star" size={12} color={theme.colors.accent.orange} />
+                    <Ionicons name="star" size={12} color={theme.colors.status.warning} />
                   </View>
                   <Text style={styles.filterButtonText}>Male</Text>
                 </TouchableOpacity>
@@ -152,7 +152,7 @@ export default function AnonymousLobbyScreen({ navigation }: any) {
                   onPress={showPremiumAlert}
                 >
                   <View style={styles.premiumBadge}>
-                    <Ionicons name="star" size={12} color={theme.colors.accent.orange} />
+                    <Ionicons name="star" size={12} color={theme.colors.status.warning} />
                   </View>
                   <Text style={styles.filterButtonText}>Female</Text>
                 </TouchableOpacity>
@@ -174,7 +174,7 @@ export default function AnonymousLobbyScreen({ navigation }: any) {
                   onPress={showPremiumAlert}
                 >
                   <View style={styles.premiumBadge}>
-                    <Ionicons name="star" size={12} color={theme.colors.accent.orange} />
+                    <Ionicons name="star" size={12} color={theme.colors.status.warning} />
                   </View>
                   <Text style={styles.filterButtonText}>My Country</Text>
                 </TouchableOpacity>
@@ -199,7 +199,7 @@ export default function AnonymousLobbyScreen({ navigation }: any) {
 
         {matchingState === 'searching' && (
           <View style={styles.searchingState}>
-            <ActivityIndicator size="large" color={theme.colors.accent.teal} />
+            <ActivityIndicator size="large" color={theme.colors.text.accent} />
             <Text style={styles.searchingText}>Finding someone...</Text>
             <Text style={styles.searchTime}>{searchTime}s</Text>
             
@@ -217,8 +217,8 @@ export default function AnonymousLobbyScreen({ navigation }: any) {
           </View>
         )}
 
-        {/* Debug Info */}
-        {session && (
+        {/* Debug Info - Only show in development */}
+        {__DEV__ && session && (
           <View style={styles.debugInfo}>
             <Text style={styles.debugText}>
               Session: {session.sessionId.substring(0, 8)}...
@@ -236,7 +236,7 @@ export default function AnonymousLobbyScreen({ navigation }: any) {
 const getStyles = (theme: Theme) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.surface.primary,
+    backgroundColor: theme.colors.background.primary,
   },
   content: {
     flex: 1,
@@ -248,33 +248,33 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     marginBottom: theme.spacing.xl,
   },
   title: {
-    ...theme.typography.heading.h1,
+    ...theme.typography.displayLarge,
     color: theme.colors.text.primary,
   },
   subtitle: {
-    ...theme.typography.body.medium,
+    ...theme.typography.bodyMedium,
     color: theme.colors.text.secondary,
     marginTop: theme.spacing.xs,
   },
   loadingText: {
-    ...theme.typography.body.medium,
+    ...theme.typography.bodyMedium,
     color: theme.colors.text.primary,
     textAlign: 'center',
     marginTop: theme.spacing.md,
   },
   errorText: {
-    ...theme.typography.body.medium,
-    color: theme.colors.feedback.error,
+    ...theme.typography.bodyMedium,
+    color: theme.colors.status.error,
     textAlign: 'center',
   },
   filtersContainer: {
-    backgroundColor: theme.colors.surface.tertiary,
-    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.background.secondary,
+    borderRadius: theme.borderRadius.medium,
     padding: theme.spacing.lg,
     marginBottom: theme.spacing.xl,
   },
   filtersTitle: {
-    ...theme.typography.heading.h4,
+    ...theme.typography.headlineSmall,
     color: theme.colors.text.primary,
     marginBottom: theme.spacing.lg,
   },
@@ -282,7 +282,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     marginBottom: theme.spacing.lg,
   },
   filterLabel: {
-    ...theme.typography.body.medium,
+    ...theme.typography.bodyMedium,
     color: theme.colors.text.primary,
     fontWeight: '500',
     marginBottom: theme.spacing.sm,

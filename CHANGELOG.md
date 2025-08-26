@@ -8,6 +8,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Floating Action Button (FAB) Menu** ✅ COMPLETE (August 23, 2025)
+  - Modern FAB design replacing cluttered header buttons
+  - Main FAB with electric purple (#B026FF) and neon glow effect
+  - Smooth spring animations with rotating plus icon
+  - Sub-buttons for "Add Friend" (pink) and "Random Chat" (blue)
+  - Labels appear on expansion with semi-transparent background
+  - Proper touch targets and accessibility features
+  - Random Chat modal implementation matching Add Friend pattern
+
+- **Production UI Polish** ✅ COMPLETE (August 23, 2025)
+  - Removed all debug UI elements from production builds
+  - Fixed Android safe area spacing issues
+  - Proper tab bar height adjustment for Android navigation
+  - Hidden debug settings menu in production
+  - Cleaned up push notification indicators
+  - Theme consistency fixes across all screens
+
+### Fixed
+- **Theme System Errors** ✅ FIXED (August 23, 2025)
+  - Fixed undefined theme property errors in AnonymousChatScreen
+  - Fixed typography references (h4 → headlineMedium, etc.)
+  - Corrected all theme color paths to match actual structure
+  - Anonymous chat now connects without crashing
+
+- **Android UI Issues** ✅ FIXED (August 23, 2025)
+  - Fixed Friends header too close to status bar
+  - Tab bar labels no longer cut off by system navigation
+  - Proper safe area handling with react-native-safe-area-context
+  - Bottom navigation respects Android system UI
+
+### Security Audit Findings (August 23, 2025)
+- **Critical**: Friend chats use server-derivable encryption keys
+- **Critical**: Anonymous chat vulnerable to MITM attacks
+- **High**: Secrets logged in development builds
+- **Added to roadmap**: Security remediation plan for true E2E encryption
+
+### Added
 - **Mobile Testing Infrastructure** ✅ COMPLETE (August 11, 2025)
   - Comprehensive MCP mobile testing integration for all development workflows
   - Complete testing ecosystem:

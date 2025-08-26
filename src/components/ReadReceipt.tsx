@@ -33,9 +33,11 @@ export default function ReadReceipt({
   const glowAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   
-  // Log status changes for read receipt debugging
+  // Log status changes for read receipt debugging (development only)
   useEffect(() => {
-    console.log('[ReadReceipt] Status changed to:', status, 'at', new Date().toLocaleTimeString());
+    if (__DEV__) {
+      console.log('[ReadReceipt] Status changed to:', status, 'at', new Date().toLocaleTimeString());
+    }
   }, [status]);
 
   useEffect(() => {

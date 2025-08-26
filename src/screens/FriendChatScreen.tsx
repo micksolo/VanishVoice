@@ -239,7 +239,8 @@ export default function FriendChatScreen({ route, navigation }: any) {
       });
     
     return () => {
-      clearInterval(pollInterval);
+      // SHELVED: Screenshot prevention feature - pollInterval commented out
+      // clearInterval(pollInterval);
       notificationSubscription.unsubscribe();
       screenshotSubscription.unsubscribe();
     };
@@ -1187,11 +1188,12 @@ export default function FriendChatScreen({ route, navigation }: any) {
       expirySubscription.unsubscribe();
       messageUpdateSubscription.unsubscribe();
       
+      // SHELVED: Screenshot prevention feature - pollInterval commented out
       // Clean up polling interval if it exists
-      if ((messageUpdateSubscription as any).pollInterval) {
-        clearInterval((messageUpdateSubscription as any).pollInterval);
-        // DEBUG_READ_RECEIPTS && console.log('[DEBUG] ✅ Polling interval cleaned up');
-      }
+      // if ((messageUpdateSubscription as any).pollInterval) {
+      //   clearInterval((messageUpdateSubscription as any).pollInterval);
+      //   // DEBUG_READ_RECEIPTS && console.log('[DEBUG] ✅ Polling interval cleaned up');
+      // }
     };
   };
 
@@ -2418,29 +2420,26 @@ export default function FriendChatScreen({ route, navigation }: any) {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      {/* SHELVED: Screenshot prevention feature - SecureScreen component commented out
       <SecureScreen
         screenName="FriendChat"
         showSecurityIndicator={true}
         showEducation={false}
       >
+      */}
         <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
           
-          {/* Enhanced cross-device screenshot notification manager */}
+          {/* SHELVED: Screenshot prevention feature - SecurityNotificationManagerEnhanced commented out
+          Enhanced cross-device screenshot notification manager
           <SecurityNotificationManagerEnhanced
             enabled={true}
             onScreenshotDetected={(data) => {
               console.log('[FriendChat] Screenshot notification received for our message:', data);
             }}
           />
+          */}
           
-          {/* DEBUG: Visual indicator that new code is running */}
-          {__DEV__ && (
-            <View style={[styles.debugHeader, { backgroundColor: theme.colors.text.accent + '20' }]}>
-              <Text style={[styles.debugHeaderText, { color: theme.colors.text.accent }]}>
-                🔍 DEBUG MODE - Read receipts fixes active - {new Date().toLocaleTimeString()}
-              </Text>
-            </View>
-          )}
+{/* Debug header removed - was causing visual issues */}
           
           <KeyboardAvoidingView
             style={styles.container}
@@ -2728,7 +2727,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
       />
       
     </SafeAreaView>
+    {/* SHELVED: Screenshot prevention feature - SecureScreen component commented out
     </SecureScreen>
+    */}
     </GestureHandlerRootView>
   );
 }

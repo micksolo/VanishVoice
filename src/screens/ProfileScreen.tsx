@@ -468,9 +468,10 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </Card>
 
-        {/* Debug Section - Remove in production */}
-        <Card style={styles.settingsSection} elevation="small">
-          <Text style={[styles.sectionTitle, theme.typography.overline, { color: theme.colors.text.tertiary }]}>Debug</Text>
+        {/* Debug Section - Development Only */}
+        {__DEV__ && (
+          <Card style={styles.settingsSection} elevation="small">
+            <Text style={[styles.sectionTitle, theme.typography.overline, { color: theme.colors.text.tertiary }]}>Debug</Text>
           
           <TouchableOpacity 
             style={[styles.settingItem, { minHeight: theme.touchTargets.medium }]}
@@ -565,7 +566,8 @@ export default function ProfileScreen() {
             <Text style={[styles.settingText, theme.typography.bodyLarge, { color: theme.colors.text.primary }]}>Clear All Chats</Text>
             <Ionicons name="chevron-forward" size={20} color={theme.colors.text.tertiary} />
           </TouchableOpacity>
-        </Card>
+          </Card>
+        )}
 
         <Button
           variant="danger"

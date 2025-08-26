@@ -505,7 +505,7 @@ export default function AnonymousChatScreen({ route, navigation }: any) {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color={theme.colors.accent.teal} />
+        <ActivityIndicator size="large" color={theme.colors.text.accent} />
       </SafeAreaView>
     );
   }
@@ -563,7 +563,7 @@ export default function AnonymousChatScreen({ route, navigation }: any) {
           
           {inputText.trim() ? (
             <TouchableOpacity onPress={sendTextMessage} style={styles.sendButton}>
-              <Ionicons name="send" size={24} color={theme.colors.accent.teal} />
+              <Ionicons name="send" size={24} color={theme.colors.text.accent} />
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
@@ -571,7 +571,7 @@ export default function AnonymousChatScreen({ route, navigation }: any) {
               onPressOut={stopRecording}
               style={[styles.micButton, isRecording && styles.micButtonRecording]}
             >
-              <Ionicons name="mic" size={24} color={isRecording ? theme.colors.text.inverse : theme.colors.accent.teal} />
+              <Ionicons name="mic" size={24} color={isRecording ? theme.colors.text.inverse : theme.colors.text.accent} />
               {isRecording && (
                 <Text style={styles.recordingDuration}>{recordingDuration}s</Text>
               )}
@@ -586,26 +586,26 @@ export default function AnonymousChatScreen({ route, navigation }: any) {
 const getStyles = (theme: Theme) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.surface.primary,
+    backgroundColor: theme.colors.background.primary,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: theme.spacing.md,
-    backgroundColor: theme.colors.surface.secondary,
+    backgroundColor: theme.colors.background.secondary,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border.light,
+    borderBottomColor: theme.colors.border.default,
   },
   headerCenter: {
     flex: 1,
     marginLeft: theme.spacing.md,
   },
   headerTitle: {
-    ...theme.typography.heading.h4,
+    ...theme.typography.headlineMedium,
     color: theme.colors.text.primary,
   },
   headerSubtitle: {
-    ...theme.typography.body.small,
+    ...theme.typography.bodySmall,
     color: theme.colors.text.secondary,
     marginTop: theme.spacing.xs,
   },
@@ -628,14 +628,14 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   },
   myMessage: {
     alignSelf: 'flex-end',
-    backgroundColor: theme.colors.accent.teal,
+    backgroundColor: theme.colors.text.accent,
   },
   theirMessage: {
     alignSelf: 'flex-start',
-    backgroundColor: theme.colors.surface.tertiary,
+    backgroundColor: theme.colors.background.tertiary,
   },
   messageText: {
-    ...theme.typography.body.medium,
+    ...theme.typography.bodyMedium,
     color: theme.colors.text.primary,
   },
   myMessageText: {
@@ -650,9 +650,9 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     padding: theme.spacing.md,
-    backgroundColor: theme.colors.surface.secondary,
+    backgroundColor: theme.colors.background.secondary,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border.light,
+    borderTopColor: theme.colors.border.default,
   },
   textInput: {
     flex: 1,
