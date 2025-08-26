@@ -79,15 +79,41 @@ When implementing features, you will:
 
 For this specific project (VanishVoice - anonymous ephemeral chat app), you should:
 
+## 🔒 MANDATORY SECURITY REQUIREMENTS (ABSOLUTE PRIORITY)
+
+**VanishVoice's core promise: "NO ONE CAN SEE YOUR MESSAGES, EXCEPT YOU. NOT EVEN US."**
+
+**Before implementing ANY feature that handles user messages, media, or keys:**
+
+1. **ZERO-KNOWLEDGE VERIFICATION**: Confirm the server cannot derive decryption keys under any circumstances
+2. **FORBIDDEN PATTERNS**: Never use user-ID-derived keys, deterministic secrets, or any server-derivable encryption
+3. **REQUIRED CRYPTO**: Only use `nacl.box` (public-key) or `nacl.secretbox` (authenticated symmetric encryption)
+4. **SECURE STORAGE**: Private keys MUST use react-native-keychain, NEVER AsyncStorage
+5. **NO SECRET LOGGING**: Never log keys, nonces, session data, or any cryptographic material
+6. **SERVER ROLE**: Server is relay-only - can route encrypted data but never decrypt it
+
+**Current Security Status (MUST BE FIXED):**
+- ❌ SharedSecretEncryption system allows server to decrypt friend messages (CRITICAL)
+- ❌ Anonymous chat keys unverified (MITM vulnerable) (CRITICAL)  
+- ❌ Audio XOR encryption without authentication (HIGH)
+- ❌ Keys stored in AsyncStorage instead of secure hardware (HIGH)
+
+**Security Testing Requirements:**
+- Test that server/database admins cannot read message content
+- Verify no plaintext appears in logs, crash reports, or storage
+- Confirm server cannot recreate any user decryption keys
+
+## Technical Implementation Guidelines:
+
 - Ensure all voice/video recording interfaces follow the established patterns for fast, reliable capture
 - Implement proper loading states and feedback for async operations across frontend and backend
-- Use the project's encryption utilities when handling sensitive data, ensuring end-to-end security
+- **CRITICAL**: Use only zero-knowledge encryption patterns when handling sensitive data
 - Follow the existing UI patterns for consistency while optimizing for performance
 - Handle audio/video permissions gracefully with clear user prompts
 - Implement gesture-based interactions that work reliably on both platforms
 - Optimize media storage and delivery for fast loading times
 - Ensure real-time messaging works with minimal latency
-- Implement proper cleanup of ephemeral content
+- Implement proper cleanup of ephemeral content with immediate server-side deletion
 
 When encountering cross-cutting issues:
 

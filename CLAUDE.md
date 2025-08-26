@@ -347,32 +347,74 @@ User Request → vv-engineer OR vv-designer
 - High team satisfaction (4/5 or higher)
 - User value delivered each sprint
 
-## Security Requirements (MANDATORY)
+## Security Requirements (MANDATORY) - "NO ONE CAN SEE YOUR MESSAGES, EXCEPT YOU. NOT EVEN US."
 
-### End-to-End Encryption Rule
-**ALL content sent between users MUST be end-to-end encrypted. This includes:**
-- Text messages
-- Voice messages
-- Images/videos (future features)
-- Any other user-generated content
+### ABSOLUTE SECURITY RULE
+**VanishVoice's core promise is that NO ONE - including the development team, server administrators, or anyone with database access - can read user messages. This is not negotiable and overrides ALL other considerations.**
 
-**Implementation Requirements:**
-1. Use recipient's public key to encrypt content or content encryption keys
-2. Only store encrypted data and encrypted keys in the database
-3. Server/Supabase must NEVER have access to decryption keys
-4. Follow the existing E2E pattern used in `FriendEncryption` class
+### Zero-Knowledge Encryption Requirements
+**ALL content sent between users MUST use true end-to-end encryption where the server CANNOT derive decryption keys:**
 
-**Before implementing ANY feature that sends content:**
-1. Review the E2E encryption implementation for text messages
-2. Ensure the same security model is applied
-3. Never store encryption keys in plaintext in the database
-4. Test that server cannot decrypt the content
+1. **Friend Messages**: Use `nacl.box` public-key encryption with device-specific keypairs
+2. **Anonymous Messages**: Use verified key exchange with TOFU or key fingerprint verification
+3. **Media Files**: Use authenticated encryption (`nacl.secretbox`) with per-message keys
+4. **Keys Storage**: Private keys ONLY in secure hardware (Keychain/Keystore), never AsyncStorage
+5. **Server Role**: Server is a relay only - can route encrypted data but never decrypt it
 
-**Current Status:**
-- ✅ Text messages: Properly E2E encrypted using SharedSecretEncryption
-- ✅ Voice messages: Properly E2E encrypted using secureE2EAudioStorage module
-- ✅ Video messages: Properly E2E encrypted using secureE2EVideoStorageFastAndroid module
-- ✅ Screenshot prevention: Complete native module implementation for Android FLAG_SECURE
+### CRITICAL: Server-Derivable Encryption is FORBIDDEN
+**These patterns are BANNED and must never be used:**
+- ❌ Keys derived from user IDs (server knows user IDs)
+- ❌ Shared secrets computed from known values  
+- ❌ Any encryption where server can recreate the decryption key
+- ❌ Deterministic key generation from user-controlled data
+
+### Implementation Requirements (MANDATORY FOR ALL FEATURES)
+
+**Before implementing ANY feature that handles user content:**
+
+1. **Verify Zero-Knowledge**: Confirm the server cannot derive decryption keys under any circumstances
+2. **Use Proper Crypto**: Only use `nacl.box` (public-key) or `nacl.secretbox` (authenticated symmetric) 
+3. **Secure Key Storage**: Private keys MUST use react-native-keychain, never AsyncStorage
+4. **No Secret Logging**: Never log keys, nonces, session data, or any cryptographic material
+5. **Key Verification**: Provide user-verifiable key authenticity (especially anonymous chat)
+6. **Immediate Deletion**: Ephemeral content deleted server-side immediately after viewing
+
+### Current Status (REQUIRES REMEDIATION)
+- ❌ **BROKEN**: Friend messages use server-derivable SharedSecretEncryption (CRITICAL)
+- ❌ **BROKEN**: Anonymous chat vulnerable to MITM (keys unverified) (CRITICAL)
+- ❌ **BROKEN**: Audio uses XOR without authentication (HIGH)
+- ❌ **BROKEN**: Keys stored in AsyncStorage (HIGH)
+- ❌ **BROKEN**: Secrets logged in multiple files (HIGH)
+
+### Remediation Priority
+1. Replace friend chat encryption with `nacl.box` + device keypairs
+2. Add key verification to anonymous chat (TOFU or fingerprint checking)
+3. Replace audio XOR with `nacl.secretbox` 
+4. Move all keys to secure hardware storage
+5. Remove ALL secret logging from codebase
+6. Implement immediate server-side deletion for ephemeral content
+
+### Agent Responsibilities
+**ALL agents must enforce this security model:**
+- **vv-engineer**: Implement only zero-knowledge encryption patterns
+- **vv-designer**: Design UX that supports key verification and security indicators
+- **monetization-specialist**: Ensure monetization never compromises zero-knowledge principle
+- **vv-mobile-tester**: Test security features and verify no plaintext leakage
+
+### Compliance Testing
+Before ANY security-related feature is marked complete:
+1. **Server Access Test**: Verify server/database admins cannot read message content
+2. **Key Derivation Test**: Confirm server cannot recreate any user decryption keys  
+3. **Logging Audit**: Ensure no secrets appear in logs or crash reports
+4. **Storage Audit**: Verify no private keys in AsyncStorage or unsecured locations
+
+### No Shortcuts Policy
+**Security shortcuts are absolutely forbidden.** Better to:
+- Delay launch until security is correct
+- Remove features that cannot be implemented securely
+- Reject any implementation that compromises zero-knowledge principle
+
+**The promise "not even us" means exactly that - we implement systems where we genuinely cannot access user content, even if we wanted to.**
 
 ## Git Commit Guidelines
 
