@@ -112,6 +112,24 @@ export default function FriendChatScreen({ route, navigation }: any) {
   const { user } = useAuth();
   const theme = useAppTheme();
   
+  // Initialize zero-knowledge encryption for this friendship
+  useEffect(() => {
+    if (!user?.id) return;
+    
+    const initializeEncryption = async () => {
+      try {
+        console.log('[FriendChat] Initializing zero-knowledge encryption...');
+        await FriendEncryption.initializeOrRepairFriendship(user.id, friendId);
+        console.log('[FriendChat] Zero-knowledge encryption ready!');
+      } catch (error) {
+        console.error('[FriendChat] Failed to initialize encryption:', error);
+        // Don't block the UI - encryption will be retried when needed
+      }
+    };
+    
+    initializeEncryption();
+  }, [user?.id, friendId]);
+  
   // Track currently playing/viewing message for screenshot detection context
   const [currentlyViewingMessageId, setCurrentlyViewingMessageId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -953,6 +971,18 @@ export default function FriendChatScreen({ route, navigation }: any) {
       setMessages(prev => prev.filter(msg => msg.id !== expiredMessageId));
     });
 
+    // FALLBACK: Start polling for ephemeral message expiry (since real-time is unreliable)
+    const stopExpiryPolling = EphemeralMessageService.startExpiryPolling(
+      user?.id || '',
+      (expiredMessageIds) => {
+        if (expiredMessageIds.length > 0) {
+          console.log(`[FriendChat] Polling found ${expiredMessageIds.length} expired messages, removing from UI`);
+          setMessages(prev => prev.filter(msg => !expiredMessageIds.includes(msg.id)));
+        }
+      },
+      3000 // Poll every 3 seconds when chat is active
+    );
+
     // Subscribe to message updates to detect when messages are marked as expired or read
     // DEBUG_READ_RECEIPTS && console.log('[DEBUG] 🔧 Setting up real-time subscription for channel:', `message-updates:${channelName}`);
     // DEBUG_READ_RECEIPTS && console.log('[DEBUG] 🔧 User ID:', user?.id, 'Friend ID:', friendId);
@@ -1187,6 +1217,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
       subscription.unsubscribe();
       expirySubscription.unsubscribe();
       messageUpdateSubscription.unsubscribe();
+      stopExpiryPolling(); // Clean up ephemeral message polling
       
       // SHELVED: Screenshot prevention feature - pollInterval commented out
       // Clean up polling interval if it exists
@@ -1539,18 +1570,41 @@ export default function FriendChatScreen({ route, navigation }: any) {
       const uploadResult = await uploadE2EEncryptedAudio(uri, user.id, friendId);
       
       if (uploadResult) {
+        // Validate upload result has all required fields
+        if (!uploadResult.path || !uploadResult.encryptedKey) {
+          console.error('Invalid upload result - missing required fields:', uploadResult);
+          Alert.alert('Error', 'Voice message encryption failed. Please try again.');
+          setMessages(prev => prev.filter(msg => msg.id !== tempId));
+          setUploadingMessageId(null);
+          return;
+        }
+        
         // Remove the temporary message
         setMessages(prev => prev.filter(msg => msg.id !== tempId));
         setUploadingMessageId(null);
       
       // Privacy preference is now persisted - no reset needed
         
-        // Send the actual message
+        // Send the actual message - create nonce JSON from separate fields with proper null handling
+        const nonceJson = JSON.stringify({
+          keyNonce: uploadResult.keyNonce || '',
+          dataNonce: uploadResult.dataNonce || '',
+          ephemeralPublicKey: uploadResult.ephemeralPublicKey || '',
+          version: uploadResult.version || 3
+        });
+        
+        console.log('[DEBUG] Voice message nonce data:', {
+          keyNonce: !!uploadResult.keyNonce,
+          dataNonce: !!uploadResult.dataNonce, 
+          ephemeralPublicKey: !!uploadResult.ephemeralPublicKey,
+          version: uploadResult.version
+        });
+        
         await handleVoiceSend(
           uploadResult.path,
           finalDuration,
           uploadResult.encryptedKey,
-          uploadResult.nonce,
+          nonceJson,
           finalDuration
         );
       } else {
@@ -1594,7 +1648,18 @@ export default function FriendChatScreen({ route, navigation }: any) {
       setUploadingMessageId(tempId);
       flatListRef.current?.scrollToEnd();
 
-      // Send to database - store encrypted key and nonce for E2E encryption
+      // Parse nonce to get encryption parameters with error handling
+      let nonceData: any;
+      try {
+        nonceData = JSON.parse(nonce);
+      } catch (parseError) {
+        console.error('Failed to parse nonce JSON:', parseError);
+        console.error('Nonce string was:', nonce);
+        throw new Error('Invalid nonce data format');
+      }
+      const { version = 3, ephemeralPublicKey } = nonceData;
+      
+      // Send to database - store zero-knowledge encrypted parameters
       const { data: sentMessage, error } = await supabase
         .from('messages')
         .insert({
@@ -1603,7 +1668,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
           type: 'voice',
           media_path: audioPath,
           content: encryptedKey, // Store encrypted key in content field
-          nonce: nonce, // Store nonce
+          nonce: nonce, // Store all nonces (keyNonce, dataNonce, etc.)
+          ephemeral_public_key: ephemeralPublicKey, // Store ephemeral public key for zero-knowledge decryption
+          encryption_version: version, // Store encryption version (3+ for zero-knowledge)
           is_encrypted: true,
           expiry_rule: currentExpiryRule.type === 'view' ? { type: 'playback' } : currentExpiryRule,
           duration: messageDuration || duration
@@ -1670,11 +1737,38 @@ export default function FriendChatScreen({ route, navigation }: any) {
       setShowRecordingModal(false);
     } catch (error) {
       console.error('Error sending voice message:', error);
-      Alert.alert('Error', 'Failed to send voice message');
+      
+      // Enhanced error logging for JSON parse issues
+      if (error instanceof Error) {
+        console.error('Error details:', {
+          message: error.message,
+          stack: error.stack,
+          name: error.name
+        });
+        
+        // Check if this is a JSON parse error
+        if (error.message.includes('JSON Parse error') || error.message.includes('Unexpected character')) {
+          console.error('JSON Parse Error - likely undefined values in nonce data');
+          Alert.alert('Error', 'Voice message encryption failed. Please try again.');
+        } else {
+          Alert.alert('Error', 'Failed to send voice message');
+        }
+      } else {
+        console.error('Non-Error object thrown:', error);
+        Alert.alert('Error', 'Failed to send voice message');
+      }
     }
   };
 
-  const handleVideoSend = async (videoPath: string, duration: number, encryptedKey: string, nonce: string, videoNonce?: string) => {
+  const handleVideoSend = async (
+    videoPath: string, 
+    duration: number, 
+    encryptedKey: string, 
+    nonce: string, 
+    dataNonce?: string,
+    ephemeralPublicKey?: string,
+    version: number = 3
+  ) => {
     if (!user) return;
 
     try {
@@ -1704,8 +1798,10 @@ export default function FriendChatScreen({ route, navigation }: any) {
           type: 'video',
           media_path: videoPath,
           content: encryptedKey, // Store encrypted key in content field
-          nonce: nonce, // Store nonce
-          video_nonce: videoNonce, // Store video-specific nonce for fast decryption
+          nonce: nonce, // Key nonce for zero-knowledge key decryption
+          data_nonce: dataNonce, // Data nonce for video content decryption
+          ephemeral_public_key: ephemeralPublicKey, // Store ephemeral public key for zero-knowledge decryption
+          encryption_version: version, // Store encryption version (3+ for zero-knowledge)
           is_encrypted: true,
           expiry_rule: currentExpiryRule,
           duration: duration
@@ -1836,7 +1932,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
           30, // Default 30 second duration
           uploadResult.encryptedKey,
           uploadResult.keyNonce,
-          uploadResult.videoNonce // Pass the video-specific nonce
+          uploadResult.dataNonce, // Zero-knowledge data nonce
+          uploadResult.ephemeralPublicKey, // Zero-knowledge ephemeral public key
+          uploadResult.version // Zero-knowledge encryption version
         );
       } else {
         // Update temp message to failed
@@ -1953,7 +2051,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
         // This is a server path, need to download and decrypt
         const { data: msgData, error } = await supabase
           .from('messages')
-          .select('media_path, content, nonce, sender_id')
+          .select('media_path, content, nonce, data_nonce, sender_id, encryption_version, ephemeral_public_key')
           .eq('id', messageId)
           .single();
 
@@ -2209,7 +2307,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
         // This is a server path, need to download and decrypt
         const { data: msgData, error } = await supabase
           .from('messages')
-          .select('media_path, content, nonce, sender_id')
+          .select('media_path, content, nonce, data_nonce, sender_id, encryption_version, ephemeral_public_key')
           .eq('id', messageId)
           .single();
 
@@ -2225,16 +2323,45 @@ export default function FriendChatScreen({ route, navigation }: any) {
         // Download and decrypt the video using the same pattern as voice messages
         // Always pass sender_id first, then recipient_id (current user)
         
+        // Parse nonce data properly for video decryption compatibility
+        // Video messages store nonces differently than audio messages
+        let keyNonce = msgData.nonce;
+        let dataNonce = msgData.data_nonce;
+        let ephemeralPublicKey = msgData.ephemeral_public_key;
+        
+        // Handle legacy audio-style JSON nonce format for backward compatibility
+        if (msgData.nonce && msgData.nonce.startsWith('{')) {
+          try {
+            const nonceData = JSON.parse(msgData.nonce);
+            keyNonce = nonceData.keyNonce || nonceData.nonce;
+            dataNonce = dataNonce || nonceData.dataNonce;
+            ephemeralPublicKey = ephemeralPublicKey || nonceData.ephemeralPublicKey;
+          } catch (error) {
+            console.error('[Video Download] Failed to parse legacy nonce JSON:', error);
+            // Continue with raw values
+          }
+        }
+        
+        console.log('[Video Download] Decryption parameters:');
+        console.log('- videoId:', msgData.media_path);
+        console.log('- encryptedKey length:', msgData.content?.length || 0);
+        console.log('- keyNonce length:', keyNonce?.length || 0);
+        console.log('- dataNonce length:', dataNonce?.length || 0);
+        console.log('- ephemeralPublicKey length:', ephemeralPublicKey?.length || 0);
+        console.log('- version:', msgData.encryption_version || 1);
+        
         const decryptedUri = await SecureE2EVideoStorageFastAndroid.downloadAndDecryptVideo(
           msgData.media_path, // This is now the videoId
           msgData.content,    // encrypted key
-          msgData.nonce,      // key nonce
+          keyNonce,           // key nonce (properly parsed)
           msgData.sender_id,  // sender is always the person who sent the message
           user?.id || '',     // recipient is always the current user when downloading
           (progress) => {
             // Could update UI with download progress here if needed
           },
-          msgData.video_nonce // Pass the video-specific nonce if available
+          dataNonce,          // Zero-knowledge data nonce (properly parsed)
+          ephemeralPublicKey, // Zero-knowledge ephemeral public key (properly parsed)
+          msgData.encryption_version || 1 // Encryption version (default to legacy if not set)
         );
 
         setDownloadingMessageId(null);
