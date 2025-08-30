@@ -76,6 +76,57 @@ Goal: Eliminate server-decryptable paths, add authenticity and AEAD to all media
 - Manual tests for key verification flow and ephemeral deletion timing.
 - Documentation updates: threat model, guarantees, and limits.
 
+## UX/UI SECURITY PRESENTATION REQUIREMENTS
+
+### Security Trust Building Through UX Design
+Based on comprehensive UX review, the following user experience improvements are required to properly present our zero-knowledge security to users:
+
+#### Phase 1: Essential Security UX (Week 1-2)
+- [ ] **Security Status Card** on main Profile screen
+  - Visual hierarchy with large shield icon and green checkmark
+  - Clear non-technical language: "Your messages are protected"
+  - One-tap access to detailed security verification
+  
+- [ ] **User-Accessible Security Verification**
+  - Move zero-knowledge verification from debug to main user interface
+  - Plain-language results instead of technical developer alerts
+  - "Prove Our Privacy" button that builds user trust through transparency
+
+- [ ] **Security Upgrade Communication for Existing Users**
+  - Positive framing: "Enhanced Privacy Update" not "Security Changed"
+  - Non-intrusive banner with optional education modal
+  - Emphasis on increased protection without causing alarm
+
+#### Phase 2: Enhanced Security UX (Week 3-4)
+- [ ] **Security Onboarding Flow for New Users**
+  - 3-screen optional educational carousel
+  - Screen 1: Anonymous & Secure (no personal info required)
+  - Screen 2: Zero-Knowledge Privacy (server cannot read messages)
+  - Screen 3: Device Control (encryption keys never leave device)
+  
+- [ ] **Detailed Security Dashboard**
+  - Progressive disclosure from basic to technical information
+  - Individual security test results with explanations
+  - Visual confirmation with green checkmarks for passed tests
+  - Competitive positioning: "Unlike other apps, we prove our privacy claims"
+
+- [ ] **Security Report Generation and Sharing**
+  - User-shareable security verification reports
+  - Timestamp and cryptographic proof that messages are private
+  - Trust-building through radical transparency
+
+#### UX Design Principles for Security Features
+- **Progressive Disclosure**: Start simple, allow deeper exploration
+- **Trust Through Transparency**: Show proof, not just promises
+- **Emotional Reassurance**: Use confidence-building language
+- **Competitive Differentiation**: Leverage superior security as advantage
+
+### Security UX Success Metrics
+- User engagement with security verification features
+- Trust scores from user surveys about message privacy
+- Conversion rates for security-conscious user segments
+- Support ticket reduction related to privacy concerns
+
 ### Key Assets Ready for Monetization:
 - Monetization analytics service - functional 
 - Payment integration foundation - exists in codebase

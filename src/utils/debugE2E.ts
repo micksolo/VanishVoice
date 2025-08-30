@@ -7,9 +7,9 @@ export const debugE2EDecryption = async (
 ) => {
   console.log('=== E2E Decryption Debug ===');
   console.log('Encrypted data length:', encryptedData.length);
-  console.log('Encrypted data preview:', encryptedData.substring(0, 50) + '...');
+  console.log('Encrypted data: [REDACTED]');
   console.log('Decrypted data length:', decryptedData.length);
-  console.log('Decrypted data preview:', decryptedData.substring(0, 50) + '...');
+  console.log('Decrypted data: [REDACTED]');
   console.log('Local file URI:', localUri);
   console.log('========================');
 };

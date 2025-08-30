@@ -283,4 +283,69 @@ export class EphemeralMessageService {
       }
     }
   }
+
+  /**
+   * Check for expired messages with polling fallback
+   * Similar to read receipts, real-time subscriptions are unreliable
+   */
+  static async checkExpiredMessages(userId: string): Promise<string[]> {
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('id, expired')
+        .or(`sender_id.eq.${userId},recipient_id.eq.${userId}`)
+        .eq('expired', true);
+
+      if (error) {
+        console.error('[EphemeralMessage] Error checking expired messages:', error);
+        return [];
+      }
+
+      return data?.map(msg => msg.id) || [];
+    } catch (error) {
+      console.error('[EphemeralMessage] Failed to check expired messages:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Start polling for message expiry updates (fallback for unreliable real-time)
+   * Returns cleanup function
+   */
+  static startExpiryPolling(
+    userId: string,
+    callback: (expiredMessageIds: string[]) => void,
+    intervalMs: number = 3000
+  ): () => void {
+    console.log('[EphemeralMessage] Starting expiry polling fallback...');
+    
+    let lastExpiredIds: string[] = [];
+    
+    const pollForExpired = async () => {
+      try {
+        const currentExpiredIds = await this.checkExpiredMessages(userId);
+        
+        // Find newly expired messages
+        const newlyExpired = currentExpiredIds.filter(id => !lastExpiredIds.includes(id));
+        
+        if (newlyExpired.length > 0) {
+          console.log(`[EphemeralMessage] Polling found ${newlyExpired.length} newly expired messages`);
+          callback(newlyExpired);
+        }
+        
+        lastExpiredIds = currentExpiredIds;
+      } catch (error) {
+        console.error('[EphemeralMessage] Error in expiry polling:', error);
+      }
+    };
+
+    // Start polling
+    const interval = setInterval(pollForExpired, intervalMs);
+
+    // Return cleanup function
+    return () => {
+      console.log('[EphemeralMessage] Stopping expiry polling');
+      clearInterval(interval);
+    };
+  }
 }

@@ -439,11 +439,14 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={20} color={theme.colors.text.tertiary} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.settingItem, { minHeight: theme.touchTargets.medium }]}>
+          <TouchableOpacity 
+            style={[styles.settingItem, { minHeight: theme.touchTargets.medium }]}
+            onPress={() => navigation.navigate('SecuritySettings' as never)}
+          >
             <View style={[styles.settingIcon, { backgroundColor: theme.colors.status.success + '20' }]}>
               <Ionicons name="shield-checkmark-outline" size={20} color={theme.colors.status.success} />
             </View>
-            <Text style={[styles.settingText, theme.typography.bodyLarge, { color: theme.colors.text.primary }]}>Privacy</Text>
+            <Text style={[styles.settingText, theme.typography.bodyLarge, { color: theme.colors.text.primary }]}>Security & Privacy</Text>
             <Ionicons name="chevron-forward" size={20} color={theme.colors.text.tertiary} />
           </TouchableOpacity>
         </Card>
@@ -535,6 +538,47 @@ export default function ProfileScreen() {
           
           <TouchableOpacity 
             style={[styles.settingItem, { minHeight: theme.touchTargets.medium }]}
+            onPress={async () => {
+              try {
+                Alert.alert('Zero-Knowledge Verification', 'Running comprehensive security verification...', [], { cancelable: false });
+                
+                const { ZeroKnowledgeVerification } = await import('../utils/zeroKnowledgeVerification');
+                const report = await ZeroKnowledgeVerification.runFullVerification(user?.id);
+                
+                let title = 'Security Verification Results';
+                let message = '';
+                
+                if (report.securityLevel === 'ZERO_KNOWLEDGE') {
+                  title = '🔐 ZERO-KNOWLEDGE VERIFIED';
+                  message = `✅ All ${report.totalTests} security tests PASSED\n\n✅ Server CANNOT decrypt messages\n✅ Keys are device-unique\n✅ Perfect forward secrecy enabled\n\nYour privacy is GUARANTEED.`;
+                } else if (report.securityLevel === 'COMPROMISED') {
+                  title = '🚨 SECURITY COMPROMISED';
+                  message = `❌ ${report.criticalFailures} critical security failures found\n\n⚠️ Your messages may not be secure\n⚠️ Server might be able to decrypt content\n\nIMMEDIATE ATTENTION REQUIRED!`;
+                } else {
+                  title = '⚠️ VERIFICATION ERROR';
+                  message = `⚠️ Unable to complete security verification\n\nSome tests encountered errors.\nCheck console for details.`;
+                }
+                
+                Alert.alert(title, message, [
+                  { text: 'View Details', onPress: () => console.log('Full Report:', report) },
+                  { text: 'OK' }
+                ]);
+                
+              } catch (error) {
+                console.error('Zero-knowledge verification error:', error);
+                Alert.alert('Verification Error', `Failed to run security verification: ${error instanceof Error ? error.message : String(error)}`);
+              }
+            }}
+          >
+            <View style={[styles.settingIcon, { backgroundColor: theme.colors.status.error + '20' }]}>
+              <Ionicons name="shield-outline" size={20} color={theme.colors.status.error} />
+            </View>
+            <Text style={[styles.settingText, theme.typography.bodyLarge, { color: theme.colors.text.primary }]}>🔐 Zero-Knowledge Verification</Text>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.text.tertiary} />
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.settingItem, { minHeight: theme.touchTargets.medium }]}
             onPress={() => navigation.navigate('ThemeDemo' as never)}
           >
             <View style={[styles.settingIcon, { backgroundColor: theme.colors.button.primary.background + '20' }]}>
@@ -554,6 +598,7 @@ export default function ProfileScreen() {
             <Text style={[styles.settingText, theme.typography.bodyLarge, { color: theme.colors.text.primary }]}>Ephemeral Demo</Text>
             <Ionicons name="chevron-forward" size={20} color={theme.colors.text.tertiary} />
           </TouchableOpacity>
+
           
           
           <TouchableOpacity 

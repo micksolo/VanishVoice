@@ -9,10 +9,12 @@ export const testE2EDetailed = async () => {
     const senderKeys = await generateUserKeyPair();
     const recipientKeys = await generateUserKeyPair();
     
-    console.log('Sender private key (first 20):', senderKeys.privateKey.substring(0, 20));
-    console.log('Sender public key (first 20):', senderKeys.publicKey.substring(0, 20));
-    console.log('Recipient private key (first 20):', recipientKeys.privateKey.substring(0, 20));
-    console.log('Recipient public key (first 20):', recipientKeys.publicKey.substring(0, 20));
+    if (__DEV__) {
+      console.log('Sender private key: [REDACTED]');
+      console.log('Sender public key: [REDACTED]');
+      console.log('Recipient private key: [REDACTED]');
+      console.log('Recipient public key: [REDACTED]');
+    }
     
     // Test with simple data first
     const testData = 'SGVsbG8gV29ybGQ='; // "Hello World" in base64

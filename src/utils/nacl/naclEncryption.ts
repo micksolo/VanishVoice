@@ -64,10 +64,11 @@ class NaClEncryption {
       // Generate ephemeral key pair for Perfect Forward Secrecy
       const ephemeralKeys = await this.generateKeyPair();
       
-      console.log('[NaClEncryption] Encrypting with:');
-      console.log('- Recipient public key length:', recipientPublicKey?.length);
-      console.log('- Ephemeral public key length:', ephemeralKeys.publicKey?.length);
-      console.log('- Ephemeral secret key length:', ephemeralKeys.secretKey?.length);
+      console.log('[NaClEncryption] Starting encryption process...');
+      if (__DEV__) {
+        console.log('- Recipient public key length: [REDACTED]');
+        console.log('- Ephemeral public key length: [REDACTED]');
+      }
       
       // Use real TweetNaCl
       const messageBytes = typeof message === 'string' 
@@ -90,10 +91,10 @@ class NaClEncryption {
         ephemeralPublicKey: ephemeralKeys.publicKey
       };
       
-      console.log('[NaClEncryption] Encryption result:');
-      console.log('- Encrypted length:', result.encrypted.length);
-      console.log('- Nonce:', result.nonce.substring(0, 10) + '...');
-      console.log('- Ephemeral public key:', result.ephemeralPublicKey.substring(0, 10) + '...');
+      console.log('[NaClEncryption] Encryption completed successfully');
+      if (__DEV__) {
+        console.log('- Encrypted data size: [REDACTED]');
+      }
       
       return result;
     } catch (error) {
@@ -111,21 +112,21 @@ class NaClEncryption {
   ): Promise<Uint8Array> {
     try {
       // Use real TweetNaCl
-      console.log('[NaClEncryption] Decrypting with:');
-      console.log('- Encrypted data length:', encryptedData?.length);
-      console.log('- Nonce:', nonce?.substring(0, 10) + '...');
-      console.log('- Ephemeral public key:', ephemeralPublicKey?.substring(0, 10) + '...');
+      console.log('[NaClEncryption] Starting decryption process...');
+      if (__DEV__) {
+        console.log('- Encrypted data length: [REDACTED]');
+      }
       
       const encryptedBytes = naclUtil.decodeBase64(encryptedData);
       const nonceBytes = naclUtil.decodeBase64(nonce);
       const ephemeralPubKey = naclUtil.decodeBase64(ephemeralPublicKey);
       const recipientSecKey = naclUtil.decodeBase64(recipientSecretKey);
       
-      console.log('[NaClEncryption] Decoded sizes:');
-      console.log('- Encrypted bytes:', encryptedBytes?.length);
-      console.log('- Nonce bytes:', nonceBytes?.length);
-      console.log('- Ephemeral pub key bytes:', ephemeralPubKey?.length);
-      console.log('- Recipient sec key bytes:', recipientSecKey?.length);
+      console.log('[NaClEncryption] Parameters decoded successfully');
+      if (__DEV__) {
+        console.log('- Encrypted bytes: [REDACTED]');
+        console.log('- Parameter validation: OK');
+      }
       
       const decrypted = nacl.box.open(
         encryptedBytes,

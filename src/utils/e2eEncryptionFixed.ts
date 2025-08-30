@@ -48,8 +48,10 @@ export const encryptForRecipient = async (
     { encoding: Crypto.CryptoEncoding.BASE64 }
   );
   
-  console.log('[ENCRYPT] Session key:', sessionKey);
-  console.log('[ENCRYPT] Key for encryption:', keyForEncryption.substring(0, 20) + '...');
+  if (__DEV__) {
+    console.log('[ENCRYPT] Session key generated');
+    console.log('[ENCRYPT] Key for encryption ready');
+  }
   const encryptedKey = await encryptTextData(sessionKey, keyForEncryption, iv);
   
   return { encryptedData, encryptedKey, iv };
@@ -77,11 +79,15 @@ export const decryptFromSender = async (
     { encoding: Crypto.CryptoEncoding.BASE64 }
   );
   
-  console.log('[DECRYPT] Key for decryption:', keyForDecryption.substring(0, 20) + '...');
+  if (__DEV__) {
+    console.log('[DECRYPT] Key for decryption ready');
+  }
   
   // Decrypt session key
   const sessionKey = await decryptTextData(encryptedKey, keyForDecryption, iv);
-  console.log('[DECRYPT] Session key:', sessionKey);
+  if (__DEV__) {
+    console.log('[DECRYPT] Session key decrypted');
+  }
   
   // Decrypt audio data
   const audioDataBase64 = await decryptBinaryData(encryptedData, sessionKey, iv);

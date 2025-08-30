@@ -136,7 +136,9 @@ export const ensureUserHasKeys = async (userId: string): Promise<{ publicKey: st
     }
 
     // No keys found anywhere, generate new NaCl keys
-    console.log('No keys found, generating new NaCl keys for user:', userId);
+    if (__DEV__) {
+      console.log('No keys found, generating new NaCl keys for user: [USER_ID_REDACTED]');
+    }
     const newNaClKeys = await NaClKeyStorage.generateAndStoreKeys(userId);
     
     // Update database with public key

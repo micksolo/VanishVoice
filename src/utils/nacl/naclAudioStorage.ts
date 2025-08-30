@@ -89,9 +89,11 @@ export const downloadAndDecryptNaClAudio = async (
   try {
     console.log('[NaClAudioStorage] Starting download and decrypt...');
     console.log('[NaClAudioStorage] Storage path:', storagePath);
-    console.log('[NaClAudioStorage] Nonce length:', nonce?.length);
-    console.log('[NaClAudioStorage] Ephemeral public key length:', ephemeralPublicKey?.length);
-    console.log('[NaClAudioStorage] Recipient secret key length:', recipientSecretKey?.length);
+    if (__DEV__) {
+      console.log('[NaClAudioStorage] Nonce length: [REDACTED]');
+      console.log('[NaClAudioStorage] Ephemeral public key length: [REDACTED]');
+      console.log('[NaClAudioStorage] Recipient secret key length: [REDACTED]');
+    }
     
     // Download from Supabase
     const { data, error } = await supabase.storage
@@ -103,7 +105,9 @@ export const downloadAndDecryptNaClAudio = async (
       return null;
     }
     
-    console.log('[NaClAudioStorage] Downloaded blob size:', data.size);
+    if (__DEV__) {
+      console.log('[NaClAudioStorage] Downloaded blob size: [REDACTED]');
+    }
     console.log('[NaClAudioStorage] Downloaded blob type:', data.type);
     
     // Convert blob to base64
@@ -112,7 +116,9 @@ export const downloadAndDecryptNaClAudio = async (
       reader.onloadend = () => {
         const result = reader.result as string;
         const base64 = result.split(',')[1];
-        console.log('[NaClAudioStorage] Converted base64 length:', base64?.length || 0);
+        if (__DEV__) {
+          console.log('[NaClAudioStorage] Converted base64 length: [REDACTED]');
+        }
         resolve(base64);
       };
       reader.onerror = (err) => {

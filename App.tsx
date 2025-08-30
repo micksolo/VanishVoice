@@ -1,5 +1,7 @@
-// CRITICAL: Import react-native-get-random-values FIRST for TweetNaCl compatibility
+// CRITICAL: Import polyfills FIRST for TweetNaCl and Buffer compatibility
 import 'react-native-get-random-values';
+import { Buffer } from 'buffer';
+global.Buffer = Buffer;
 
 import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
@@ -7,7 +9,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/contexts/AnonymousAuthContext';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
-// import { SecurityProvider } from './src/contexts/SecurityContext'; // SHELVED: Screenshot prevention feature
+import { SecurityProvider } from './src/contexts/SecurityContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import { usePermissions } from './src/hooks/usePermissions';
 import pushNotifications from './src/services/pushNotifications';
@@ -15,6 +17,13 @@ import { initializeDeviceId } from './src/utils/secureKeyStorage';
 // import SecurityNotificationManager from './src/components/SecurityNotificationManager'; // SHELVED: Screenshot prevention feature
 // import monetizationAnalytics from './src/services/monetizationAnalytics'; // SHELVED: Screenshot prevention feature
 import './src/utils/devTools'; // Load development tools
+
+// Verify polyfills are loaded correctly
+if (typeof global.Buffer === 'undefined') {
+  console.error('CRITICAL: Buffer polyfill failed to load!');
+} else {
+  console.log('✅ Buffer polyfill loaded successfully');
+}
 
 function AppContent() {
   usePermissions();
@@ -50,10 +59,9 @@ export default function App() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <ThemeProvider>
           <AuthProvider>
-            {/* SHELVED: Screenshot prevention feature */}
-            {/* <SecurityProvider> */}
+            <SecurityProvider>
               <AppContent />
-            {/* </SecurityProvider> */}
+            </SecurityProvider>
           </AuthProvider>
         </ThemeProvider>
       </GestureHandlerRootView>

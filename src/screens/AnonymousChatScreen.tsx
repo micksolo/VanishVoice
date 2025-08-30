@@ -22,6 +22,10 @@ import { Theme } from '../theme';
 import AnonymousEncryption from '../utils/anonymousEncryption';
 import AnonymousAudioStorage from '../utils/anonymousAudioStorage';
 import messageClearingService from '../services/messageClearingService';
+import SecurityVerificationModal from '../components/SecurityVerificationModal';
+import SecurityStatusNotification from '../components/SecurityStatusNotification';
+import verificationLogger from '../services/verificationLogger';
+import { useSecurity } from '../contexts/SecurityContext';
 
 interface Message {
   id: string;
@@ -35,6 +39,7 @@ export default function AnonymousChatScreen({ route, navigation }: any) {
   const { conversationId, partnerId } = route.params;
   const { session, deviceHash } = useAnonymousSession();
   const theme = useAppTheme();
+  const { shouldShowVerificationModal, shouldShowSecurityNotification, securityLevel } = useSecurity();
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
@@ -43,6 +48,11 @@ export default function AnonymousChatScreen({ route, navigation }: any) {
   const [isTyping, setIsTyping] = useState(false);
   const [encryption, setEncryption] = useState<AnonymousEncryption | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [showSecurityNotification, setShowSecurityNotification] = useState(false);
+  const [verificationEmojis, setVerificationEmojis] = useState<string[]>([]);
+  const [connectionVerified, setConnectionVerified] = useState(false);
+  const [securityWarning, setSecurityWarning] = useState(false);
   
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
@@ -107,6 +117,24 @@ export default function AnonymousChatScreen({ route, navigation }: any) {
       
       // Then subscribe to new messages
       const unsubscribe = subscribeToMessages();
+      
+      // Handle security verification based on user's security level
+      const verificationData = enc.getVerificationData();
+      if (verificationData && verificationData.emojis.length > 0) {
+        setVerificationEmojis(verificationData.emojis);
+        
+        // Show appropriate security UI based on security level
+        setTimeout(() => {
+          if (shouldShowVerificationModal()) {
+            // Paranoid level: Show full verification modal
+            setShowVerificationModal(true);
+          } else if (shouldShowSecurityNotification()) {
+            // Informed level: Show security status notification
+            setShowSecurityNotification(true);
+          }
+          // Silent level: No UI shown, security runs in background
+        }, 1000);
+      }
       
       // Subscribe to message clearing events
       const unsubscribeClearing = messageClearingService.subscribeToMessageClearing(() => {
@@ -472,6 +500,135 @@ export default function AnonymousChatScreen({ route, navigation }: any) {
     }
   };
 
+  const handleVerificationComplete = async () => {
+    if (encryption && session) {
+      encryption.markAsVerified();
+      setConnectionVerified(true);
+      setShowVerificationModal(false);
+      
+      // Log verification completion
+      const securityStatus = encryption.getSecurityStatus();
+      if (securityStatus.fingerprint) {
+        await verificationLogger.logVerificationCompleted(
+          session.sessionId,
+          partnerId,
+          securityStatus.fingerprint
+        );
+      }
+      
+      Alert.alert(
+        'Connection Verified!',
+        'Your chat is now verified as secure.',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
+  const handleVerificationSkip = async () => {
+    setShowVerificationModal(false);
+    setSecurityWarning(true);
+    
+    // Log verification skip
+    if (encryption && session) {
+      const securityStatus = encryption.getSecurityStatus();
+      await verificationLogger.logVerificationSkipped(
+        session.sessionId,
+        partnerId,
+        securityStatus.fingerprint || undefined
+      );
+    }
+    
+    Alert.alert(
+      'Verification Skipped',
+      'Your connection works but isn\'t verified. You can verify later by tapping the security icon.',
+      [{ text: 'OK' }]
+    );
+  };
+
+  const handleVerificationCancel = () => {
+    Alert.alert(
+      'Cancel Chat?',
+      'Verification helps ensure your security. Are you sure you want to cancel?',
+      [
+        { text: 'Continue Chat', onPress: () => setShowVerificationModal(false) },
+        { 
+          text: 'Cancel Chat', 
+          style: 'destructive',
+          onPress: () => navigation.replace('AnonymousLobby')
+        }
+      ]
+    );
+  };
+
+  const handleMitmDetected = async () => {
+    if (encryption && session) {
+      // Use new rejection method to mark as potential MITM
+      const mitmDetected = encryption.rejectVerification('User reported emoji mismatch');
+      
+      if (mitmDetected) {
+        console.log('[AnonymousChat] MITM attack detected, logging incident');
+        
+        // Log MITM detection for security analysis
+        if (session) {
+          const securityAnalysis = encryption.getDetailedSecurityAnalysis();
+          await verificationLogger.logSecurityIncident(
+            session.sessionId,
+            partnerId,
+            'mitm_detected',
+            {
+              reason: 'emoji_mismatch',
+              emojis: securityAnalysis.verification.emojis,
+              fingerprint: securityAnalysis.verification.fingerprint,
+              securityBits: securityAnalysis.sas.securityBits
+            }
+          );
+        }
+      }
+    }
+    
+    setShowVerificationModal(false);
+    
+    Alert.alert(
+      '⚠️ Security Incident Reported',
+      'This potential security issue has been logged. For your safety, this conversation will end and you\'ll be connected with someone new.',
+      [
+        { 
+          text: 'Get New Match',
+          onPress: () => navigation.replace('AnonymousLobby')
+        }
+      ]
+    );
+  };
+
+  const showVerificationInfo = async () => {
+    if (!encryption) return;
+    
+    const securityStatus = encryption.getSecurityStatus();
+    
+    if (securityStatus.hasKeyChanged) {
+      // Log key change detection
+      if (session && securityStatus.fingerprint) {
+        await verificationLogger.logKeyChanged(
+          session.sessionId,
+          partnerId,
+          securityStatus.fingerprint
+        );
+      }
+      
+      Alert.alert(
+        'Security Warning',
+        'The security keys have changed during this conversation. This could indicate a security issue.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    
+    if (securityStatus.verificationEmojis) {
+      setVerificationEmojis(securityStatus.verificationEmojis);
+      setShowVerificationModal(true);
+    }
+  };
+
   const renderMessage = ({ item }: { item: Message }) => {
     const isVoice = item.type === 'voice';
 
@@ -524,7 +681,20 @@ export default function AnonymousChatScreen({ route, navigation }: any) {
           
           <View style={styles.headerCenter}>
             <Text style={styles.headerTitle}>Anonymous</Text>
-            <Text style={styles.headerSubtitle}>🔒 E2E Encrypted</Text>
+            <View style={styles.securityStatus}>
+              <Text style={styles.headerSubtitle}>
+                {connectionVerified ? '✅ Verified E2E' : securityWarning ? '⚠️ Unverified' : '🔒 E2E Encrypted'}
+              </Text>
+              {encryption && (
+                <TouchableOpacity onPress={showVerificationInfo} style={styles.securityButton}>
+                  <Ionicons 
+                    name={connectionVerified ? "shield-checkmark" : securityWarning ? "warning" : "shield"} 
+                    size={16} 
+                    color={connectionVerified ? "#4CAF50" : securityWarning ? "#FF9800" : "#4ECDC4"} 
+                  />
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
 
           <View style={styles.headerActions}>
@@ -539,6 +709,21 @@ export default function AnonymousChatScreen({ route, navigation }: any) {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Security Status Notification */}
+        <SecurityStatusNotification
+          visible={showSecurityNotification}
+          verificationEmojis={verificationEmojis}
+          onVerify={() => {
+            setShowSecurityNotification(false);
+            handleVerificationComplete();
+          }}
+          onDismiss={() => setShowSecurityNotification(false)}
+          onViewDetails={() => {
+            setShowSecurityNotification(false);
+            navigation.navigate('SecuritySettings');
+          }}
+        />
 
         {/* Messages */}
         <FlatList
@@ -578,6 +763,17 @@ export default function AnonymousChatScreen({ route, navigation }: any) {
             </TouchableOpacity>
           )}
         </View>
+        
+        <SecurityVerificationModal
+          visible={showVerificationModal}
+          verificationEmojis={verificationEmojis}
+          onVerified={handleVerificationComplete}
+          onSkip={handleVerificationSkip}
+          onCancel={handleVerificationCancel}
+          onMitm={handleMitmDetected}
+          mode={securityLevel === 'paranoid' ? 'full' : 'simplified'}
+        />
+
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -608,6 +804,15 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     ...theme.typography.bodySmall,
     color: theme.colors.text.secondary,
     marginTop: theme.spacing.xs,
+  },
+  securityStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.xs,
+  },
+  securityButton: {
+    padding: theme.spacing.xs,
   },
   headerActions: {
     flexDirection: 'row',

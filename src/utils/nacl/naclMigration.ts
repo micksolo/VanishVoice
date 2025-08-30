@@ -59,7 +59,9 @@ class NaClMigration {
     };
 
     try {
-      console.log('[NaClMigration] Starting migration for user:', userId);
+      if (__DEV__) {
+        console.log('[NaClMigration] Starting migration for user: [USER_ID_REDACTED]');
+      }
 
       // Step 1: Generate new NaCl keys
       const newKeys = await NaClKeyStorage.generateAndStoreKeys(userId);

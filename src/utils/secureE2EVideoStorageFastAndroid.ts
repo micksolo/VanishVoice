@@ -348,8 +348,8 @@ export class SecureE2EVideoStorageFastAndroid {
       console.log('[Video Upload] Encrypting video key with zero-knowledge encryption...');
       console.log('[Video Upload] ✅ Server CANNOT decrypt this video!');
       
-      // Encrypt video key using zero-knowledge NaCl hybrid encryption
-      const keyEncryption = await NaClBoxEncryption.encryptBinary(
+      // Encrypt video key using NaCl box encryption (same as audio system)
+      const keyEncryption = await NaClBoxEncryption.encrypt(
         videoKey, // The symmetric video encryption key
         friendPublicKey // Recipient's public key
       );
@@ -370,8 +370,8 @@ export class SecureE2EVideoStorageFastAndroid {
       
       return {
         videoId,
-        encryptedKey: keyEncryption.encryptedKey, // Video key encrypted with recipient's public key
-        keyNonce: keyEncryption.keyNonce, // Nonce for key encryption
+        encryptedKey: keyEncryption.encryptedContent, // Video key encrypted with recipient's public key
+        keyNonce: keyEncryption.nonce, // Nonce for key encryption
         dataNonce, // Nonce for video data encryption
         ephemeralPublicKey: keyEncryption.ephemeralPublicKey, // Ephemeral public key for Perfect Forward Secrecy
         version: 3 // Zero-knowledge encryption version

@@ -352,9 +352,9 @@ export default function EphemeralInboxScreen({ navigation }: any) {
       
       console.log('[EphemeralInbox] Saving message with:');
       console.log('- Encryption version:', encryptionVersion);
-      console.log('- Encrypted key (ephemeral):', encryptionKey?.substring(0, 10) + '...');
-      console.log('- IV (nonce):', iv?.substring(0, 10) + '...');
-      console.log('- Sender public key:', senderPublicKey?.substring(0, 10) + '...');
+      console.log('- Encrypted key: ready');
+      console.log('- IV (nonce): ready');
+      console.log('- Sender public key: ready');
       
       const { data: messageData, error } = await supabase.from('messages').insert({
         sender_id: user.id,

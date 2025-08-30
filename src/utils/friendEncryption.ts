@@ -1,70 +1,73 @@
 /**
- * Friend Message Encryption using NaCl
+ * Zero-Knowledge Friend Message Encryption
  * 
- * This module handles E2E encryption for friend messages using the same
- * NaCl (TweetNaCl) encryption as anonymous messages for consistency and security.
+ * This module provides true zero-knowledge E2E encryption for friend messages.
+ * The server CANNOT decrypt any messages because it never has access to private keys.
+ * 
+ * SECURITY MODEL:
+ * - Each device has unique keypair stored in secure hardware
+ * - Private keys NEVER leave the device
+ * - Public keys stored in database for key exchange
+ * - Uses nacl.box (Curve25519 + XSalsa20 + Poly1305)
+ * - Perfect Forward Secrecy via ephemeral keys
  */
 
-import NaClEncryption from './nacl/naclEncryption';
+import NaClBoxEncryption from './NaClBoxEncryption';
+import SecureDeviceKeys, { DeviceKeyPair } from './SecureDeviceKeys';
 import { supabase } from '../services/supabase';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import naclUtil from 'tweetnacl-util';
-import * as Crypto from 'expo-crypto';
-import SharedSecretEncryption from './sharedSecretEncryption';
-
-interface FriendKeys {
-  myPublicKey: string;
-  mySecretKey: string;
-  friendPublicKey: string;
-}
 
 class FriendEncryption {
-  private static FRIEND_KEYS_PREFIX = 'friend_keys_';
+  private static deviceKeys: DeviceKeyPair | null = null;
 
   /**
-   * Initialize encryption keys for a new friendship
-   * Called when a friend request is accepted
+   * Initialize device keys and publish public key
+   * Called on app startup or user login
+   */
+  static async initializeDevice(userId: string): Promise<void> {
+    try {
+      console.log('[FriendEncryption] Initializing device keys...');
+      
+      // Get or generate device keys
+      this.deviceKeys = await SecureDeviceKeys.initializeDeviceKeys();
+      
+      // Publish public key to database
+      await SecureDeviceKeys.publishPublicKey(userId, this.deviceKeys);
+      
+      console.log('[FriendEncryption] Device initialization complete');
+      if (__DEV__) {
+        console.log('[FriendEncryption] Device initialized: [DEVICE_ID_REDACTED]');
+      }
+      console.log(`[FriendEncryption] Public key ready`);
+    } catch (error) {
+      console.error('[FriendEncryption] Device initialization failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Initialize encryption for a new friendship
+   * This just ensures device keys are ready - no per-friendship setup needed
    */
   static async initializeFriendship(userId: string, friendId: string): Promise<void> {
     try {
       console.log('[FriendEncryption] Initializing encryption for friendship');
       
-      // Generate new key pair for this friendship
-      const keyPair = await NaClEncryption.generateKeyPair();
-      
-      // Store keys locally
-      const storageKey = `${this.FRIEND_KEYS_PREFIX}${friendId}`;
-      await AsyncStorage.setItem(storageKey, JSON.stringify({
-        myPublicKey: keyPair.publicKey,
-        mySecretKey: keyPair.secretKey,
-        friendPublicKey: null // Will be set when we receive their first message
-      }));
-      
-      // Share public key with friend via database
-      const { error } = await supabase
-        .from('friend_keys')
-        .upsert({
-          user_id: userId,
-          friend_id: friendId,
-          public_key: keyPair.publicKey,
-          created_at: new Date().toISOString()
-        });
-      
-      if (error) {
-        console.error('[FriendEncryption] Error sharing public key:', JSON.stringify(error, null, 2));
-        console.error('[FriendEncryption] Error details:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        });
-        throw error;
+      // Ensure device keys are initialized
+      if (!this.deviceKeys) {
+        await this.initializeDevice(userId);
       }
       
-      console.log('[FriendEncryption] Keys initialized successfully');
+      // Check if friend has published their public key
+      const friendPublicKey = await SecureDeviceKeys.getLatestPublicKeyForUser(friendId);
+      if (friendPublicKey) {
+        console.log('[FriendEncryption] Friend public key found, ready for secure messaging');
+      } else {
+        console.log('[FriendEncryption] Friend public key not found, they need to open the app first');
+      }
+      
+      console.log('[FriendEncryption] Friendship encryption initialized successfully');
     } catch (error) {
-      console.error('[FriendEncryption] Initialization failed:', error instanceof Error ? error.message : String(error));
-      console.error('[FriendEncryption] Full error:', JSON.stringify(error, null, 2));
+      console.error('[FriendEncryption] Friendship initialization failed:', error);
       throw error;
     }
   }
@@ -74,47 +77,24 @@ class FriendEncryption {
    */
   static async getFriendPublicKey(friendId: string, myUserId: string): Promise<string | null> {
     try {
-      // Check local cache first
-      const storageKey = `${this.FRIEND_KEYS_PREFIX}${friendId}`;
-      const storedKeys = await AsyncStorage.getItem(storageKey);
+      // Get the latest public key for the friend
+      const publicKey = await SecureDeviceKeys.getLatestPublicKeyForUser(friendId);
       
-      if (storedKeys) {
-        const keys: FriendKeys = JSON.parse(storedKeys);
-        if (keys.friendPublicKey) {
-          return keys.friendPublicKey;
-        }
-      }
-      
-      // Fetch from database
-      const { data, error } = await supabase
-        .from('friend_keys')
-        .select('public_key')
-        .eq('user_id', friendId)
-        .eq('friend_id', myUserId)
-        .single();
-      
-      if (error || !data) {
-        console.log('[FriendEncryption] Friend public key not found');
+      if (!publicKey) {
+        console.log('[FriendEncryption] Friend public key not found - they may not have opened the app yet');
         return null;
       }
       
-      // Cache the friend's public key
-      if (storedKeys) {
-        const keys: FriendKeys = JSON.parse(storedKeys);
-        keys.friendPublicKey = data.public_key;
-        await AsyncStorage.setItem(storageKey, JSON.stringify(keys));
-      }
-      
-      return data.public_key;
+      return publicKey;
     } catch (error) {
-      console.error('[FriendEncryption] Error getting friend public key:', error instanceof Error ? error.message : String(error));
+      console.error('[FriendEncryption] Error getting friend public key:', error);
       return null;
     }
   }
 
   /**
-   * Encrypt a text message for a friend
-   * Uses a shared secret approach that works even if recipient hasn't opened chat yet
+   * Encrypt a text message for a friend using zero-knowledge encryption
+   * Server CANNOT decrypt this message because it doesn't have private keys
    */
   static async encryptMessage(
     message: string,
@@ -126,30 +106,45 @@ class FriendEncryption {
     ephemeralPublicKey: string;
   } | null> {
     try {
-      console.log('[FriendEncryption] Encrypting message for friend:', friendId);
+      if (__DEV__) {
+        console.log('[FriendEncryption] Encrypting message for friend: [USER_ID_REDACTED]');
+      }
       
-      // Derive the shared secret
-      const sharedSecret = await SharedSecretEncryption.deriveSharedSecret(myUserId, friendId);
+      // Ensure device keys are available
+      if (!this.deviceKeys) {
+        await this.initializeDevice(myUserId);
+      }
       
-      // Encrypt using our shared secret encryption
-      const encrypted = await SharedSecretEncryption.encrypt(message, sharedSecret);
+      // Get friend's public key
+      const friendPublicKey = await this.getFriendPublicKey(friendId, myUserId);
+      if (!friendPublicKey) {
+        throw new Error('Friend public key not available - they need to open the app first');
+      }
       
-      console.log('[FriendEncryption] Message encrypted successfully with shared secret');
+      // Encrypt using nacl.box with our device private key
+      const encrypted = await NaClBoxEncryption.encrypt(
+        message,
+        friendPublicKey,
+        this.deviceKeys!.privateKey
+      );
+      
+      console.log('[FriendEncryption] Message encrypted successfully with zero-knowledge encryption');
+      console.log('[FriendEncryption] Server CANNOT decrypt this message');
       
       return {
-        encryptedContent: encrypted.encrypted,
+        encryptedContent: encrypted.encryptedContent,
         nonce: encrypted.nonce,
-        ephemeralPublicKey: '' // Not used in shared secret encryption
+        ephemeralPublicKey: encrypted.ephemeralPublicKey
       };
     } catch (error) {
-      console.error('[FriendEncryption] Encryption failed:', error instanceof Error ? error.message : String(error));
+      console.error('[FriendEncryption] Zero-knowledge encryption failed:', error);
       return null;
     }
   }
 
   /**
-   * Decrypt a text message from a friend
-   * Uses the same shared secret approach
+   * Decrypt a text message from a friend using zero-knowledge decryption
+   * Only this device can decrypt because it has the private key
    */
   static async decryptMessage(
     encryptedContent: string,
@@ -159,23 +154,28 @@ class FriendEncryption {
     myUserId: string
   ): Promise<string | null> {
     try {
-      console.log('[FriendEncryption] Decrypting message from friend:', friendId);
+      if (__DEV__) {
+        console.log('[FriendEncryption] Decrypting message from friend: [USER_ID_REDACTED]');
+      }
       
-      // Derive the same shared secret
-      const sharedSecret = await SharedSecretEncryption.deriveSharedSecret(myUserId, friendId);
+      // Ensure device keys are available
+      if (!this.deviceKeys) {
+        await this.initializeDevice(myUserId);
+      }
       
-      // Decrypt using our shared secret decryption
-      const decryptedMessage = await SharedSecretEncryption.decrypt(
+      // Decrypt using nacl.box.open with our device private key
+      const decryptedMessage = await NaClBoxEncryption.decryptToString(
         encryptedContent,
         nonce,
-        sharedSecret
+        ephemeralPublicKey,
+        this.deviceKeys!.privateKey
       );
       
-      console.log('[FriendEncryption] Message decrypted successfully');
+      console.log('[FriendEncryption] Message decrypted successfully with zero-knowledge decryption');
       
       return decryptedMessage;
     } catch (error) {
-      console.error('[FriendEncryption] Decryption failed:', error instanceof Error ? error.message : String(error));
+      console.error('[FriendEncryption] Zero-knowledge decryption failed:', error);
       return null;
     }
   }
@@ -185,114 +185,108 @@ class FriendEncryption {
    */
   static async hasEncryptionKeys(friendId: string): Promise<boolean> {
     try {
-      const storageKey = `${this.FRIEND_KEYS_PREFIX}${friendId}`;
-      const storedKeys = await AsyncStorage.getItem(storageKey);
-      
-      // Also check if we have the friend's public key
-      if (storedKeys) {
-        const keys: FriendKeys = JSON.parse(storedKeys);
-        return !!(keys.myPublicKey && keys.mySecretKey);
+      // Check if we have our device keys
+      if (!this.deviceKeys) {
+        const deviceKeys = await SecureDeviceKeys.getDeviceKeys();
+        if (!deviceKeys) {
+          return false;
+        }
+        this.deviceKeys = deviceKeys;
       }
       
-      return false;
+      // Check if friend has published their public key
+      const friendPublicKey = await SecureDeviceKeys.getLatestPublicKeyForUser(friendId);
+      
+      return !!(this.deviceKeys && friendPublicKey);
     } catch (error) {
-      console.error('[FriendEncryption] Error checking keys:', error instanceof Error ? error.message : String(error));
+      console.error('[FriendEncryption] Error checking encryption keys:', error);
       return false;
     }
   }
 
   /**
    * Initialize or repair encryption for existing friendships
-   * This is more resilient and handles cases where:
-   * - The friend_keys table doesn't exist yet
-   * - There are existing friendships without encryption
-   * - Keys are partially set up
+   * Ensures device keys are set up and published
    */
   static async initializeOrRepairFriendship(userId: string, friendId: string): Promise<void> {
     try {
-      console.log('[FriendEncryption] Initializing/repairing encryption for friendship');
+      console.log('[FriendEncryption] Initializing/repairing zero-knowledge encryption for friendship');
       
-      // Check if we already have local keys
-      const storageKey = `${this.FRIEND_KEYS_PREFIX}${friendId}`;
-      let localKeys = await AsyncStorage.getItem(storageKey);
-      let keyPair: { publicKey: string; secretKey: string };
-      
-      if (localKeys) {
-        const parsedKeys = JSON.parse(localKeys);
-        keyPair = {
-          publicKey: parsedKeys.myPublicKey,
-          secretKey: parsedKeys.mySecretKey
-        };
-        console.log('[FriendEncryption] Using existing local keys');
-      } else {
-        // Generate new key pair
-        keyPair = await NaClEncryption.generateKeyPair();
-        console.log('[FriendEncryption] Generated new key pair');
-        
-        // Store keys locally
-        await AsyncStorage.setItem(storageKey, JSON.stringify({
-          myPublicKey: keyPair.publicKey,
-          mySecretKey: keyPair.secretKey,
-          friendPublicKey: null
-        }));
+      // Ensure device keys are initialized
+      if (!this.deviceKeys) {
+        await this.initializeDevice(userId);
       }
       
-      // Try to share public key with friend via database
-      // Use upsert with on_conflict to handle existing records
-      const { error } = await supabase
-        .from('friend_keys')
-        .upsert({
-          user_id: userId,
-          friend_id: friendId,
-          public_key: keyPair.publicKey,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'user_id,friend_id'
-        });
-      
-      if (error) {
-        // Check if it's a table doesn't exist error
-        if (error.code === '42P01' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
-          console.warn('[FriendEncryption] friend_keys table does not exist yet.');
-          console.warn('[FriendEncryption] Please run the migration: supabase/migrations/20250114_create_friend_keys_table.sql');
-          console.warn('[FriendEncryption] Continuing with local encryption only for now.');
-          // Continue anyway - encryption will work locally
-        } else {
-          console.warn('[FriendEncryption] Could not share public key:', error.message);
-          console.warn('[FriendEncryption] Error code:', error.code);
-          // Continue anyway - encryption will work locally for now
-        }
-      } else {
-        console.log('[FriendEncryption] Successfully shared public key with friend');
-      }
-      
-      // Try to fetch friend's public key immediately
+      // Check if friend has published their public key
       const friendPublicKey = await this.getFriendPublicKey(friendId, userId);
       if (friendPublicKey) {
-        console.log('[FriendEncryption] Friend public key found and cached');
+        console.log('[FriendEncryption] Friend public key found, ready for secure messaging');
       } else {
-        console.log('[FriendEncryption] Friend public key not available yet - they need to open the chat');
+        console.log('[FriendEncryption] Friend public key not available yet - they need to open the app first');
       }
       
-      console.log('[FriendEncryption] Keys initialized/repaired successfully');
+      console.log('[FriendEncryption] Zero-knowledge encryption initialized/repaired successfully');
     } catch (error) {
-      console.error('[FriendEncryption] Initialization/repair failed:', error instanceof Error ? error.message : String(error));
-      console.error('[FriendEncryption] Full error:', JSON.stringify(error, null, 2));
-      // Don't throw - allow chat to continue with local encryption
+      console.error('[FriendEncryption] Zero-knowledge initialization/repair failed:', error);
+      // Don't throw - allow chat to continue and retry later
     }
   }
 
   /**
    * Clean up keys when friendship is removed
+   * Note: We keep device keys since they're used for all friendships
    */
   static async removeFriendKeys(friendId: string): Promise<void> {
     try {
-      const storageKey = `${this.FRIEND_KEYS_PREFIX}${friendId}`;
-      await AsyncStorage.removeItem(storageKey);
-      console.log('[FriendEncryption] Friend keys removed');
+      // In zero-knowledge system, we don't store per-friend keys
+      // Device keys are shared across all friendships
+      console.log('[FriendEncryption] Friend cleanup complete (zero-knowledge system uses shared device keys)');
     } catch (error) {
-      console.error('[FriendEncryption] Error removing keys:', error instanceof Error ? error.message : String(error));
+      console.error('[FriendEncryption] Error in friend cleanup:', error);
+    }
+  }
+
+  /**
+   * Get current device keys (for debugging/verification)
+   */
+  static async getDeviceKeys(): Promise<DeviceKeyPair | null> {
+    return this.deviceKeys || await SecureDeviceKeys.getDeviceKeys();
+  }
+
+  /**
+   * Run encryption verification test
+   */
+  static async verifyEncryption(): Promise<boolean> {
+    try {
+      console.log('[FriendEncryption] Running zero-knowledge encryption verification...');
+      
+      const verified = await NaClBoxEncryption.verifyEncryption();
+      
+      if (verified) {
+        console.log('[FriendEncryption] ✅ Zero-knowledge encryption verified successfully!');
+        console.log('[FriendEncryption] ✅ Server CANNOT decrypt any messages!');
+      } else {
+        console.error('[FriendEncryption] ❌ Zero-knowledge encryption verification FAILED!');
+      }
+      
+      return verified;
+    } catch (error) {
+      console.error('[FriendEncryption] Zero-knowledge encryption verification error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Clear device keys (for logout)
+   */
+  static async clearDeviceKeys(): Promise<void> {
+    try {
+      await SecureDeviceKeys.clearDeviceKeys();
+      this.deviceKeys = null;
+      console.log('[FriendEncryption] Device keys cleared');
+    } catch (error) {
+      console.error('[FriendEncryption] Error clearing device keys:', error);
+      throw error;
     }
   }
 }

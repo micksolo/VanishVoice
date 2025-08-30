@@ -230,7 +230,7 @@ async function registerForPushNotifications(userId: string): Promise<string | nu
     console.log('SDK Version:', Constants.expoConfig?.sdkVersion);
     
     const token = await Notifications.getExpoPushTokenAsync({ projectId });
-    console.log('Push token:', token.data);
+    console.log('Push token received successfully');
 
     // Save token to database
     const { error } = await supabase

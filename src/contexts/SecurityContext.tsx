@@ -19,11 +19,15 @@ interface ScreenshotAttempt {
   };
 }
 
+// Security verification levels
+type SecurityLevel = 'silent' | 'informed' | 'paranoid';
+
 interface SecurityContextType {
   // Security state
   isSecureModeEnabled: boolean;
   isPremiumUser: boolean;
   screenshotAttempts: ScreenshotAttempt[];
+  securityLevel: SecurityLevel;
   
   // Platform-specific capabilities
   canPreventScreenshots: boolean; // Android only
@@ -32,9 +36,15 @@ interface SecurityContextType {
   // Actions
   enableSecureMode: () => Promise<void>;
   disableSecureMode: () => Promise<void>;
+  setSecurityLevel: (level: SecurityLevel) => Promise<void>;
   recordScreenshotAttempt: (messageId?: string, context?: any) => Promise<void>;
   getScreenshotHistory: () => Promise<ScreenshotAttempt[]>;
   clearSecurityData: () => Promise<void>;
+  
+  // Verification helpers
+  shouldShowVerificationModal: () => boolean;
+  shouldShowSecurityNotification: () => boolean;
+  getSecurityDescription: (level: SecurityLevel) => string;
 }
 
 const SecurityContext = createContext<SecurityContextType | undefined>(undefined);
@@ -47,6 +57,7 @@ export function SecurityProvider({ children }: { children: ReactNode }) {
   const [isSecureModeEnabled, setIsSecureModeEnabled] = useState(true); // Default to secure
   const [isPremiumUser, setIsPremiumUser] = useState(true); // Make screenshot prevention free for all users
   const [screenshotAttempts, setScreenshotAttempts] = useState<ScreenshotAttempt[]>([]);
+  const [securityLevel, setSecurityLevelState] = useState<SecurityLevel>('silent'); // Default to silent for better UX
   
   // Platform capabilities
   const canPreventScreenshots = Platform.OS === 'android';
@@ -64,6 +75,7 @@ export function SecurityProvider({ children }: { children: ReactNode }) {
       if (stored) {
         const preferences = JSON.parse(stored);
         setIsSecureModeEnabled(preferences.secureModeEnabled ?? true);
+        setSecurityLevelState(preferences.securityLevel ?? 'silent');
       }
     } catch (error) {
       console.error('[Security] Failed to load preferences:', error);
@@ -106,7 +118,10 @@ export function SecurityProvider({ children }: { children: ReactNode }) {
       // Save preference
       await AsyncStorage.setItem(
         SECURITY_STORAGE_KEY,
-        JSON.stringify({ secureModeEnabled: true })
+        JSON.stringify({ 
+          secureModeEnabled: true,
+          securityLevel 
+        })
       );
       
       // Platform-specific secure mode activation
@@ -133,7 +148,10 @@ export function SecurityProvider({ children }: { children: ReactNode }) {
               
               await AsyncStorage.setItem(
                 SECURITY_STORAGE_KEY,
-                JSON.stringify({ secureModeEnabled: false })
+                JSON.stringify({ 
+                  secureModeEnabled: false,
+                  securityLevel 
+                })
               );
             },
           },
@@ -321,18 +339,65 @@ export function SecurityProvider({ children }: { children: ReactNode }) {
       console.error('[Security] Failed to clear security data:', error);
     }
   };
+
+  const setSecurityLevel = async (level: SecurityLevel) => {
+    try {
+      setSecurityLevelState(level);
+      
+      // Save preference
+      await AsyncStorage.setItem(
+        SECURITY_STORAGE_KEY,
+        JSON.stringify({
+          secureModeEnabled: isSecureModeEnabled,
+          securityLevel: level
+        })
+      );
+      
+      console.log(`[Security] Security level changed to: ${level}`);
+    } catch (error) {
+      console.error('[Security] Failed to set security level:', error);
+      Alert.alert('Error', 'Failed to update security settings');
+    }
+  };
+
+  // Helper functions for UX decisions
+  const shouldShowVerificationModal = (): boolean => {
+    return securityLevel === 'paranoid';
+  };
+
+  const shouldShowSecurityNotification = (): boolean => {
+    return securityLevel === 'informed' || securityLevel === 'paranoid';
+  };
+
+  const getSecurityDescription = (level: SecurityLevel): string => {
+    switch (level) {
+      case 'silent':
+        return 'Silent protection - security runs in the background without interrupting your chats. You\'ll only be notified if something goes wrong.';
+      case 'informed':
+        return 'Informed protection - see security status and optional verification for each chat. Balanced security with minimal friction.';
+      case 'paranoid':
+        return 'Maximum protection - full emoji verification required before each anonymous chat. Highest security but requires coordination with chat partners.';
+      default:
+        return '';
+    }
+  };
   
   const value: SecurityContextType = {
     isSecureModeEnabled,
     isPremiumUser,
     screenshotAttempts,
+    securityLevel,
     canPreventScreenshots,
     canDetectScreenshots,
     enableSecureMode,
     disableSecureMode,
+    setSecurityLevel,
     recordScreenshotAttempt,
     getScreenshotHistory,
     clearSecurityData,
+    shouldShowVerificationModal,
+    shouldShowSecurityNotification,
+    getSecurityDescription,
   };
   
   return (
@@ -352,4 +417,4 @@ export function useSecurity() {
 }
 
 // Export types
-export type { ScreenshotAttempt, SecurityContextType };
+export type { ScreenshotAttempt, SecurityContextType, SecurityLevel };

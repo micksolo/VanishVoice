@@ -51,7 +51,9 @@ export const encryptForRecipient = async (
   const encryptedData = await encryptWithKey(data, sessionKey, iv);
   
   // Debug log
-  console.log('[E2E] Session key:', sessionKey.substring(0, 20) + '...');
+  if (__DEV__) {
+    console.log('[E2E] Session key generated successfully');
+  }
   
   // Now encrypt the session key with the recipient's public key
   // In a real implementation, this would use RSA or ECDH
@@ -81,7 +83,9 @@ export const decryptFromSender = async (
   const sessionKey = await decryptSessionKey(encryptedKey, sharedSecret, iv);
   
   // Debug log
-  console.log('[E2E] Decrypted session key:', sessionKey.substring(0, 20) + '...');
+  if (__DEV__) {
+    console.log('[E2E] Session key decrypted successfully');
+  }
   
   // Decrypt the actual data
   const decryptedData = await decryptWithKey(encryptedData, sessionKey, iv);

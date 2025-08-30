@@ -416,6 +416,58 @@ Before ANY security-related feature is marked complete:
 
 **The promise "not even us" means exactly that - we implement systems where we genuinely cannot access user content, even if we wanted to.**
 
+## CRITICAL: Verification Requirements (Added August 28, 2025)
+
+**Problem Identified**: Claims of completion without actual implementation - saying files exist when they don't, claiming features work when they're still using legacy code paths.
+
+### Mandatory Verification Protocol
+
+**Before marking ANY task complete, Claude MUST:**
+
+1. **File Existence Check**: Use Read tool to verify every claimed file actually exists
+2. **Implementation Verification**: Read the actual code paths mentioned to confirm they work as claimed
+3. **Evidence-Based Status**: Only mark complete what has been verified by reading the actual code
+4. **Explicit Gap Identification**: When planning meets reality gaps exist, document them honestly
+
+### Verification Checklist Template
+
+When reporting completion status, ALWAYS include:
+
+```markdown
+## Verification Evidence
+- [ ] File X exists: [✅ Verified by Read tool | ❌ Does not exist]
+- [ ] Code path Y implemented: [✅ Verified in code | ❌ Still uses legacy path]  
+- [ ] Feature Z functional: [✅ Tested and working | ❌ Placeholder/stub]
+
+## Gaps Identified
+- Gap 1: [Specific discrepancy between claim and reality]
+- Gap 2: [What needs to be implemented to match the claim]
+```
+
+### Anti-Pattern Prevention
+
+**NEVER:**
+- Claim files exist without using Read tool to verify
+- Mark features "complete" based on plans rather than implementation
+- Mix aspirational goals with actual status in reports
+- Assume previous session work was completed without verification
+
+**ALWAYS:**
+- Read the actual code before claiming it implements something
+- Distinguish clearly between "planned", "partially implemented", and "verified complete"
+- Use evidence from file reads to support completion claims
+- Call out when reality doesn't match expectations
+
+### Accountability Measure
+
+**If an expert audit finds claims don't match code reality:**
+1. Acknowledge the gap honestly and immediately
+2. Update CLAUDE.md with lessons learned from the specific failure
+3. Apply stricter verification to all subsequent work
+4. Never repeat the same verification failure pattern
+
+**Zero tolerance for aspirational completion claims.**
+
 ## Git Commit Guidelines
 
 ### Pre-Commit Checklist (REQUIRED)
@@ -593,4 +645,15 @@ When creating a git commit, ALWAYS follow this sequence:
 - **Build Management**: Use EAS Build for consistent development build creation
 - **Testing Strategy**: Always test on both platforms before considering complete
 - **Plugin Configuration**: Enable plugins in app.config.js for proper native code integration
+
+### CRITICAL FAILURE: Aspirational Completion Claims (August 28, 2025)
+- **What Happened**: Claimed "ZERO-KNOWLEDGE ACHIEVED" and detailed implementation completion without verifying actual code paths
+- **Reality Gap**: Expert audit revealed core audio/video encryption still uses SharedSecretEncryption (server can decrypt)
+- **Missing Files**: Claimed MITM protection files (SecurityVerificationModal.tsx, sasVerification.ts) don't exist
+- **Verification Failure**: Reported "real cryptographic tests" when verification system still has placeholder stubs
+- **Root Cause**: Mixed architectural planning with implementation status; didn't read actual code to verify claims
+- **Damage**: Undermined trust, wasted expert reviewer time, created false security confidence
+- **Prevention**: Added mandatory verification protocol requiring Read tool confirmation before any completion claims
+- **Lesson**: Foundation code (NaClBoxEncryption, SecureDeviceKeys) ≠ Implementation in core paths
+- **Never Again**: Must distinguish between "tools built" vs "tools actually used in production flows"
 - always use   eas build --platform ios --profile development-device for development builds (we never us simulator for development builds)

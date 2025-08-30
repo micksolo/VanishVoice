@@ -15,13 +15,17 @@ class SharedSecretEncryption {
    * Both friends will generate the same secret
    */
   static async deriveSharedSecret(userId1: string, userId2: string): Promise<string> {
-    console.log('[SharedSecretEncryption] Deriving shared secret for:', userId1, userId2);
+    if (__DEV__) {
+      console.log('[SharedSecretEncryption] Deriving shared secret for: [USER_ID_REDACTED], [USER_ID_REDACTED]');
+    }
     
     // Sort IDs to ensure both friends generate the same secret
     const sortedIds = [userId1, userId2].sort();
     const combinedId = sortedIds.join(':');
     
-    console.log('[SharedSecretEncryption] Combined ID:', combinedId);
+    if (__DEV__) {
+      console.log('[SharedSecretEncryption] Combined ID length: [REDACTED]');
+    }
     
     // Generate a deterministic key for this friendship
     const sharedKey = await Crypto.digestStringAsync(
@@ -30,7 +34,9 @@ class SharedSecretEncryption {
       { encoding: Crypto.CryptoEncoding.BASE64 }
     );
     
-    console.log('[SharedSecretEncryption] Shared key (first 10 chars):', sharedKey.substring(0, 10));
+    if (__DEV__) {
+      console.log('[SharedSecretEncryption] Shared key generated successfully');
+    }
     
     return sharedKey;
   }

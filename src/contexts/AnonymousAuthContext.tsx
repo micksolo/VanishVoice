@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { generateKeyPair } from '../utils/encryption';
 import { ensureUserHasKeys } from '../utils/keyMigration';
 import pushNotifications from '../services/pushNotifications';
+import FriendEncryption from '../utils/friendEncryption';
 
 interface AuthContextType {
   user: AnonymousUser | null;
@@ -66,13 +67,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   
   const loadOrGenerateKeys = async (userId: string) => {
     try {
-      // Use the key migration utility to ensure user has keys
+      // DUAL ENCRYPTION SUPPORT: Initialize both old and new systems
+      
+      // 1. Initialize legacy encryption (for existing messages)
       const keys = await ensureUserHasKeys(userId);
       if (keys) {
         setUserKeys(keys);
-        console.log('User keys loaded/generated successfully');
+        console.log('Legacy user keys loaded/generated successfully');
       } else {
-        console.error('Failed to load or generate user keys');
+        console.error('Failed to load or generate legacy user keys');
+      }
+      
+      // 2. Initialize zero-knowledge device encryption (for new messages)
+      try {
+        await FriendEncryption.initializeDevice(userId);
+        console.log('Zero-knowledge device encryption initialized successfully');
+      } catch (deviceError) {
+        console.error('Zero-knowledge device initialization failed:', deviceError);
+        // Continue with legacy encryption only
+        console.warn('Falling back to legacy encryption system');
       }
     } catch (error) {
       console.error('Error managing encryption keys:', error);
