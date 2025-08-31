@@ -1980,6 +1980,42 @@ export default function FriendChatScreen({ route, navigation }: any) {
     }
   };
 
+  // Handle ephemeral message removal from UI
+  const handleMessageRemoval = (messageId: string) => {
+    console.log(`[FriendChat] 🗑️ RECEIVED handleMessageRemoval for: ${messageId}`);
+    console.log(`[FriendChat] Current messages count: ${messages.length}`);
+    console.log(`[FriendChat] Message to remove exists:`, messages.some(m => m.id === messageId));
+    
+    setMessages(prev => {
+      const filtered = prev.filter(msg => msg.id !== messageId);
+      console.log(`[FriendChat] ✅ Filtered messages: ${prev.length} → ${filtered.length}`);
+      return filtered;
+    });
+    
+    console.log(`[FriendChat] ✅ Message removal completed for: ${messageId}`);
+  };
+
+  // Handle video completion for ephemeral messages
+  const handleVideoComplete = async (messageId: string) => {
+    console.log(`[FriendChat] 📹 RECEIVED VIDEO COMPLETION CALLBACK for message: ${messageId}`);
+    
+    if (!messageId) {
+      console.log(`[FriendChat] ❌ No messageId provided to handleVideoComplete`);
+      return;
+    }
+    
+    console.log(`[FriendChat] 🔄 Processing video completion for message: ${messageId}`);
+    
+    try {
+      // Use EphemeralMessageService to handle the completion
+      console.log(`[FriendChat] 🚀 Calling EphemeralMessageService.handleVideoComplete for: ${messageId}`);
+      await EphemeralMessageService.handleVideoComplete(messageId, handleMessageRemoval);
+      console.log(`[FriendChat] ✅ EphemeralMessageService.handleVideoComplete completed for: ${messageId}`);
+    } catch (error) {
+      console.error('[FriendChat] ❌ Error handling video completion:', error);
+    }
+  };
+
   const playVoiceMessage = async (messageId: string) => {
     try {
       // Set the currently viewing message for screenshot detection
@@ -2409,6 +2445,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
       
       // Open video player modal
       setCurrentVideoUri(videoUri);
+      setCurrentlyViewingMessageId(messageId); // Set the message ID for ephemeral handling
       setShowVideoPlayer(true);
       
     } catch (error: any) {
@@ -2831,11 +2868,13 @@ export default function FriendChatScreen({ route, navigation }: any) {
         <VideoPlayerModal
           visible={showVideoPlayer}
           videoUri={currentVideoUri}
+          messageId={currentlyViewingMessageId}
           onClose={() => {
             setShowVideoPlayer(false);
             setCurrentVideoUri(null);
             setCurrentlyViewingMessageId(null);
           }}
+          onVideoComplete={handleVideoComplete}
         />
       )}
       

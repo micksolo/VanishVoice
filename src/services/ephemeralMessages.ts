@@ -33,6 +33,135 @@ export class EphemeralMessageService {
   }
 
   /**
+   * Handle video message completion and immediate expiry for view-once messages
+   */
+  static async handleVideoComplete(messageId: string, onMessageRemoved?: (messageId: string) => void): Promise<boolean> {
+    try {
+      console.log(`[EphemeralMessage] 🎬 RECEIVED handleVideoComplete for message: ${messageId}`);
+      console.log(`[EphemeralMessage] Parameters:`, {
+        messageId,
+        hasRemovalCallback: !!onMessageRemoved
+      });
+      
+      // First, get the message to check its expiry rule
+      console.log(`[EphemeralMessage] 🔍 Fetching message from database: ${messageId}`);
+      const { data: message, error: fetchError } = await supabase
+        .from('messages')
+        .select('expiry_rule, viewed_at')
+        .eq('id', messageId)
+        .single();
+
+      if (fetchError) {
+        console.error('[EphemeralMessage] ❌ Error fetching message:', fetchError);
+        return false;
+      }
+
+      console.log(`[EphemeralMessage] 📋 Message fetched:`, {
+        messageId,
+        expiryRule: message?.expiry_rule,
+        viewedAt: message?.viewed_at,
+        hasMessage: !!message
+      });
+
+      // Check if this is a view-once message that should disappear immediately
+      const shouldDisappearImmediately = message?.expiry_rule?.type === 'view' && 
+                                        message?.expiry_rule?.disappear_after_view === true;
+
+      console.log(`[EphemeralMessage] 🤔 Should disappear immediately?`, {
+        shouldDisappearImmediately,
+        expiryType: message?.expiry_rule?.type,
+        disappearAfterView: message?.expiry_rule?.disappear_after_view
+      });
+
+      if (shouldDisappearImmediately) {
+        console.log(`[EphemeralMessage] ✨ Video is view-once, marking as viewed and removing from UI`);
+        
+        // Mark as viewed in database
+        console.log(`[EphemeralMessage] 📝 Marking message as viewed: ${messageId}`);
+        const marked = await this.markMessageViewed(messageId);
+        console.log(`[EphemeralMessage] Marked as viewed result: ${marked}`);
+        
+        if (marked && onMessageRemoved) {
+          // Immediately remove from UI
+          console.log(`[EphemeralMessage] 🗑️ Calling onMessageRemoved for: ${messageId}`);
+          onMessageRemoved(messageId);
+          console.log(`[EphemeralMessage] ✅ View-once video message removed from UI: ${messageId}`);
+        } else {
+          console.log(`[EphemeralMessage] ⚠️ Not removing from UI:`, {
+            marked,
+            hasRemovalCallback: !!onMessageRemoved
+          });
+        }
+        
+        return marked;
+      } else {
+        console.log(`[EphemeralMessage] 🔄 Video is not view-once, no immediate removal needed`);
+        return true;
+      }
+      
+    } catch (error) {
+      console.error('[EphemeralMessage] ❌ Failed to handle video completion:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Handle audio message completion and immediate expiry for view-once messages
+   */
+  static async handleAudioComplete(messageId: string, onMessageRemoved?: (messageId: string) => void): Promise<boolean> {
+    try {
+      console.log(`[EphemeralMessage] Handling audio completion for message ${messageId}`);
+      
+      // First, get the message to check its expiry rule
+      const { data: message, error: fetchError } = await supabase
+        .from('messages')
+        .select('expiry_rule, listened_at')
+        .eq('id', messageId)
+        .single();
+
+      if (fetchError) {
+        console.error('[EphemeralMessage] Error fetching message:', fetchError);
+        return false;
+      }
+
+      // Check if this is a playback-once message that should disappear immediately
+      const shouldDisappearImmediately = message?.expiry_rule?.type === 'playback' ||
+                                        (message?.expiry_rule?.type === 'view' && 
+                                         message?.expiry_rule?.disappear_after_view === true);
+
+      if (shouldDisappearImmediately) {
+        console.log(`[EphemeralMessage] Audio is view-once, marking as listened and removing from UI`);
+        
+        // Mark as listened in database
+        const { error: updateError } = await supabase
+          .from('messages')
+          .update({ listened_at: new Date().toISOString() })
+          .eq('id', messageId);
+
+        if (updateError) {
+          console.error('[EphemeralMessage] Error marking audio as listened:', updateError);
+          return false;
+        }
+        
+        if (onMessageRemoved) {
+          // Immediately remove from UI
+          onMessageRemoved(messageId);
+          console.log(`[EphemeralMessage] ✅ View-once audio message removed from UI: ${messageId}`);
+        }
+        
+        return true;
+      } else {
+        console.log(`[EphemeralMessage] Audio is not view-once, no immediate removal needed`);
+        return true;
+      }
+      
+    } catch (error) {
+      console.error('[EphemeralMessage] Failed to handle audio completion:', error);
+      return false;
+    }
+  }
+
+  /**
    * Check if a message should expire based on its expiry rule
    */
   static shouldMessageExpire(message: Message): boolean {

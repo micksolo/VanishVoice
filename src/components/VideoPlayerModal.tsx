@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -17,6 +17,8 @@ interface VideoPlayerModalProps {
   visible: boolean;
   videoUri: string | null;
   onClose: () => void;
+  onVideoComplete?: (messageId?: string) => void; // Callback for when video finishes playing
+  messageId?: string; // Message ID for ephemeral message handling
 }
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -25,6 +27,8 @@ export default function VideoPlayerModal({
   visible,
   videoUri,
   onClose,
+  onVideoComplete,
+  messageId,
 }: VideoPlayerModalProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [duration, setDuration] = useState(0);
@@ -61,11 +65,12 @@ export default function VideoPlayerModal({
   }, [videoUri]);
 
   const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
-    console.log(`[VideoPlayer] Status update:`, {
+    console.log(`[VideoPlayer] Status update for messageId ${messageId}:`, {
       isLoaded: status.isLoaded,
       isPlaying: status.isLoaded ? status.isPlaying : false,
       positionMillis: status.isLoaded ? status.positionMillis : 0,
       durationMillis: status.isLoaded ? status.durationMillis : 0,
+      didJustFinish: status.isLoaded ? status.didJustFinish : false,
       error: status.isLoaded ? null : status.error
     });
 
@@ -77,21 +82,58 @@ export default function VideoPlayerModal({
       setIsPlaying(status.isPlaying || false);
       
       if (status.didJustFinish) {
-        // Video finished playing
+        // Video finished playing - handle ephemeral message expiry
+        console.log(`[VideoPlayer] 🎬 VIDEO COMPLETION DETECTED - handling completion`);
+        console.log(`[VideoPlayer] Video completion details:`, {
+          messageId,
+          hasOnVideoComplete: !!onVideoComplete,
+          videoUri,
+          position: status.positionMillis,
+          duration: status.durationMillis
+        });
         setIsPlaying(false);
-        console.log(`[VideoPlayer] Video finished playing`);
         
-        // Auto-close modal after video completes (with small delay for smooth UX)
+        // Notify parent component that video completed (for ephemeral messages)
+        if (onVideoComplete && messageId) {
+          console.log(`[VideoPlayer] 🚀 CALLING onVideoComplete for message: ${messageId}`);
+          onVideoComplete(messageId);
+        } else {
+          console.log(`[VideoPlayer] ❌ NOT calling onVideoComplete:`, {
+            hasCallback: !!onVideoComplete,
+            hasMessageId: !!messageId,
+            messageId
+          });
+        }
+        
+        // Small delay to prevent race conditions during cleanup
         setTimeout(() => {
+          console.log(`[VideoPlayer] 🔒 CLOSING MODAL after completion`);
           handleClose();
-        }, 1000);
+        }, 100);
       }
     } else {
-      // Handle loading errors
+      // Handle loading errors - but filter out harmless end-of-playback errors
+      const errorMessage = status.error;
+      const isHarmlessError = 
+        errorMessage === 'Player error: null' || 
+        errorMessage === null ||
+        errorMessage === undefined ||
+        (typeof errorMessage === 'string' && errorMessage.includes('Player error: null'));
+      
       setIsLoading(false);
-      setError(status.error || 'Failed to load video');
-      console.error(`[VideoPlayer] Playback error:`, status.error);
-      console.error(`[VideoPlayer] Video URI:`, videoUri);
+      
+      // Only show user-facing errors for genuine problems, not end-of-playback states
+      if (!isHarmlessError) {
+        setError(errorMessage || 'Failed to load video');
+        console.error(`[VideoPlayer] Actual playback error:`, errorMessage);
+        console.error(`[VideoPlayer] Video URI:`, videoUri);
+      } else {
+        // This is normal player cleanup after successful playback - no error logging needed
+        if (errorMessage !== undefined) {
+          console.log(`[VideoPlayer] Normal cleanup state:`, errorMessage);
+        }
+        setError(null); // Clear any previous errors
+      }
     }
   };
 
