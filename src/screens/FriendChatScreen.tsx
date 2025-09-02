@@ -32,6 +32,7 @@ import {
 import { sendMessageNotification } from '../services/pushNotifications';
 import { useFocusEffect } from '@react-navigation/native';
 import FriendEncryption from '../utils/friendEncryption';
+import SecureDeviceKeys from '../utils/SecureDeviceKeys';
 import { uploadE2EEncryptedAudio, downloadAndDecryptE2EAudio } from '../utils/secureE2EAudioStorage';
 import { SecureE2EVideoStorageFastAndroid } from '../utils/secureE2EVideoStorageFastAndroid';
 import { EphemeralMessageService } from '../services/ephemeralMessages';
@@ -60,6 +61,10 @@ import * as Notifications from 'expo-notifications';
 import messageClearingService from '../services/messageClearingService';
 import { filterExpiredMessages, areMessageArraysEquivalent } from '../utils/messageFiltering';
 import { computeMessageStatus } from '../utils/messageStatus';
+import ViewOnceMessageManager from '../services/ViewOnceMessageManager';
+import ViewOnceClearingDebugger from '../utils/debugViewOnceClearing';
+import { MessageStatusService, MessageStatus } from '../services/MessageStatusService';
+import ViewOnceUIManager from '../services/ViewOnceUIManager';
 // import EnhancedReadReceipt from '../components/EnhancedReadReceipt'; // Temporarily disabled due to migration issues
 
 // Debug flags now controlled by debugConfig.ts
@@ -74,7 +79,7 @@ interface Message {
   content: string;
   isMine: boolean;
   timestamp: Date;
-  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+  status?: MessageStatus;
   duration?: number; // Duration in seconds for voice/video messages
   uploadProgress?: number; // Upload progress percentage
   expiryRule?: ExpiryRule; // Expiry rule for ephemeral messages
@@ -83,6 +88,8 @@ interface Message {
   hasBeenViewed?: boolean; // For sender to know when recipient viewed message
   sender_id?: string; // ID of the user who sent this message
   recipient_id?: string; // ID of the user who should receive this message
+  senderCleared?: boolean; // Whether sender has cleared this view-once message
+  recipientCleared?: boolean; // Whether recipient has cleared this view-once message
 }
 
 const PAGE_SIZE = 20;
@@ -133,6 +140,29 @@ export default function FriendChatScreen({ route, navigation }: any) {
   // Track currently playing/viewing message for screenshot detection context
   const [currentlyViewingMessageId, setCurrentlyViewingMessageId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  
+  // IMMEDIATE MESSAGE REMOVAL for view-once clearing
+  const handleViewOnceMessageCleared = (messageId: string) => {
+    console.log(`[FriendChatScreen] 🚀 Removing view-once message from local UI immediately: ${messageId}`);
+    
+    // Immediate UI update with smooth animation
+    setMessages(prevMessages => {
+      // First, mark message as clearing to trigger animation
+      const updatedMessages = prevMessages.map(msg => 
+        msg.id === messageId 
+          ? { ...msg, isClearing: true, opacity: 0.3 } as Message & { isClearing?: boolean; opacity?: number }
+          : msg
+      );
+      
+      // Remove completely after brief animation delay
+      setTimeout(() => {
+        setMessages(prev => prev.filter(msg => msg.id !== messageId));
+        console.log(`[FriendChatScreen] ✅ View-once message ${messageId} removed from UI after animation`);
+      }, 300); // Short animation duration
+      
+      return updatedMessages;
+    });
+  };
   
   // SHELVED: Screenshot prevention feature
   // Working screenshot detection with proper notification logic
@@ -454,6 +484,21 @@ export default function FriendChatScreen({ route, navigation }: any) {
       
       return () => {
         // DEBUG_READ_RECEIPTS && console.log('[DEBUG] 🛑 Read receipts focus effect cleanup');
+        
+        // Handle chat exit clearing for view-once messages
+        if (user?.id && friendId) {
+          console.log(`[ViewOnceClearing] 🚪 User leaving chat with ${friendId} - checking for view-once messages to clear`);
+          
+          ViewOnceMessageManager.handleChatExit(friendId, user.id)
+            .then(clearedIds => {
+              if (clearedIds.length > 0) {
+                console.log(`[ViewOnceClearing] ✅ Cleared ${clearedIds.length} view-once messages on chat exit`);
+              }
+            })
+            .catch(error => {
+              console.error('[ViewOnceClearing] ❌ Error clearing messages on chat exit:', error);
+            });
+        }
       };
     }, [user, friendId, messages])
   );
@@ -518,6 +563,19 @@ export default function FriendChatScreen({ route, navigation }: any) {
         lastMessageCount.current = 0;
       });
       
+      // REGISTER WITH VIEW-ONCE UI MANAGER for immediate local clearing
+      const chatId = `${user.id}-${friendId}`;
+      console.log(`[FriendChatScreen] 📱 Registering with ViewOnceUIManager for chat: ${chatId}`);
+      
+      // Register direct callback for immediate UI updates
+      ViewOnceUIManager.registerChatScreen(chatId, handleViewOnceMessageCleared);
+      
+      // Subscribe to view-once clearing events (fallback/broadcast)
+      const unsubscribeViewOnceClearing = ViewOnceUIManager.subscribe((event) => {
+        console.log(`[FriendChatScreen] 📡 Received view-once clearing event:`, event);
+        handleViewOnceMessageCleared(event.messageId);
+      });
+      
       setLoading(false);
       
       return () => {
@@ -525,6 +583,12 @@ export default function FriendChatScreen({ route, navigation }: any) {
         // SHELVED: Screenshot prevention feature
         // unsubscribeScreenshots();
         unsubscribeClearing();
+        
+        // Cleanup ViewOnceUIManager registration
+        console.log(`[FriendChatScreen] 🧹 Cleaning up ViewOnceUIManager registration for chat: ${chatId}`);
+        ViewOnceUIManager.unregisterChatScreen(chatId);
+        unsubscribeViewOnceClearing();
+        
         clearAllStatusTimers(); // Clear all pending status update timers
         if (messagePollingInterval.current) {
           clearInterval(messagePollingInterval.current);
@@ -983,6 +1047,31 @@ export default function FriendChatScreen({ route, navigation }: any) {
       3000 // Poll every 3 seconds when chat is active
     );
 
+    // Subscribe to view-once message clearing notifications
+    const clearingSubscription = ViewOnceMessageManager.subscribeToMessageClearing(
+      user?.id || '',
+      (messageId, clearingInfo) => {
+        console.log(`[ViewOnceClearing] 📨 Received clearing notification for message: ${messageId}`);
+        
+        // Remove message from sender's UI if it was cleared
+        setMessages(prev => prev.filter(msg => msg.id !== messageId));
+        
+        console.log(`[ViewOnceClearing] ✅ Removed cleared view-once message from UI: ${messageId}`);
+      }
+    );
+
+    // FALLBACK: Start polling for view-once message clearing (since real-time is unreliable)
+    const stopClearingPolling = MessageStatusService.startStatusPolling(
+      user?.id || '',
+      (clearedMessageIds) => {
+        if (clearedMessageIds.length > 0) {
+          console.log(`[ViewOnceClearing] 📊 Polling found ${clearedMessageIds.length} newly cleared messages`);
+          setMessages(prev => prev.filter(msg => !clearedMessageIds.includes(msg.id)));
+        }
+      },
+      3000 // Poll every 3 seconds when chat is active
+    );
+
     // Subscribe to message updates to detect when messages are marked as expired or read
     // DEBUG_READ_RECEIPTS && console.log('[DEBUG] 🔧 Setting up real-time subscription for channel:', `message-updates:${channelName}`);
     // DEBUG_READ_RECEIPTS && console.log('[DEBUG] 🔧 User ID:', user?.id, 'Friend ID:', friendId);
@@ -1217,7 +1306,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
       subscription.unsubscribe();
       expirySubscription.unsubscribe();
       messageUpdateSubscription.unsubscribe();
+      clearingSubscription.unsubscribe(); // Clean up view-once clearing subscription
       stopExpiryPolling(); // Clean up ephemeral message polling
+      stopClearingPolling(); // Clean up view-once clearing polling
       
       // SHELVED: Screenshot prevention feature - pollInterval commented out
       // Clean up polling interval if it exists
@@ -1659,6 +1750,27 @@ export default function FriendChatScreen({ route, navigation }: any) {
       }
       const { version = 3, ephemeralPublicKey } = nonceData;
       
+      // PHASE 1 FIX: Get recipient key metadata for tracking exact encryption parameters
+      let recipientKeyId: string | null = null;
+      let recipientDeviceId: string | null = null;
+      
+      try {
+        console.log('[FriendChat] PHASE 1: Getting recipient key metadata for audio message...');
+        const recipientKeys = await SecureDeviceKeys.getPublicKeysForUser(friendId);
+        const currentKeys = recipientKeys.filter(k => k.is_current);
+        
+        if (currentKeys.length === 1) {
+          recipientKeyId = currentKeys[0].id || null; // May not exist in older migrations
+          recipientDeviceId = currentKeys[0].device_id;
+          console.log('[FriendChat] ✅ Got recipient metadata:', { recipientKeyId, recipientDeviceId });
+        } else {
+          console.warn('[FriendChat] ⚠️ Could not get unique recipient key metadata');
+          console.warn(`[FriendChat] Current keys: ${currentKeys.length}, Total keys: ${recipientKeys.length}`);
+        }
+      } catch (metadataError) {
+        console.warn('[FriendChat] Could not get recipient metadata (Phase 1 migration may not be applied):', metadataError);
+      }
+
       // Send to database - store zero-knowledge encrypted parameters
       const { data: sentMessage, error } = await supabase
         .from('messages')
@@ -1671,6 +1783,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
           nonce: nonce, // Store all nonces (keyNonce, dataNonce, etc.)
           ephemeral_public_key: ephemeralPublicKey, // Store ephemeral public key for zero-knowledge decryption
           encryption_version: version, // Store encryption version (3+ for zero-knowledge)
+          // PHASE 1 FIX: Include recipient metadata to track exact keys used
+          recipient_key_id: recipientKeyId,
+          recipient_device_id: recipientDeviceId,
           is_encrypted: true,
           expiry_rule: currentExpiryRule.type === 'view' ? { type: 'playback' } : currentExpiryRule,
           duration: messageDuration || duration
@@ -1767,7 +1882,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
     nonce: string, 
     dataNonce?: string,
     ephemeralPublicKey?: string,
-    version: number = 3
+    version: number = 3,
+    recipientKeyId?: string,
+    recipientDeviceId?: string
   ) => {
     if (!user) return;
 
@@ -1789,6 +1906,18 @@ export default function FriendChatScreen({ route, navigation }: any) {
       setUploadingMessageId(tempId);
       flatListRef.current?.scrollToEnd();
 
+      // PHASE 2 FIX: Use recipient key metadata passed from encryption process
+      console.log('[FriendChat] PHASE 2: Using recipient key metadata from encryption process...');
+      console.log('- Recipient Key ID:', recipientKeyId || 'not provided');
+      console.log('- Recipient Device ID:', recipientDeviceId || 'not provided');
+      
+      if (recipientKeyId && recipientDeviceId) {
+        console.log('[FriendChat] ✅ Using PHASE 2 recipient key tracking for nacl.box.open null fix');
+      } else {
+        console.warn('[FriendChat] ⚠️ No recipient key metadata provided - using legacy approach');
+        console.warn('[FriendChat] This may result in nacl.box.open returning null for key mismatches');
+      }
+
       // Send to database - store encrypted key and nonce for E2E encryption
       const { data: sentMessage, error } = await supabase
         .from('messages')
@@ -1802,6 +1931,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
           data_nonce: dataNonce, // Data nonce for video content decryption
           ephemeral_public_key: ephemeralPublicKey, // Store ephemeral public key for zero-knowledge decryption
           encryption_version: version, // Store encryption version (3+ for zero-knowledge)
+          // PHASE 1 FIX: Include recipient metadata to track exact keys used
+          recipient_key_id: recipientKeyId,
+          recipient_device_id: recipientDeviceId,
           is_encrypted: true,
           expiry_rule: currentExpiryRule,
           duration: duration
@@ -1934,7 +2066,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
           uploadResult.keyNonce,
           uploadResult.dataNonce, // Zero-knowledge data nonce
           uploadResult.ephemeralPublicKey, // Zero-knowledge ephemeral public key
-          uploadResult.version // Zero-knowledge encryption version
+          uploadResult.version, // Zero-knowledge encryption version
+          uploadResult.recipientKeyId, // PHASE 2 FIX: Store recipient key ID
+          uploadResult.recipientDeviceId // Store recipient device ID
         );
       } else {
         // Update temp message to failed
@@ -1995,7 +2129,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
     console.log(`[FriendChat] ✅ Message removal completed for: ${messageId}`);
   };
 
-  // Handle video completion for ephemeral messages
+  // Handle video completion for ephemeral messages (legacy)
   const handleVideoComplete = async (messageId: string) => {
     console.log(`[FriendChat] 📹 RECEIVED VIDEO COMPLETION CALLBACK for message: ${messageId}`);
     
@@ -2016,6 +2150,70 @@ export default function FriendChatScreen({ route, navigation }: any) {
     }
   };
 
+  // Handle video modal close for view-once clearing (NEW)
+  const handleVideoClose = async (messageId: string) => {
+    console.log(`[ViewOnceClearing] 🎬 Video modal closed for message: ${messageId}`);
+    
+    if (!messageId || !user?.id) {
+      console.log(`[ViewOnceClearing] ❌ Missing messageId or userId`);
+      return;
+    }
+    
+    try {
+      const message = messages.find(m => m.id === messageId);
+      if (!message) {
+        console.log(`[ViewOnceClearing] ❌ Message not found: ${messageId}`);
+        return;
+      }
+
+      // Handle message consumption for video close
+      await ViewOnceMessageManager.handleMessageConsumption(
+        messageId,
+        'video',
+        message.expiryRule || { type: 'none' },
+        message.sender_id || '',
+        message.recipient_id || '',
+        'closed'
+      );
+      
+      console.log(`[ViewOnceClearing] ✅ Video close handling completed for: ${messageId}`);
+    } catch (error) {
+      console.error('[ViewOnceClearing] ❌ Error handling video close:', error);
+    }
+  };
+
+  // Handle audio first play for view-once status tracking (NEW)
+  const handleAudioViewed = async (messageId: string) => {
+    console.log(`[ViewOnceClearing] 🎵 Audio first played for message: ${messageId}`);
+    
+    if (!messageId || !user?.id) {
+      console.log(`[ViewOnceClearing] ❌ Missing messageId or userId`);
+      return;
+    }
+    
+    try {
+      const message = messages.find(m => m.id === messageId);
+      if (!message) {
+        console.log(`[ViewOnceClearing] ❌ Message not found: ${messageId}`);
+        return;
+      }
+
+      // Mark as viewed and handle any immediate clearing logic
+      await ViewOnceMessageManager.handleMessageConsumption(
+        messageId,
+        'voice',
+        message.expiryRule || { type: 'none' },
+        message.sender_id || '',
+        message.recipient_id || '',
+        'played'
+      );
+      
+      console.log(`[ViewOnceClearing] ✅ Audio viewed handling completed for: ${messageId}`);
+    } catch (error) {
+      console.error('[ViewOnceClearing] ❌ Error handling audio viewed:', error);
+    }
+  };
+
   const playVoiceMessage = async (messageId: string) => {
     try {
       // Set the currently viewing message for screenshot detection
@@ -2033,6 +2231,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
         // Mark as viewed in database - status will be updated via real-time subscription
         try {
           await EphemeralMessageService.markMessageViewed(messageId);
+          
+          // Also trigger new view-once tracking system
+          await handleAudioViewed(messageId);
         } catch (error) {
           console.error('[Voice] Failed to mark message as viewed:', error);
         }
@@ -2102,6 +2303,24 @@ export default function FriendChatScreen({ route, navigation }: any) {
 
         // Set downloading state
         setDownloadingMessageId(messageId);
+
+        // PHASE 1 FIX: Validate device metadata before audio decryption
+        const currentDeviceKeys = await SecureDeviceKeys.getDeviceKeys();
+        if (msgData.recipient_device_id && currentDeviceKeys?.deviceId !== msgData.recipient_device_id) {
+          console.warn('[FriendChat] PHASE 1: Audio device ID mismatch detected!');
+          console.warn(`[FriendChat] Expected device: ${msgData.recipient_device_id}`);
+          console.warn(`[FriendChat] Current device: ${currentDeviceKeys?.deviceId || 'unknown'}`);
+          console.warn('[FriendChat] This may cause audio decryption failure');
+          console.warn('[FriendChat] Root cause: Message was encrypted for different device');
+          
+          // Continue anyway but log the mismatch for debugging
+          console.warn('[FriendChat] Attempting audio decryption despite device mismatch...');
+        } else if (msgData.recipient_device_id) {
+          console.log('[FriendChat] PHASE 1: Audio device metadata validation passed ✅');
+          console.log(`[FriendChat] Target device: ${msgData.recipient_device_id}`);
+        } else {
+          console.log('[FriendChat] PHASE 1: No audio device metadata (message from before Phase 1 fix)');
+        }
 
         // Download and decrypt the audio using E2E encryption
         const decryptedUri = await downloadAndDecryptE2EAudio(
@@ -2323,6 +2542,16 @@ export default function FriendChatScreen({ route, navigation }: any) {
         // Mark as viewed in database - status will be updated via real-time subscription
         try {
           await EphemeralMessageService.markMessageViewed(messageId);
+          
+          // Also trigger new view-once tracking system when video opens
+          await ViewOnceMessageManager.handleMessageConsumption(
+            messageId,
+            'video',
+            message.expiryRule || { type: 'none' },
+            message.sender_id || '',
+            message.recipient_id || '',
+            'opened'
+          );
         } catch (error) {
           console.error('[Video] Failed to mark message as viewed:', error);
         }
@@ -2385,6 +2614,26 @@ export default function FriendChatScreen({ route, navigation }: any) {
         console.log('- dataNonce length:', dataNonce?.length || 0);
         console.log('- ephemeralPublicKey length:', ephemeralPublicKey?.length || 0);
         console.log('- version:', msgData.encryption_version || 1);
+        console.log('- recipient_device_id:', msgData.recipient_device_id || 'none');
+        console.log('- recipient_key_id:', msgData.recipient_key_id || 'none');
+        
+        // PHASE 1 FIX: Validate device metadata before decryption
+        const currentDeviceKeys = await SecureDeviceKeys.getDeviceKeys();
+        if (msgData.recipient_device_id && currentDeviceKeys?.deviceId !== msgData.recipient_device_id) {
+          console.warn('[FriendChat] PHASE 1: Device ID mismatch detected!');
+          console.warn(`[FriendChat] Expected device: ${msgData.recipient_device_id}`);
+          console.warn(`[FriendChat] Current device: ${currentDeviceKeys?.deviceId || 'unknown'}`);
+          console.warn('[FriendChat] This may cause "nacl.box.open returned null" error');
+          console.warn('[FriendChat] Root cause: Message was encrypted for different device');
+          
+          // Continue anyway but log the mismatch for debugging
+          console.warn('[FriendChat] Attempting decryption despite device mismatch...');
+        } else if (msgData.recipient_device_id) {
+          console.log('[FriendChat] PHASE 1: Device metadata validation passed ✅');
+          console.log(`[FriendChat] Target device: ${msgData.recipient_device_id}`);
+        } else {
+          console.log('[FriendChat] PHASE 1: No device metadata available (message from before Phase 1 fix)');
+        }
         
         const decryptedUri = await SecureE2EVideoStorageFastAndroid.downloadAndDecryptVideo(
           msgData.media_path, // This is now the videoId
@@ -2397,7 +2646,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
           },
           dataNonce,          // Zero-knowledge data nonce (properly parsed)
           ephemeralPublicKey, // Zero-knowledge ephemeral public key (properly parsed)
-          msgData.encryption_version || 1 // Encryption version (default to legacy if not set)
+          msgData.encryption_version || 1, // Encryption version (default to legacy if not set)
+          msgData.recipient_key_id,        // PHASE 2 FIX: Pass recipient key ID for validation
+          msgData.recipient_device_id      // Pass recipient device ID for validation
         );
 
         setDownloadingMessageId(null);
@@ -2444,8 +2695,10 @@ export default function FriendChatScreen({ route, navigation }: any) {
       }
       
       // Open video player modal
+      console.log(`[FriendChat] 🎬 Opening video player for messageId: ${messageId}`);
       setCurrentVideoUri(videoUri);
       setCurrentlyViewingMessageId(messageId); // Set the message ID for ephemeral handling
+      console.log(`[FriendChat] 📝 Set currentlyViewingMessageId to: ${messageId}`);
       setShowVideoPlayer(true);
       
     } catch (error: any) {
@@ -2635,6 +2888,17 @@ export default function FriendChatScreen({ route, navigation }: any) {
           </View>
 
           <View style={styles.headerActions}>
+            {/* DEBUG: Temporary debug button for view-once clearing issues */}
+            <TouchableOpacity
+              onPress={() => {
+                console.log('🔬 Running View-Once Clearing Debug...');
+                ViewOnceClearingDebugger.quickDiagnostic();
+              }}
+              style={{ marginRight: 8, padding: 4 }}
+            >
+              <Text style={{ fontSize: 12, color: '#ff4444' }}>🐛</Text>
+            </TouchableOpacity>
+            
             <EphemeralHeaderToggle
               currentRule={currentExpiryRule}
               onPress={() => {
@@ -2869,12 +3133,14 @@ export default function FriendChatScreen({ route, navigation }: any) {
           visible={showVideoPlayer}
           videoUri={currentVideoUri}
           messageId={currentlyViewingMessageId}
+          senderId={messages.find(m => m.id === currentlyViewingMessageId)?.sender_id}
           onClose={() => {
             setShowVideoPlayer(false);
             setCurrentVideoUri(null);
             setCurrentlyViewingMessageId(null);
           }}
           onVideoComplete={handleVideoComplete}
+          onVideoClose={handleVideoClose}
         />
       )}
       

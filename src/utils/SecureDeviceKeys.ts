@@ -23,10 +23,14 @@ export interface DeviceKeyPair {
 }
 
 export interface PublicKeyRecord {
+  id?: string;
   user_id: string;
   device_id: string;
   public_key: string;
   created_at: string;
+  is_current?: boolean;
+  status?: string;
+  updated_at?: string;
 }
 
 class SecureDeviceKeys {
@@ -195,36 +199,60 @@ class SecureDeviceKeys {
   }
   
   /**
-   * Publish device public key to database
+   * Publish device public key to database using atomic key management
    * Called after key generation or when user signs in
+   * PHASE 1 FIX: Uses atomic RPC to prevent sender/receiver key mismatches
    */
   static async publishPublicKey(userId: string, deviceKeys: DeviceKeyPair): Promise<void> {
     try {
-      console.log('[SecureDeviceKeys] Publishing public key to database...');
+      console.log('[SecureDeviceKeys] Publishing public key using atomic key management...');
       
-      const { error } = await supabase
-        .from('device_public_keys')
-        .upsert({
-          user_id: userId,
-          device_id: deviceKeys.deviceId,
-          public_key: deviceKeys.publicKey,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }, {
-          onConflict: 'user_id,device_id'
-        });
+      // Use atomic RPC function to prevent race conditions
+      const { data, error } = await supabase.rpc('set_current_device_key', {
+        p_user_id: userId,
+        p_device_id: deviceKeys.deviceId,
+        p_public_key: deviceKeys.publicKey
+      });
       
       if (error) {
-        // If table doesn't exist, warn but don't fail
-        if (error.code === '42P01' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
-          console.warn('[SecureDeviceKeys] device_public_keys table does not exist yet.');
-          console.warn('[SecureDeviceKeys] Please create migration for device_public_keys table');
-          return; // Don't throw, continue with local keys
+        // If RPC doesn't exist, fall back to direct upsert for backward compatibility
+        if (error.code === '42883' || error.message?.includes('function') || error.message?.includes('does not exist')) {
+          console.warn('[SecureDeviceKeys] Atomic RPC not available, using direct upsert fallback');
+          console.warn('[SecureDeviceKeys] Please run Phase 1 migration for full key management fix');
+          
+          // Fallback to legacy upsert
+          const { error: upsertError } = await supabase
+            .from('device_public_keys')
+            .upsert({
+              user_id: userId,
+              device_id: deviceKeys.deviceId,
+              public_key: deviceKeys.publicKey,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }, {
+              onConflict: 'user_id,device_id'
+            });
+          
+          if (upsertError) {
+            throw upsertError;
+          }
+        } else {
+          throw error;
         }
-        throw error;
+      } else if (data && data.length > 0) {
+        const result = data[0];
+        console.log('[SecureDeviceKeys] ✅ Atomic key management successful:');
+        console.log(`- Key ID: ${result.key_id}`);
+        console.log(`- Was updated: ${result.was_updated}`);
+        console.log(`- Previous keys: ${result.previous_keys_count}`);
+        
+        if (result.previous_keys_count > 1) {
+          console.log('[SecureDeviceKeys] ⚠️ Multiple previous keys detected - this may have caused decryption failures');
+          console.log('[SecureDeviceKeys] ✅ Now using single current key to prevent sender/receiver key mismatches');
+        }
       }
       
-      console.log('[SecureDeviceKeys] Public key published successfully');
+      console.log('[SecureDeviceKeys] Public key published successfully with atomic key management');
     } catch (error) {
       console.error('[SecureDeviceKeys] Failed to publish public key:', error);
       throw error;
@@ -256,21 +284,45 @@ class SecureDeviceKeys {
   
   /**
    * Get all public keys for a user (multiple devices)
+   * PHASE 1 FIX: Enhanced with current key information
    */
   static async getPublicKeysForUser(userId: string): Promise<PublicKeyRecord[]> {
     try {
       const { data, error } = await supabase
         .from('device_public_keys')
-        .select('*')
+        .select('user_id, device_id, public_key, created_at, is_current, status, updated_at')
         .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+        .order('is_current', { ascending: false }) // Current key first
+        .order('created_at', { ascending: false }); // Then by recency
       
       if (error) {
         console.error('[SecureDeviceKeys] Failed to get public keys for user:', error);
         return [];
       }
       
-      return data || [];
+      const keys = data || [];
+      
+      if (__DEV__ && keys.length > 0) {
+        const currentKeys = keys.filter(k => k.is_current);
+        const activeKeys = keys.filter(k => k.status === 'active');
+        
+        console.log('[SecureDeviceKeys] Key analysis for user:');
+        console.log(`- Total keys: ${keys.length}`);
+        console.log(`- Current keys: ${currentKeys.length}`);
+        console.log(`- Active keys: ${activeKeys.length}`);
+        
+        if (currentKeys.length > 1) {
+          console.warn('[SecureDeviceKeys] ⚠️ Multiple current keys detected - this will cause decryption failures!');
+          console.warn('[SecureDeviceKeys] Database constraint may not be enforced properly');
+        }
+        
+        if (currentKeys.length === 0 && keys.length > 0) {
+          console.warn('[SecureDeviceKeys] ⚠️ No current key marked - using latest key as fallback');
+          console.warn('[SecureDeviceKeys] This may cause sender/receiver key mismatches');
+        }
+      }
+      
+      return keys;
     } catch (error) {
       console.error('[SecureDeviceKeys] Failed to get public keys for user:', error);
       return [];
@@ -278,22 +330,148 @@ class SecureDeviceKeys {
   }
   
   /**
-   * Get the latest (most recent) public key for a user
+   * Get the current (active) public key for a user with metadata
+   * Used for recipient key tracking to prevent nacl.box.open null errors
+   */
+  static async getLatestPublicKeyForUserWithMetadata(userId: string): Promise<{
+    publicKey: string;
+    keyId: string;
+    deviceId: string;
+  } | null> {
+    try {
+      console.log('[SecureDeviceKeys] Getting current public key WITH METADATA for recipient tracking...');
+      
+      // First try to get current key using RPC function
+      try {
+        const { data, error } = await supabase.rpc('get_current_public_key', {
+          p_user_id: userId
+        });
+        
+        if (!error && data && data.length > 0) {
+          const currentKey = data[0];
+          console.log('[SecureDeviceKeys] ✅ Using current key from atomic management WITH METADATA:');
+          console.log(`- Device ID: ${currentKey.device_id}`);
+          console.log(`- Key ID: ${currentKey.id}`);
+          console.log(`- Created: ${currentKey.created_at}`);
+          console.log(`- Updated: ${currentKey.updated_at}`);
+          return {
+            publicKey: currentKey.public_key,
+            keyId: currentKey.id,
+            deviceId: currentKey.device_id
+          };
+        }
+      } catch (rpcError) {
+        console.warn('[SecureDeviceKeys] RPC function not available, falling back to direct query');
+      }
+      
+      // Fallback: Direct query for is_current = true
+      const { data, error } = await supabase
+        .from('device_public_keys')
+        .select('id, public_key, device_id, created_at, updated_at, status')
+        .eq('user_id', userId)
+        .eq('is_current', true)
+        .single();
+      
+      if (error || !data) {
+        console.log('[SecureDeviceKeys] No current key found, falling back to latest key');
+        
+        // Final fallback: Get most recent key (legacy behavior)
+        const publicKeys = await this.getPublicKeysForUser(userId);
+        
+        if (publicKeys.length === 0) {
+          console.log('[SecureDeviceKeys] No public keys found for user');
+          return null;
+        }
+        
+        const latestKey = publicKeys[0]; // Already ordered by created_at desc
+        console.log('[SecureDeviceKeys] ⚠️ Using latest key WITH METADATA (not atomic management)');
+        console.log('[SecureDeviceKeys] ⚠️ This may cause sender/receiver key mismatches');
+        
+        return {
+          publicKey: latestKey.public_key,
+          keyId: 'unknown', // No key ID available for fallback
+          deviceId: latestKey.device_id
+        };
+      }
+      
+      console.log('[SecureDeviceKeys] ✅ Using current key from direct query WITH METADATA:');
+      console.log(`- Device ID: ${data.device_id}`);
+      console.log(`- Key ID: ${data.id}`);
+      console.log(`- Status: ${data.status || 'unknown'}`);
+      
+      return {
+        publicKey: data.public_key,
+        keyId: data.id,
+        deviceId: data.device_id
+      };
+    } catch (error) {
+      console.error('[SecureDeviceKeys] Failed to get current public key with metadata:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get the current (active) public key for a user
+   * PHASE 1 FIX: Always gets the is_current=true key to prevent stale key usage
    * This is used when we need to encrypt a message for someone
    */
   static async getLatestPublicKeyForUser(userId: string): Promise<string | null> {
-    const publicKeys = await this.getPublicKeysForUser(userId);
-    
-    if (publicKeys.length === 0) {
-      console.log('[SecureDeviceKeys] No public keys found for user');
+    try {
+      console.log('[SecureDeviceKeys] Getting current public key for user (Phase 1 fix)...');
+      
+      // First try to get current key using RPC function
+      try {
+        const { data, error } = await supabase.rpc('get_current_public_key', {
+          p_user_id: userId
+        });
+        
+        if (!error && data && data.length > 0) {
+          const currentKey = data[0];
+          console.log('[SecureDeviceKeys] ✅ Using current key from atomic management:');
+          console.log(`- Device ID: ${currentKey.device_id}`);
+          console.log(`- Created: ${currentKey.created_at}`);
+          console.log(`- Updated: ${currentKey.updated_at}`);
+          return currentKey.public_key;
+        }
+      } catch (rpcError) {
+        console.warn('[SecureDeviceKeys] RPC function not available, falling back to direct query');
+      }
+      
+      // Fallback: Direct query for is_current = true
+      const { data, error } = await supabase
+        .from('device_public_keys')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_current', true)
+        .single();
+      
+      if (error || !data) {
+        console.log('[SecureDeviceKeys] No current key found, falling back to latest key');
+        
+        // Final fallback: Get most recent key (legacy behavior)
+        const publicKeys = await this.getPublicKeysForUser(userId);
+        
+        if (publicKeys.length === 0) {
+          console.log('[SecureDeviceKeys] No public keys found for user');
+          return null;
+        }
+        
+        const latestKey = publicKeys[0]; // Already ordered by created_at desc
+        console.log('[SecureDeviceKeys] ⚠️ Using latest key (not atomic management)');
+        console.log('[SecureDeviceKeys] ⚠️ This may cause sender/receiver key mismatches');
+        
+        return latestKey.public_key;
+      }
+      
+      console.log('[SecureDeviceKeys] ✅ Using current key from direct query:');
+      console.log(`- Device ID: ${data.device_id}`);
+      console.log(`- Status: ${data.status || 'unknown'}`);
+      
+      return data.public_key;
+    } catch (error) {
+      console.error('[SecureDeviceKeys] Failed to get current public key:', error);
       return null;
     }
-    
-    // Return the most recent public key
-    const latestKey = publicKeys[0]; // Already ordered by created_at desc
-    console.log('[SecureDeviceKeys] Using latest public key for user');
-    
-    return latestKey.public_key;
   }
   
   /**
@@ -358,6 +536,171 @@ class SecureDeviceKeys {
         hasSecureHardware: false,
         securityLevel: 'unknown',
         hasBiometrics: false,
+      };
+    }
+  }
+
+  /**
+   * Get current device key ID for this user
+   * Used for recipient key ID validation during decryption
+   */
+  static async getCurrentKeyId(userId: string): Promise<string | null> {
+    try {
+      const currentKeyData = await this.getLatestPublicKeyForUserWithMetadata(userId);
+      return currentKeyData?.keyId || null;
+    } catch (error) {
+      console.error('[SecureDeviceKeys] Failed to get current key ID:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Debug key management issues for a user
+   * PHASE 1 FIX: Comprehensive debugging for sender/receiver key mismatches
+   */
+  static async debugUserKeyIssues(userId: string): Promise<{
+    success: boolean;
+    summary: string;
+    details: string[];
+    recommendations: string[];
+  }> {
+    const details: string[] = [];
+    const recommendations: string[] = [];
+    
+    try {
+      details.push('🔍 DEBUGGING USER KEY MANAGEMENT ISSUES');
+      details.push(`👤 User ID: ${userId}`);
+      
+      // Step 1: Use database debugging function if available
+      try {
+        const { data, error } = await supabase.rpc('debug_user_keys', {
+          p_user_id: userId
+        });
+        
+        if (!error && data && data.length > 0) {
+          const debugInfo = data[0];
+          details.push('📊 DATABASE ANALYSIS:');
+          details.push(`   Total keys: ${debugInfo.total_keys}`);
+          details.push(`   Current keys: ${debugInfo.current_keys}`);
+          details.push(`   Active keys: ${debugInfo.active_keys}`);
+          details.push(`   Latest key age: ${debugInfo.latest_key_age_hours?.toFixed(1) || 'N/A'} hours`);
+          details.push(`   Summary: ${debugInfo.key_summary}`);
+          
+          // Analyze issues
+          if (debugInfo.current_keys > 1) {
+            details.push('❌ CRITICAL: Multiple current keys detected');
+            recommendations.push('Database constraint failure - run Phase 1 migration again');
+          } else if (debugInfo.current_keys === 0) {
+            details.push('⚠️ WARNING: No current key marked');
+            recommendations.push('Run atomic key management to mark a current key');
+          } else {
+            details.push('✅ Key management looks healthy');
+          }
+          
+          if (debugInfo.total_keys > 5) {
+            details.push(`⚠️ WARNING: High key count (${debugInfo.total_keys})`);
+            recommendations.push('Consider cleaning up old keys to improve performance');
+          }
+        }
+      } catch (rpcError) {
+        details.push('⚠️ Database debugging RPC not available (migration not applied)');
+        recommendations.push('Apply Phase 1 migration for enhanced key debugging');
+      }
+      
+      // Step 2: Direct key analysis
+      details.push('\n🔍 DIRECT KEY ANALYSIS:');
+      const allKeys = await this.getPublicKeysForUser(userId);
+      
+      if (allKeys.length === 0) {
+        details.push('❌ No keys found for user');
+        recommendations.push('User needs to open app to initialize device keys');
+        return {
+          success: false,
+          summary: `No keys found for user ${userId}`,
+          details,
+          recommendations
+        };
+      }
+      
+      const currentKeys = allKeys.filter(k => k.is_current);
+      const activeKeys = allKeys.filter(k => k.status === 'active');
+      
+      details.push(`   Found ${allKeys.length} total keys`);
+      details.push(`   Current keys: ${currentKeys.length}`);
+      details.push(`   Active keys: ${activeKeys.length}`);
+      
+      // Analyze key consistency
+      if (currentKeys.length > 1) {
+        details.push('❌ CRITICAL: Multiple current keys found');
+        details.push('   This WILL cause "nacl.box.open returned null" errors');
+        currentKeys.forEach((key, index) => {
+          details.push(`   Current key ${index + 1}: ${key.device_id} (${key.created_at})`);
+        });
+        recommendations.push('URGENT: Fix multiple current keys using atomic key management');
+        recommendations.push('Run: set_current_device_key() RPC to fix');
+      } else if (currentKeys.length === 0) {
+        details.push('⚠️ No current key marked - using latest as fallback');
+        details.push('   This may cause sender/receiver key mismatches');
+        recommendations.push('Mark latest key as current using atomic key management');
+      } else {
+        const currentKey = currentKeys[0];
+        details.push('✅ Single current key found:');
+        details.push(`   Device: ${currentKey.device_id}`);
+        details.push(`   Created: ${currentKey.created_at}`);
+        details.push(`   Status: ${currentKey.status || 'unknown'}`);
+      }
+      
+      // Step 3: Test current key retrieval
+      details.push('\n🔍 CURRENT KEY RETRIEVAL TEST:');
+      const retrievedKey = await this.getLatestPublicKeyForUser(userId);
+      
+      if (!retrievedKey) {
+        details.push('❌ Failed to retrieve current public key');
+        recommendations.push('Key retrieval is broken - check database permissions');
+        return {
+          success: false,
+          summary: `Key retrieval failed for user ${userId}`,
+          details,
+          recommendations
+        };
+      }
+      
+      details.push('✅ Successfully retrieved current public key');
+      
+      // Verify it matches a current key
+      const matchingCurrentKey = currentKeys.find(k => k.public_key === retrievedKey);
+      if (matchingCurrentKey) {
+        details.push('✅ Retrieved key matches current key in database');
+      } else {
+        details.push('⚠️ Retrieved key does not match any current key');
+        const matchingKey = allKeys.find(k => k.public_key === retrievedKey);
+        if (matchingKey) {
+          details.push(`   Retrieved key matches device: ${matchingKey.device_id}`);
+          details.push(`   But is_current: ${matchingKey.is_current}`);
+        }
+        recommendations.push('Key retrieval inconsistency - atomic management may not be working');
+      }
+      
+      const summary = currentKeys.length === 1 ? 
+        `Key management healthy for user ${userId}` : 
+        `Key management issues detected for user ${userId}`;
+      
+      return {
+        success: currentKeys.length === 1,
+        summary,
+        details,
+        recommendations
+      };
+      
+    } catch (error: any) {
+      details.push(`❌ Debugging failed: ${error.message}`);
+      recommendations.push('Unable to complete key debugging - check database connectivity');
+      
+      return {
+        success: false,
+        summary: `Debugging failed for user ${userId}`,
+        details,
+        recommendations
       };
     }
   }
