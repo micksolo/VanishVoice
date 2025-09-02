@@ -175,6 +175,8 @@ class FriendEncryption {
     encryptedContent: string;
     nonce: string;
     ephemeralPublicKey: string;
+    recipientKeyId: string;
+    recipientDeviceId: string;
   } | null> {
     try {
       if (__DEV__) {
@@ -186,11 +188,15 @@ class FriendEncryption {
         await this.initializeDevice(myUserId);
       }
       
-      // Get friend's public key
-      const friendPublicKey = await this.getFriendPublicKey(friendId, myUserId);
-      if (!friendPublicKey) {
+      // OPTION A FIX: Get friend's public key WITH metadata for recipient tracking
+      console.log('[FriendEncryption] PHASE 2: Getting recipient key metadata for text message...');
+      const friendPublicKeyWithMetadata = await this.getFriendPublicKey(friendId, myUserId, true);
+      if (!friendPublicKeyWithMetadata) {
         throw new Error('Friend public key not available - they need to open the app first');
       }
+      
+      const { publicKey: friendPublicKey, keyId: recipientKeyId, deviceId: recipientDeviceId } = friendPublicKeyWithMetadata;
+      console.log('[FriendEncryption] ✅ Got recipient metadata:', { recipientKeyId, recipientDeviceId });
       
       // Encrypt using nacl.box with our device private key
       const encrypted = await NaClBoxEncryption.encrypt(
@@ -201,11 +207,14 @@ class FriendEncryption {
       
       console.log('[FriendEncryption] Message encrypted successfully with zero-knowledge encryption');
       console.log('[FriendEncryption] Server CANNOT decrypt this message');
+      console.log('[FriendEncryption] ✅ Using PHASE 2 recipient key tracking for nacl.box.open null fix');
       
       return {
         encryptedContent: encrypted.encryptedContent,
         nonce: encrypted.nonce,
-        ephemeralPublicKey: encrypted.ephemeralPublicKey
+        ephemeralPublicKey: encrypted.ephemeralPublicKey,
+        recipientKeyId,
+        recipientDeviceId
       };
     } catch (error) {
       console.error('[FriendEncryption] Zero-knowledge encryption failed:', error);

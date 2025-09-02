@@ -94,6 +94,43 @@ interface Message {
 
 const PAGE_SIZE = 20;
 
+// PERFORMANCE OPTIMIZATION: Check if messages have meaningful changes to avoid unnecessary re-renders
+const hasMessageChanges = (dbMessages: any[], currentMessages: Message[], userId: string): boolean => {
+  // Quick checks first
+  if (dbMessages.length !== currentMessages.length) {
+    return true; // Message count changed
+  }
+  
+  // Check for read status changes (most common update during polling)
+  for (let i = 0; i < dbMessages.length; i++) {
+    const dbMsg = dbMessages[i];
+    const currentMsg = currentMessages[i];
+    
+    if (!currentMsg || dbMsg.id !== currentMsg.id) {
+      return true; // Message ID mismatch or missing
+    }
+    
+    // Check for read status changes for messages I sent
+    if (dbMsg.sender_id === userId) {
+      const dbReadStatus = dbMsg.read_at ? 'read' : (dbMsg.created_at ? 'sent' : 'sending');
+      const currentReadStatus = currentMsg.status;
+      
+      if (dbReadStatus !== currentReadStatus) {
+        console.log(`[Polling Optimization] Read status changed for message ${dbMsg.id}: ${currentReadStatus} → ${dbReadStatus}`);
+        return true; // Read status changed
+      }
+    }
+    
+    // Check for other important field changes
+    if (dbMsg.viewed_at !== (currentMsg.hasBeenViewed ? 'viewed' : null) ||
+        JSON.stringify(dbMsg.expiry_rule) !== JSON.stringify(currentMsg.expiryRule)) {
+      return true; // Other status changed
+    }
+  }
+  
+  return false; // No meaningful changes detected
+};
+
 // Basic read receipt function - simple database update
 const markMessageAsRead = async (messageId: string) => {
   try {
@@ -551,8 +588,22 @@ export default function FriendChatScreen({ route, navigation }: any) {
       // Subscribe to screenshot notifications
       // const unsubscribeScreenshots = subscribeToScreenshotNotifications();
       
-      // Start polling for new messages as fallback
-      // DISABLED FOR DEBUG: messagePollingInterval.current = setInterval(checkForNewMessages, 3000);
+      // Start adaptive polling for new messages as fallback
+      // Use shorter interval for first minute, then longer interval for inactive chats
+      let pollCount = 0;
+      const adaptivePolling = () => {
+        checkForNewMessages();
+        pollCount++;
+        
+        // After 20 polls (1 minute), slow down polling if no activity
+        if (pollCount > 20) {
+          clearInterval(messagePollingInterval.current!);
+          messagePollingInterval.current = setInterval(checkForNewMessages, 5000); // 5 second polls
+          console.log('[Polling Optimization] Switched to 5-second polling interval for inactive chat');
+        }
+      };
+      
+      messagePollingInterval.current = setInterval(adaptivePolling, 3000);
       
       // Subscribe to message clearing events
       const unsubscribeClearing = messageClearingService.subscribeToMessageClearing(() => {
@@ -813,9 +864,11 @@ export default function FriendChatScreen({ route, navigation }: any) {
       
       const currentCount = nonExpiredMessages.length;
       
-      // Always process messages to update read statuses (not just when count changes)
-      // This ensures read receipts update even if no new messages
-      if (true) { // Changed from: if (currentCount !== lastMessageCount.current)
+      // PERFORMANCE FIX: Only process messages if there are actual changes
+      // Check for changes in message count OR message modifications
+      const hasChanges = hasMessageChanges(nonExpiredMessages, messages, user?.id || '');
+      
+      if (hasChanges || currentCount !== lastMessageCount.current) {
         
         // Convert and decrypt messages
         const convertedMessages: Message[] = [];
@@ -870,7 +923,13 @@ export default function FriendChatScreen({ route, navigation }: any) {
 
         // Update messages with new read statuses from database
         // IMPORTANT: Use the NEW status from database, not the old one!
-        setMessages(convertedMessages);
+        // PERFORMANCE: Only update if messages actually changed to prevent unnecessary re-renders
+        if (!areMessageArraysEquivalent(convertedMessages, messages)) {
+          console.log(`[Polling Optimization] Messages changed - updating UI (${messages.length} → ${convertedMessages.length} messages)`);
+          setMessages(convertedMessages);
+        } else {
+          console.log(`[Polling Optimization] No message changes detected - skipping UI update`);
+        }
         lastMessageCount.current = currentCount;
         
         // Only scroll if there are actually new messages (not just status updates)
@@ -1351,6 +1410,12 @@ export default function FriendChatScreen({ route, navigation }: any) {
         throw new Error('Failed to encrypt message');
       }
 
+      // PHASE 2 FIX: Include recipient key metadata for text messages (consistent with voice/video)
+      console.log('[FriendChat] PHASE 2: Using recipient key metadata for text message...');
+      console.log('- Recipient Key ID:', encrypted.recipientKeyId);
+      console.log('- Recipient Device ID:', encrypted.recipientDeviceId);
+      console.log('[FriendChat] ✅ Using PHASE 2 recipient key tracking for nacl.box.open null fix');
+      
       // Send to database
       const { data: sentMessage, error } = await supabase
         .from('messages')
@@ -1362,6 +1427,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
           is_encrypted: true,
           nonce: encrypted.nonce,
           ephemeral_public_key: encrypted.ephemeralPublicKey,
+          // PHASE 1 FIX: Include recipient metadata to track exact keys used (consistent with voice/video)
+          recipient_key_id: encrypted.recipientKeyId,
+          recipient_device_id: encrypted.recipientDeviceId,
           expiry_rule: currentExpiryRule
         })
         .select()
@@ -1433,37 +1501,17 @@ export default function FriendChatScreen({ route, navigation }: any) {
 
   const startRecording = async () => {
     try {
+      // ANDROID UI FIX: Set recording state immediately for instant UI feedback
+      console.log('[Voice Recording] Starting recording - setting UI state immediately...');
+      setIsRecording(true);
+      isRecordingRef.current = true;
+      setRecordingDuration(0);
       
       // Reset swipe position
       swipeX.setValue(0);
       setShouldCancel(false);
       
-      // Request permissions
-      const { status } = await Audio.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Please grant microphone access');
-        return;
-      }
-
-      // Configure audio for recording
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
-        staysActiveInBackground: false,
-      });
-
-      // Use a simpler, more compatible recording preset
-      const recordingOptions = Audio.RecordingOptionsPresets.HIGH_QUALITY;
-
-      const { recording: newRecording } = await Audio.Recording.createAsync(recordingOptions);
-
-      setRecording(newRecording);
-      setIsRecording(true);
-      isRecordingRef.current = true;
-      setRecordingDuration(0);
-
-      // Animate mic button and start waveform
+      // Start UI animations immediately
       Animated.parallel([
         Animated.spring(micScale, {
           toValue: 1.5,
@@ -1483,22 +1531,59 @@ export default function FriendChatScreen({ route, navigation }: any) {
             }),
           ])
         ),
-        // Start glowing effect
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(recordButtonGlow, {
-              toValue: 1,
-              duration: 1500,
-              useNativeDriver: false,
-            }),
-            Animated.timing(recordButtonGlow, {
-              toValue: 0,
-              duration: 1500,
-              useNativeDriver: false,
-            }),
-          ])
-        ),
       ]).start();
+      
+      // Start duration timer immediately
+      recordingInterval.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+      
+      console.log('[Voice Recording] UI state set, now requesting permissions...');
+      
+      // Request permissions
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status !== 'granted') {
+        // Reset UI state on permission failure
+        await cancelRecording();
+        Alert.alert('Permission needed', 'Please grant microphone access');
+        return;
+      }
+
+      console.log('[Voice Recording] Permissions granted, configuring audio...');
+
+      // Configure audio for recording
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        staysActiveInBackground: false,
+      });
+
+      console.log('[Voice Recording] Audio configured, creating recording...');
+
+      // Use a simpler, more compatible recording preset
+      const recordingOptions = Audio.RecordingOptionsPresets.HIGH_QUALITY;
+
+      const { recording: newRecording } = await Audio.Recording.createAsync(recordingOptions);
+
+      console.log('[Voice Recording] ✅ Recording created successfully!');
+      setRecording(newRecording);
+
+      // Add glowing effect (animations already started above)
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(recordButtonGlow, {
+            toValue: 1,
+            duration: 1500,
+            useNativeDriver: false,
+          }),
+          Animated.timing(recordButtonGlow, {
+            toValue: 0,
+            duration: 1500,
+            useNativeDriver: false,
+          }),
+        ])
+      ).start();
 
       // Start animated waveform
       const startWaveformAnimation = () => {
@@ -1522,14 +1607,37 @@ export default function FriendChatScreen({ route, navigation }: any) {
       
       startWaveformAnimation();
 
-      // Start duration timer
-      recordingInterval.current = setInterval(() => {
-        setRecordingDuration(prev => prev + 1);
-      }, 1000);
-
     } catch (error) {
-      console.error('Failed to start recording', error);
-      Alert.alert('Error', 'Failed to start recording');
+      console.error('Failed to start recording:', error);
+      
+      // Reset recording state on error
+      setRecording(null);
+      setIsRecording(false);
+      isRecordingRef.current = false;
+      setRecordingDuration(0);
+      
+      // Clear any intervals that might have started
+      if (recordingInterval.current) {
+        clearInterval(recordingInterval.current);
+        recordingInterval.current = null;
+      }
+      
+      // Reset animations
+      micScale.setValue(1);
+      micPulse.setValue(1);
+      recordButtonGlow.setValue(0);
+      
+      // Show specific error message based on error type
+      let errorMessage = 'Failed to start recording. Please try again.';
+      if (error?.message?.includes('permission')) {
+        errorMessage = 'Microphone permission is required. Please enable it in your device settings.';
+      } else if (error?.message?.includes('audio mode')) {
+        errorMessage = 'Audio configuration failed. Please restart the app and try again.';
+      } else if (error?.message?.includes('recording')) {
+        errorMessage = 'Recording initialization failed. Please check if another app is using the microphone.';
+      }
+      
+      Alert.alert('Recording Error', errorMessage);
     }
   };
 
@@ -2469,10 +2577,24 @@ export default function FriendChatScreen({ route, navigation }: any) {
               // Handle ephemeral voice message expiry after playback completion
               const message = messages.find(m => m.id === messageId);
               if (message && (message.expiryRule?.type === 'view' || message.expiryRule?.type === 'playback') && !message.isMine) {
-                // Schedule expiry based on actual audio duration + 2 second buffer
-                const audioDurationMs = duration || 0;
-                const bufferTime = 2000; // 2 seconds buffer
+                console.log(`[ViewOnceClearing] 🎵 Audio playback completed for view-once message: ${messageId}`);
                 
+                // Mark as viewed and trigger clearing for sender
+                ViewOnceMessageManager.handleMessageConsumption(
+                  messageId,
+                  'voice',
+                  message.expiryRule,
+                  message.sender_id || '',
+                  message.recipient_id || '',
+                  'closed' // Audio completed playing
+                ).then(() => {
+                  console.log(`[ViewOnceClearing] ✅ Voice message consumption handled: ${messageId}`);
+                }).catch(error => {
+                  console.error('[ViewOnceClearing] ❌ Error handling voice consumption:', error);
+                });
+                
+                // Schedule local removal based on actual audio duration + 2 second buffer
+                const bufferTime = 2000; // 2 seconds buffer
                 setTimeout(() => {
                   setMessages(prev => prev.filter(msg => msg.id !== messageId));
                 }, bufferTime); // Give 2 second buffer after playback completes
