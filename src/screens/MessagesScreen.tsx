@@ -132,12 +132,12 @@ export default function MessagesScreen({ navigation }: any) {
 
   const getAvatarColor = (seed: string = '') => {
     const colors = [
-      theme.colors.accent.red,
-      theme.colors.accent.teal,
-      theme.colors.accent.blue,
-      theme.colors.accent.green,
-      theme.colors.accent.orange,
-      theme.colors.accent.pink
+      theme.colors.status.error,
+      theme.colors.text.accent,
+      theme.colors.status.info,
+      theme.colors.status.success,
+      theme.colors.status.warning,
+      theme.colors.text.accentSecondary
     ];
     const index = seed.charCodeAt(0) % colors.length;
     return colors[index];
@@ -520,7 +520,7 @@ export default function MessagesScreen({ navigation }: any) {
 const getStyles = (theme: Theme) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.surface.primary,
+    backgroundColor: theme.colors.background.primary,
   },
   emptyContainer: {
     flex: 1,
@@ -528,7 +528,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   conversationItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.surface.secondary,
+    backgroundColor: theme.colors.background.secondary,
     padding: theme.spacing.md,
     marginHorizontal: theme.spacing.sm,
     marginVertical: theme.spacing.xs,
@@ -568,7 +568,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: theme.colors.accent.teal,
+    backgroundColor: theme.colors.text.accent,
     marginRight: theme.spacing.sm,
   },
   emptyState: {
@@ -609,7 +609,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     paddingBottom: 90,
   },
   actionModal: {
-    backgroundColor: theme.colors.surface.secondary,
+    backgroundColor: theme.colors.background.secondary,
     borderRadius: theme.borderRadius.lg,
     padding: theme.spacing.sm,
     ...theme.shadows.large,
@@ -633,7 +633,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     backgroundColor: theme.colors.overlay.dark,
   },
   modalContent: {
-    backgroundColor: theme.colors.surface.secondary,
+    backgroundColor: theme.colors.background.secondary,
     borderRadius: theme.borderRadius.lg,
     padding: theme.spacing.xl,
     width: '80%',
@@ -647,13 +647,13 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: theme.colors.border.light,
+    borderColor: theme.colors.border.subtle,
     borderRadius: theme.borderRadius.md,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
     ...theme.typography.bodyMedium,
     color: theme.colors.text.primary,
-    backgroundColor: theme.colors.surface.primary,
+    backgroundColor: theme.colors.background.primary,
     marginBottom: theme.spacing.lg,
   },
   modalButtons: {
@@ -667,7 +667,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     alignItems: 'center',
   },
   cancelButton: {
-    backgroundColor: theme.colors.surface.tertiary,
+    backgroundColor: theme.colors.background.tertiary,
     marginRight: theme.spacing.sm,
   },
   addButton: {

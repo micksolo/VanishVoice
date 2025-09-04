@@ -155,7 +155,7 @@ export default function MessagePreviewScreen({ route, navigation }: MessagePrevi
             style={[styles.expiryOption, expiryType === 'time' && styles.selectedOption]}
             onPress={() => setExpiryType('time')}
           >
-            <Ionicons name="time-outline" size={24} color={expiryType === 'time' ? theme.colors.accent.teal : theme.colors.text.secondary} />
+            <Ionicons name="time-outline" size={24} color={expiryType === 'time' ? theme.colors.text.accent : theme.colors.text.secondary} />
             <View style={styles.optionContent}>
               <Text style={[styles.optionTitle, expiryType === 'time' && styles.selectedText]}>
                 After Time
@@ -165,7 +165,7 @@ export default function MessagePreviewScreen({ route, navigation }: MessagePrevi
               </Text>
             </View>
             {expiryType === 'time' && (
-              <Ionicons name="checkmark-circle" size={24} color={theme.colors.accent.teal} />
+              <Ionicons name="checkmark-circle" size={24} color={theme.colors.text.accent} />
             )}
           </TouchableOpacity>
 
@@ -173,7 +173,7 @@ export default function MessagePreviewScreen({ route, navigation }: MessagePrevi
             style={[styles.expiryOption, expiryType === 'playback' && styles.selectedOption]}
             onPress={() => setExpiryType('playback')}
           >
-            <Ionicons name="headset-outline" size={24} color={expiryType === 'playback' ? theme.colors.accent.teal : theme.colors.text.secondary} />
+            <Ionicons name="headset-outline" size={24} color={expiryType === 'playback' ? theme.colors.text.accent : theme.colors.text.secondary} />
             <View style={styles.optionContent}>
               <Text style={[styles.optionTitle, expiryType === 'playback' && styles.selectedText]}>
                 After Playback
@@ -183,7 +183,7 @@ export default function MessagePreviewScreen({ route, navigation }: MessagePrevi
               </Text>
             </View>
             {expiryType === 'playback' && (
-              <Ionicons name="checkmark-circle" size={24} color={theme.colors.accent.teal} />
+              <Ionicons name="checkmark-circle" size={24} color={theme.colors.text.accent} />
             )}
           </TouchableOpacity>
         </View>
@@ -219,7 +219,7 @@ export default function MessagePreviewScreen({ route, navigation }: MessagePrevi
 const getStyles = (theme: Theme) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.surface.primary,
+    backgroundColor: theme.colors.background.primary,
   },
   header: {
     flexDirection: 'row',
@@ -227,7 +227,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     justifyContent: 'space-between',
     padding: theme.spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border.light,
+    borderBottomColor: theme.colors.border.subtle,
   },
   title: {
     ...theme.typography.headlineMedium,
@@ -238,7 +238,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     padding: theme.spacing.lg,
   },
   recipientCard: {
-    backgroundColor: theme.colors.surface.tertiary,
+    backgroundColor: theme.colors.background.tertiary,
     padding: theme.spacing.lg,
     borderRadius: theme.borderRadius.md,
     marginBottom: theme.spacing.lg,
@@ -265,7 +265,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: theme.colors.accent.teal,
+    backgroundColor: theme.colors.text.accent,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: theme.spacing.md,
@@ -294,15 +294,15 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: theme.spacing.lg,
-    backgroundColor: theme.colors.surface.tertiary,
+    backgroundColor: theme.colors.background.tertiary,
     borderRadius: theme.borderRadius.md,
     marginBottom: theme.spacing.sm,
     borderWidth: 1,
     borderColor: 'transparent',
   },
   selectedOption: {
-    backgroundColor: theme.colors.accent.light,
-    borderColor: theme.colors.accent.teal,
+    backgroundColor: theme.colors.text.accentSecondary,
+    borderColor: theme.colors.text.accent,
   },
   optionContent: {
     flex: 1,
@@ -314,7 +314,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     fontWeight: '600',
   },
   selectedText: {
-    color: theme.colors.accent.teal,
+    color: theme.colors.text.accent,
   },
   optionDescription: {
     ...theme.typography.bodySmall,
@@ -330,7 +330,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     flex: 1,
     paddingVertical: theme.spacing.md,
     borderRadius: theme.borderRadius.md,
-    backgroundColor: theme.colors.surface.tertiary,
+    backgroundColor: theme.colors.background.tertiary,
     alignItems: 'center',
   },
   cancelText: {

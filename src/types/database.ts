@@ -26,7 +26,7 @@ export interface Message {
   duration?: number; // For voice/video messages
 }
 
-export type ExpiryType = 'none' | 'view' | 'time' | 'location' | 'event' | 'playback' | 'read';
+export type ExpiryType = 'none' | 'view' | 'time' | 'location' | 'event' | 'playback' | 'read' | 'session';
 
 export interface NoExpiryRule {
   type: 'none';
@@ -52,6 +52,11 @@ export interface ReadExpiryRule {
   // Expires immediately after first read (for text)
 }
 
+export interface SessionExpiryRule {
+  type: 'session';
+  // Expires when user exits chat session (Snapchat-style behavior)
+}
+
 export interface LocationExpiryRule {
   type: 'location';
   radius_m: number;
@@ -70,6 +75,7 @@ export type ExpiryRule =
   | TimeExpiryRule 
   | PlaybackExpiryRule 
   | ReadExpiryRule
+  | SessionExpiryRule
   | LocationExpiryRule 
   | EventExpiryRule;
 

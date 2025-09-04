@@ -12,6 +12,8 @@ import { useAppTheme } from '../contexts/ThemeContext';
 import EphemeralIndicator from './EphemeralIndicator';
 import CountdownTimer from './CountdownTimer';
 import ReadReceipt from './ReadReceipt';
+import { MessageStatusService, MessageStatus } from '../services/MessageStatusService';
+import ViewOnceMessageManager from '../services/ViewOnceMessageManager';
 // SHELVED: Screenshot prevention feature
 // import SecurityShield from './SecurityShield';
 // import SecurityTrustScore from './SecurityTrustScore';
@@ -31,10 +33,13 @@ interface MessageBubbleProps {
   showAvatar?: boolean;
   senderName?: string;
   messageType?: 'text' | 'voice' | 'video' | 'image';
-  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+  status?: MessageStatus;
   readReceiptVariant?: 'traditional' | 'neon' | 'eye' | 'lightning';
   screenshotAttempts?: number;
   showSecurityTrustScore?: boolean;
+  senderCleared?: boolean;
+  recipientCleared?: boolean;
+  onViewOnceCleared?: (messageId: string) => void;
 }
 
 export default function MessageBubble({
@@ -54,6 +59,9 @@ export default function MessageBubble({
   readReceiptVariant = 'traditional',
   screenshotAttempts = 0,
   showSecurityTrustScore = false,
+  senderCleared = false,
+  recipientCleared = false,
+  onViewOnceCleared,
 }: MessageBubbleProps) {
   const theme = useAppTheme();
   // SHELVED: Screenshot prevention feature
@@ -63,10 +71,12 @@ export default function MessageBubble({
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
+  const disappearAnim = useRef(new Animated.Value(1)).current;
+  const viewedPulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    if (isExpired) {
-      // Fade out animation for expired messages
+    if (isExpired || status === 'disappeared') {
+      // Fade out animation for expired/disappeared messages
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 0.3,
@@ -78,8 +88,27 @@ export default function MessageBubble({
           duration: 1000,
           useNativeDriver: true,
         }),
+        Animated.timing(disappearAnim, {
+          toValue: 0,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
       ]).start();
-    } else if (isEphemeral && !hasBeenViewed) {
+    } else if (status === 'viewed' && ViewOnceMessageManager.isViewOnceMessage(expiryRule || { type: 'none' })) {
+      // Pulse animation when view-once message is viewed
+      Animated.sequence([
+        Animated.timing(viewedPulseAnim, {
+          toValue: 1.05,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(viewedPulseAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else if (isEphemeral && !hasBeenViewed && status !== 'viewed') {
       // Subtle glow for unviewed ephemeral messages
       Animated.loop(
         Animated.sequence([
@@ -96,11 +125,18 @@ export default function MessageBubble({
         ])
       ).start();
     }
-  }, [isExpired, isEphemeral, hasBeenViewed]);
+  }, [isExpired, isEphemeral, hasBeenViewed, status]);
 
   const getBubbleColor = () => {
-    if (isExpired) {
+    if (isExpired || status === 'disappeared') {
       return theme.colors.text.disabled + '40';
+    }
+    
+    if (status === 'viewed' && ViewOnceMessageManager.isViewOnceMessage(expiryRule || { type: 'none' })) {
+      // Slightly dimmed color for viewed view-once messages
+      return isMine 
+        ? theme.colors.chat.sent + 'CC'
+        : theme.colors.chat.received + 'CC';
     }
     
     if (isMine) {
@@ -111,8 +147,15 @@ export default function MessageBubble({
   };
 
   const getTextColor = () => {
-    if (isExpired) {
+    if (isExpired || status === 'disappeared') {
       return theme.colors.text.disabled;
+    }
+    
+    if (status === 'viewed' && ViewOnceMessageManager.isViewOnceMessage(expiryRule || { type: 'none' })) {
+      // Slightly dimmed text for viewed view-once messages
+      return isMine 
+        ? theme.colors.chat.sentText + 'AA'
+        : theme.colors.chat.receivedText + 'AA';
     }
     
     return isMine 
@@ -144,7 +187,10 @@ export default function MessageBubble({
         {
           alignSelf: isMine ? 'flex-end' : 'flex-start',
           opacity: fadeAnim,
-          transform: [{ scale: scaleAnim }],
+          transform: [
+            { scale: scaleAnim },
+            { scale: viewedPulseAnim },
+          ],
         },
         style,
       ]}
@@ -234,11 +280,38 @@ export default function MessageBubble({
           {isMine && (
             <View style={styles.statusIndicator}>
               <ReadReceipt
-                status={status}
+                status={status === 'viewed' ? 'read' : status === 'disappeared' ? 'read' : status || 'sent'}
                 textColor={getTextColor()}
                 variant={readReceiptVariant}
                 size={12}
               />
+              
+              {/* View-once status indicator */}
+              {ViewOnceMessageManager.isViewOnceMessage(expiryRule || { type: 'none' }) && (
+                <View style={styles.viewOnceIndicator}>
+                  {status === 'viewed' && (
+                    <Animated.View style={{
+                      opacity: disappearAnim,
+                      transform: [{ scale: viewedPulseAnim }]
+                    }}>
+                      <Ionicons
+                        name="eye"
+                        size={10}
+                        color={theme.colors.text.accent}
+                        style={styles.viewOnceIcon}
+                      />
+                    </Animated.View>
+                  )}
+                  {status === 'disappeared' && (
+                    <Ionicons
+                      name="eye-off"
+                      size={10}
+                      color={theme.colors.text.disabled}
+                      style={styles.viewOnceIcon}
+                    />
+                  )}
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -401,5 +474,13 @@ const styles = StyleSheet.create({
   trustScoreContainer: {
     marginTop: 4,
     marginHorizontal: 8,
+  },
+  viewOnceIndicator: {
+    marginLeft: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  viewOnceIcon: {
+    marginLeft: 2,
   },
 });

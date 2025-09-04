@@ -36,6 +36,7 @@ import SecureDeviceKeys from '../utils/SecureDeviceKeys';
 import { uploadE2EEncryptedAudio, downloadAndDecryptE2EAudio } from '../utils/secureE2EAudioStorage';
 import { SecureE2EVideoStorageFastAndroid } from '../utils/secureE2EVideoStorageFastAndroid';
 import { EphemeralMessageService } from '../services/ephemeralMessages';
+import { ChatSessionService, SessionClearingResult } from '../services/ChatSessionService';
 import { ExpiryRule, Message as DBMessage } from '../types/database';
 import RecordingModal from '../components/RecordingModal';
 import VideoRecordingModal from '../components/VideoRecordingModalNew';
@@ -46,6 +47,7 @@ import ExpiryRuleSelector from '../components/ExpiryRuleSelector';
 import MessageBubble from '../components/MessageBubble';
 import VoiceMessagePlayer from '../components/VoiceMessagePlayer';
 import EphemeralMessageBubble from '../components/EphemeralMessageBubble';
+import SessionIndicator from '../components/SessionIndicator';
 import { useAppTheme } from '../contexts/ThemeContext';
 import * as FileSystem from 'expo-file-system';
 import { Video, ResizeMode } from 'expo-av';
@@ -548,6 +550,72 @@ export default function FriendChatScreen({ route, navigation }: any) {
       }
     };
   }, [sound]);
+
+  // Session-based ephemeral messaging: Track chat session lifecycle
+  useEffect(() => {
+    if (!user?.id) return;
+
+    console.log('[FriendChat] 🟢 Starting chat session for ephemeral messaging');
+    let sessionCleanup: (() => void) | undefined;
+    let appStateListener: any;
+
+    const startChatSession = async () => {
+      try {
+        // Start the chat session
+        await ChatSessionService.startSession(user.id, friendId);
+        
+        // Register for session clearing notifications
+        sessionCleanup = ChatSessionService.onSessionClearing(
+          user.id,
+          friendId,
+          (result: SessionClearingResult) => {
+            console.log(`[FriendChat] 📱 Session cleared ${result.totalTextMessagesCleared} text messages`);
+            
+            // Remove cleared messages from local UI
+            if (result.clearedMessageIds.length > 0) {
+              setMessages(prev => prev.filter(msg => !result.clearedMessageIds.includes(msg.id)));
+            }
+          }
+        );
+        
+        // Handle app backgrounding - end session when app goes to background
+        appStateListener = AppState.addEventListener('change', async (nextAppState) => {
+          if (nextAppState === 'background' || nextAppState === 'inactive') {
+            console.log('[FriendChat] 📱 App backgrounded, ending chat session');
+            await ChatSessionService.endSession(user.id, friendId, true);
+          }
+        });
+        
+      } catch (error) {
+        console.warn('[FriendChat] Failed to start chat session:', error);
+      }
+    };
+
+    startChatSession();
+
+    // Cleanup function - end session when component unmounts or user changes
+    return () => {
+      console.log('[FriendChat] 🔴 Ending chat session (component cleanup)');
+      
+      // Cleanup callbacks
+      if (sessionCleanup) {
+        sessionCleanup();
+      }
+      
+      if (appStateListener) {
+        appStateListener.remove();
+      }
+      
+      // End the session and trigger clearing
+      ChatSessionService.endSession(user.id, friendId, true)
+        .then((result) => {
+          console.log(`[FriendChat] ✅ Session cleanup completed: ${result.totalTextMessagesCleared} messages cleared`);
+        })
+        .catch((error) => {
+          console.warn('[FriendChat] Session cleanup failed:', error);
+        });
+    };
+  }, [user?.id, friendId]);
 
   // Function to save privacy preference to AsyncStorage
   const savePrivacyPreference = async (rule: ExpiryRule) => {
@@ -1385,6 +1453,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
       const messageText = inputText.trim();
       setInputText('');
 
+      // Use session-based expiry for text messages (Snapchat-style behavior)
+      const textExpiryRule: ExpiryRule = { type: 'session' };
+      
       // Add optimistic message
       const tempMessage: Message = {
         id: Date.now().toString(),
@@ -1393,7 +1464,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
         isMine: true,
         timestamp: new Date(),
         status: 'sending',
-        expiryRule: currentExpiryRule
+        expiryRule: textExpiryRule
       };
       
       setMessages(prev => [...prev, tempMessage]);
@@ -1430,7 +1501,7 @@ export default function FriendChatScreen({ route, navigation }: any) {
           // PHASE 1 FIX: Include recipient metadata to track exact keys used (consistent with voice/video)
           recipient_key_id: encrypted.recipientKeyId,
           recipient_device_id: encrypted.recipientDeviceId,
-          expiry_rule: currentExpiryRule
+          expiry_rule: textExpiryRule
         })
         .select()
         .single();
@@ -3035,6 +3106,9 @@ export default function FriendChatScreen({ route, navigation }: any) {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Session indicator for new ephemeral behavior */}
+        <SessionIndicator />
 
         {/* Messages */}
         <FlatList

@@ -24,10 +24,8 @@ module.exports = ({ config }) => {
     // Configure Android-specific settings for development builds
     android: {
       ...config.android,
-      // Enable Proguard/R8 minification in production builds
-      enableProguardInReleaseBuilds: true,
-      // Enable Hermes for better performance
-      enableHermes: true,
+      // Note: enableProguardInReleaseBuilds and enableHermes are not valid in app.config.js
+      // These should be configured in android/app/build.gradle if needed
     },
   };
 };

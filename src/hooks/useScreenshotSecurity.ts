@@ -2,7 +2,11 @@ import { useEffect, useRef, useCallback } from 'react';
 import { Platform, AppState, AppStateStatus } from 'react-native';
 import * as ScreenCapture from 'expo-screen-capture';
 import { useSecurity } from '../contexts/SecurityContext';
-import { enableScreenshotPrevention, disableScreenshotPrevention } from 'screenshot-prevent';
+// import { enableScreenshotPrevention, disableScreenshotPrevention } from 'screenshot-prevent'; // Temporarily disabled for debugging
+
+// Temporary stub functions for debugging
+const enableScreenshotPrevention = () => console.log('Screenshot prevention stub enabled');
+const disableScreenshotPrevention = () => console.log('Screenshot prevention stub disabled');
 import { 
   createScreenshotContext, 
   detectPrimaryMessageForScreenshot, 

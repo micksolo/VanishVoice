@@ -8,6 +8,11 @@
     "build",
     "dist",
     ".vscode",
-    ".idea"
+    ".idea",
+    "temp_test",
+    "archive",
+    "ios",
+    "android",
+    "web-build"
   ]
 }

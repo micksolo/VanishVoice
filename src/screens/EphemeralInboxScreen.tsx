@@ -460,12 +460,12 @@ export default function EphemeralInboxScreen({ navigation }: any) {
 
   const getAvatarColor = (seed: string = '') => {
     const colors = [
-      theme.colors.accent.red,
-      theme.colors.accent.teal,
-      theme.colors.accent.blue,
-      theme.colors.accent.green,
-      theme.colors.accent.orange,
-      theme.colors.accent.pink
+      theme.colors.status.error,
+      theme.colors.text.accent,
+      theme.colors.status.info,
+      theme.colors.status.success,
+      theme.colors.status.warning,
+      theme.colors.text.accentSecondary
     ];
     const index = seed.charCodeAt(0) % colors.length;
     return colors[index];
@@ -559,7 +559,7 @@ export default function EphemeralInboxScreen({ navigation }: any) {
             </Text>
           </View>
           {playingMessage === item.id ? (
-            <Ionicons name="volume-high" size={24} color={theme.colors.accent.teal} />
+            <Ionicons name="volume-high" size={24} color={theme.colors.text.accent} />
           ) : (
             <Ionicons name="play-circle" size={32} color={theme.colors.text.primary} />
           )}
@@ -609,7 +609,7 @@ export default function EphemeralInboxScreen({ navigation }: any) {
             setRecordingModalVisible(true);
           }}
         >
-          <Ionicons name="mic" size={24} color={theme.colors.accent.teal} />
+          <Ionicons name="mic" size={24} color={theme.colors.text.accent} />
         </TouchableOpacity>
       </TouchableOpacity>
     </Swipeable>
@@ -687,7 +687,7 @@ export default function EphemeralInboxScreen({ navigation }: any) {
                 style={styles.addFriendPrompt}
                 onPress={() => setAddFriendModalVisible(true)}
               >
-                <Ionicons name="person-add-outline" size={32} color={theme.colors.accent.teal} />
+                <Ionicons name="person-add-outline" size={32} color={theme.colors.text.accent} />
                 <Text style={styles.addFriendText}>Add your first friend</Text>
                 <Text style={styles.addFriendSubtext}>Share friend codes to connect</Text>
               </TouchableOpacity>
@@ -851,7 +851,7 @@ const { width } = Dimensions.get('window');
 const getStyles = (theme: Theme) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.surface.primary,
+    backgroundColor: theme.colors.background.primary,
   },
   content: {
     flex: 1,
@@ -879,7 +879,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: theme.colors.accent.teal,
+    backgroundColor: theme.colors.text.accent,
     marginBottom: theme.spacing.md,
   },
   counterText: {
@@ -912,7 +912,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   messageItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.surface.secondary,
+    backgroundColor: theme.colors.background.secondary,
     padding: theme.spacing.md,
     borderRadius: theme.borderRadius.md,
     marginBottom: theme.spacing.sm,

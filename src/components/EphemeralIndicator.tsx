@@ -32,6 +32,8 @@ export default function EphemeralIndicator({
         return hasBeenViewed ? 'mail-open' : 'mail';
       case 'playback':
         return hasBeenViewed ? 'play-circle' : 'play-circle-outline';
+      case 'session':
+        return hasBeenViewed ? 'exit-outline' : 'chatbubble-outline';
       default:
         return 'eye';
     }
@@ -59,6 +61,8 @@ export default function EphemeralIndicator({
         return 'Read once';
       case 'playback':
         return 'Play once';
+      case 'session':
+        return hasBeenViewed ? 'Clears on exit' : 'In chat only';
       default:
         return 'Ephemeral';
     }

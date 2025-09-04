@@ -18,7 +18,9 @@ interface VideoPlayerModalProps {
   videoUri: string | null;
   onClose: () => void;
   onVideoComplete?: (messageId?: string) => void; // Callback for when video finishes playing
+  onVideoClose?: (messageId: string) => void; // Callback for when video modal closes (for view-once clearing)
   messageId?: string; // Message ID for ephemeral message handling
+  senderId?: string; // Sender ID for view-once clearing
 }
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -28,20 +30,33 @@ export default function VideoPlayerModal({
   videoUri,
   onClose,
   onVideoComplete,
+  onVideoClose,
   messageId,
+  senderId,
 }: VideoPlayerModalProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [duration, setDuration] = useState(0);
   const [position, setPosition] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [hasCompleted, setHasCompleted] = useState(false);
+  const [maxPositionReached, setMaxPositionReached] = useState(0);
+  const [stallCount, setStallCount] = useState(0);
   const videoRef = useRef<Video>(null);
+  const completionTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastPositionRef = useRef(0);
+  const positionStallCountRef = useRef(0);
 
   // Cleanup video when modal closes or component unmounts
   useEffect(() => {
     return () => {
       if (videoRef.current) {
         videoRef.current.unloadAsync().catch(console.error);
+      }
+      // Clear completion timer if it exists
+      if (completionTimerRef.current) {
+        clearTimeout(completionTimerRef.current);
+        completionTimerRef.current = null;
       }
     };
   }, []);
@@ -50,6 +65,11 @@ export default function VideoPlayerModal({
   useEffect(() => {
     if (!visible && videoRef.current) {
       videoRef.current.unloadAsync().catch(console.error);
+      // Clear completion timer when modal closes
+      if (completionTimerRef.current) {
+        clearTimeout(completionTimerRef.current);
+        completionTimerRef.current = null;
+      }
     }
   }, [visible]);
 
@@ -61,8 +81,46 @@ export default function VideoPlayerModal({
       setIsPlaying(true);
       setPosition(0);
       setDuration(0);
+      setHasCompleted(false);
+      setMaxPositionReached(0);
+      lastPositionRef.current = 0;
+      positionStallCountRef.current = 0;
+      
+      // Clear any existing completion timer
+      if (completionTimerRef.current) {
+        clearTimeout(completionTimerRef.current);
+        completionTimerRef.current = null;
+      }
     }
   }, [videoUri]);
+
+
+  // Multi-layered video completion detection to handle expo-av limitations
+  const triggerCompletion = (trigger: string) => {
+    if (hasCompleted) return;
+    
+    console.log(`[VideoPlayer] 🎬 COMPLETION TRIGGERED by: ${trigger}`);
+    setHasCompleted(true);
+    setIsPlaying(false);
+    
+    // Clear completion timer if set
+    if (completionTimerRef.current) {
+      clearTimeout(completionTimerRef.current);
+      completionTimerRef.current = null;
+    }
+    
+    // Notify parent component
+    if (onVideoComplete && messageId) {
+      console.log(`[VideoPlayer] 🚀 CALLING onVideoComplete for message: ${messageId} (${trigger})`);
+      onVideoComplete(messageId);
+    }
+    
+    // Auto-close modal
+    setTimeout(() => {
+      console.log(`[VideoPlayer] 🚪 Closing modal after completion (${trigger})`);
+      handleClose();
+    }, 100);
+  };
 
   const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
     console.log(`[VideoPlayer] Status update for messageId ${messageId}:`, {
@@ -77,42 +135,74 @@ export default function VideoPlayerModal({
     if (status.isLoaded) {
       setIsLoading(false);
       setError(null);
-      setDuration(status.durationMillis || 0);
-      setPosition(status.positionMillis || 0);
-      setIsPlaying(status.isPlaying || false);
       
-      if (status.didJustFinish) {
-        // Video finished playing - handle ephemeral message expiry
-        console.log(`[VideoPlayer] 🎬 VIDEO COMPLETION DETECTED - handling completion`);
-        console.log(`[VideoPlayer] Video completion details:`, {
-          messageId,
-          hasOnVideoComplete: !!onVideoComplete,
-          videoUri,
-          position: status.positionMillis,
-          duration: status.durationMillis
-        });
-        setIsPlaying(false);
+      const currentDuration = status.durationMillis || 0;
+      const currentPosition = status.positionMillis || 0;
+      const isCurrentlyPlaying = status.isPlaying || false;
+      
+      setDuration(currentDuration);
+      setPosition(currentPosition);
+      setIsPlaying(isCurrentlyPlaying);
+      
+      // Track maximum position reached
+      if (currentPosition > maxPositionReached) {
+        setMaxPositionReached(currentPosition);
+      }
+      
+      // MULTI-LAYERED COMPLETION DETECTION
+      if (currentDuration > 0 && !hasCompleted) {
         
-        // Notify parent component that video completed (for ephemeral messages)
-        if (onVideoComplete && messageId) {
-          console.log(`[VideoPlayer] 🚀 CALLING onVideoComplete for message: ${messageId}`);
-          onVideoComplete(messageId);
-        } else {
-          console.log(`[VideoPlayer] ❌ NOT calling onVideoComplete:`, {
-            hasCallback: !!onVideoComplete,
-            hasMessageId: !!messageId,
-            messageId
-          });
+        // 1. Traditional didJustFinish check (rarely works but worth checking)
+        if (status.didJustFinish) {
+          triggerCompletion('didJustFinish');
+          return;
         }
         
-        // Small delay to prevent race conditions during cleanup
-        setTimeout(() => {
-          console.log(`[VideoPlayer] 🔒 CLOSING MODAL after completion`);
-          handleClose();
-        }, 100);
+        // 2. Near-end detection with generous threshold (1 second from end)
+        const isVeryNearEnd = currentPosition >= (currentDuration - 1000);
+        if (isVeryNearEnd && !isCurrentlyPlaying) {
+          triggerCompletion('nearEndAndStopped');
+          return;
+        }
+        
+        // 3. Position-based completion (reached 95% of duration)
+        const reachedNearEnd = currentPosition >= (currentDuration * 0.95);
+        if (reachedNearEnd && !isCurrentlyPlaying) {
+          triggerCompletion('95percentComplete');
+          return;
+        }
+        
+        // 4. Set up timer-based fallback when video reaches 80% of duration
+        const reached80Percent = currentPosition >= (currentDuration * 0.8);
+        if (reached80Percent && !completionTimerRef.current && isCurrentlyPlaying) {
+          const remainingTime = currentDuration - currentPosition + 1000; // Add 1s buffer
+          console.log(`[VideoPlayer] Setting completion timer for ${remainingTime}ms`);
+          
+          completionTimerRef.current = setTimeout(() => {
+            triggerCompletion('timerFallback');
+          }, remainingTime);
+        }
+        
+        // 5. Position stall detection (position stops advancing near the end)
+        if (currentPosition >= (currentDuration * 0.8)) {
+          if (Math.abs(currentPosition - lastPositionRef.current) < 100) { // Position hasn't moved much
+            positionStallCountRef.current += 1;
+            
+            // If position stalled for 3 consecutive checks near the end, consider it complete
+            if (positionStallCountRef.current >= 3 && !isCurrentlyPlaying) {
+              triggerCompletion('positionStall');
+              return;
+            }
+          } else {
+            positionStallCountRef.current = 0; // Reset stall counter if position is advancing
+          }
+        }
+        
+        lastPositionRef.current = currentPosition;
       }
+      
     } else {
-      // Handle loading errors - but filter out harmless end-of-playback errors
+      // Handle unloaded state - this often happens at video end
       const errorMessage = status.error;
       const isHarmlessError = 
         errorMessage === 'Player error: null' || 
@@ -121,6 +211,20 @@ export default function VideoPlayerModal({
         (typeof errorMessage === 'string' && errorMessage.includes('Player error: null'));
       
       setIsLoading(false);
+      
+      // Check if we had significant playback before unloading (indicates natural end)
+      if (isHarmlessError && maxPositionReached > 0 && !hasCompleted) {
+        const estimatedDuration = duration || maxPositionReached * 1.1; // Estimate duration if unknown
+        const playbackPercentage = maxPositionReached / estimatedDuration;
+        
+        console.log(`[VideoPlayer] Video unloaded after ${maxPositionReached}ms (${(playbackPercentage * 100).toFixed(1)}% complete)`);
+        
+        // If we reached at least 80% before unloading, consider it complete
+        if (playbackPercentage >= 0.8) {
+          triggerCompletion('unloadedAfterPlayback');
+          return;
+        }
+      }
       
       // Only show user-facing errors for genuine problems, not end-of-playback states
       if (!isHarmlessError) {
@@ -155,6 +259,12 @@ export default function VideoPlayerModal({
   };
 
   const handleClose = async () => {
+    // Clear completion timer
+    if (completionTimerRef.current) {
+      clearTimeout(completionTimerRef.current);
+      completionTimerRef.current = null;
+    }
+    
     // Cleanup video before closing
     if (videoRef.current) {
       try {
@@ -164,6 +274,13 @@ export default function VideoPlayerModal({
         console.error('[VideoPlayer] Error cleaning up video:', error);
       }
     }
+    
+    // Trigger view-once clearing if this is a view-once video being closed
+    if (messageId && senderId && onVideoClose) {
+      console.log(`[VideoPlayer] 🎬 Video modal closing - triggering view-once clearing for message ${messageId}`);
+      onVideoClose(messageId);
+    }
+    
     onClose();
   };
 

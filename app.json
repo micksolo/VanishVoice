@@ -4,7 +4,6 @@
     "slug": "VanishVoice",
     "owner": "generictech",
     "version": "1.0.0",
-    "main": "index.js",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",

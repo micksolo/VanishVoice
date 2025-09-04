@@ -181,6 +181,11 @@ export class EphemeralMessageService {
       case 'playback':
         return message.listened_at !== null;
         
+      case 'session':
+        // Session-based messages expire when chat session ends
+        // This is handled by ChatSessionService, not automatic expiry
+        return false;
+        
       case 'time':
         const expiryTime = new Date(createdAt.getTime() + (message.expiry_rule.duration_sec * 1000));
         return now > expiryTime;
@@ -214,6 +219,9 @@ export class EphemeralMessageService {
         
       case 'playback':
         return 'Disappears after playing';
+        
+      case 'session':
+        return 'Disappears when you leave this chat';
         
       case 'time':
         const hours = Math.floor(expiryRule.duration_sec / 3600);
@@ -268,6 +276,8 @@ export class EphemeralMessageService {
     return expiryRule.type === 'view' || 
            expiryRule.type === 'read' || 
            expiryRule.type === 'playback';
+    // Note: session-based messages don't disappear immediately after viewing
+    // They disappear when the chat session ends
   }
 
   /**
@@ -279,6 +289,7 @@ export class EphemeralMessageService {
       viewOnce: { type: 'view', disappear_after_view: true } as ExpiryRule,
       readOnce: { type: 'read' } as ExpiryRule,
       playOnce: { type: 'playback' } as ExpiryRule,
+      session: { type: 'session' } as ExpiryRule,
       oneHour: { type: 'time', duration_sec: 3600 } as ExpiryRule,
       oneDay: { type: 'time', duration_sec: 86400 } as ExpiryRule,
       oneWeek: { type: 'time', duration_sec: 604800 } as ExpiryRule,

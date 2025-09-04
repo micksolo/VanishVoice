@@ -18,9 +18,11 @@ interface VoiceMessagePlayerProps {
   isEphemeral?: boolean;
   onPlayStart?: () => void;
   onPlayComplete?: () => void;
+  onAudioViewed?: (messageId: string) => void; // Callback when audio is first played (for view-once status)
   style?: ViewStyle;
   showWaveform?: boolean;
   size?: 'small' | 'medium' | 'large';
+  messageId?: string; // Message ID for view-once tracking
 }
 
 export default function VoiceMessagePlayer({
@@ -29,15 +31,18 @@ export default function VoiceMessagePlayer({
   isEphemeral = false,
   onPlayStart,
   onPlayComplete,
+  onAudioViewed,
   style,
   showWaveform = true,
   size = 'medium',
+  messageId,
 }: VoiceMessagePlayerProps) {
   const theme = useAppTheme();
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [position, setPosition] = useState(0);
   const [actualDuration, setActualDuration] = useState(duration);
+  const [hasBeenViewed, setHasBeenViewed] = useState(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
 
@@ -85,6 +90,14 @@ export default function VoiceMessagePlayer({
 
       setSound(newSound);
       setIsPlaying(true);
+      
+      // Mark as viewed for view-once tracking (first time only)
+      if (!hasBeenViewed && messageId && onAudioViewed) {
+        console.log(`[VoicePlayer] 🎵 Audio first played - marking as viewed: ${messageId}`);
+        setHasBeenViewed(true);
+        onAudioViewed(messageId);
+      }
+      
       onPlayStart?.();
     } catch (error) {
       console.error('Error loading sound:', error);

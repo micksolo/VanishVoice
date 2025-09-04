@@ -53,7 +53,7 @@ function AppContent() {
   );
 }
 
-export default function App() {
+function App() {
   return (
     <SafeAreaProvider>
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -68,3 +68,5 @@ export default function App() {
     </SafeAreaProvider>
   );
 }
+
+export default App;

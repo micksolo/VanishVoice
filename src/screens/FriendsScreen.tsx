@@ -230,7 +230,7 @@ export default function FriendsScreen() {
 const getStyles = (theme: Theme) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.surface.primary,
+    backgroundColor: theme.colors.background.primary,
   },
   emptyContainer: {
     flex: 1,
@@ -238,7 +238,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   friendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.surface.secondary,
+    backgroundColor: theme.colors.background.secondary,
     padding: theme.spacing.md,
     marginHorizontal: theme.spacing.sm,
     marginVertical: theme.spacing.xs,
@@ -300,7 +300,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     backgroundColor: theme.colors.overlay.dark,
   },
   modalContent: {
-    backgroundColor: theme.colors.surface.secondary,
+    backgroundColor: theme.colors.background.secondary,
     borderRadius: theme.borderRadius.lg,
     padding: theme.spacing.xl,
     width: '80%',
@@ -314,13 +314,13 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: theme.colors.border.light,
+    borderColor: theme.colors.border.subtle,
     borderRadius: theme.borderRadius.md,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
     ...theme.typography.bodyMedium,
     color: theme.colors.text.primary,
-    backgroundColor: theme.colors.surface.primary,
+    backgroundColor: theme.colors.background.primary,
     marginBottom: theme.spacing.lg,
   },
   modalButtons: {
@@ -334,7 +334,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     alignItems: 'center',
   },
   cancelButton: {
-    backgroundColor: theme.colors.surface.tertiary,
+    backgroundColor: theme.colors.background.tertiary,
     marginRight: theme.spacing.sm,
   },
   addButton: {

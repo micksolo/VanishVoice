@@ -113,6 +113,12 @@ export function useTheme() {
 
 // Convenience hook to just get the current theme
 export function useAppTheme() {
-  const { theme } = useTheme();
-  return theme;
+  try {
+    const { theme } = useTheme();
+    return theme;
+  } catch (error) {
+    console.warn('useAppTheme: Theme context not available, using light theme fallback');
+    // Return light theme as fallback if context is not available
+    return lightTheme;
+  }
 }

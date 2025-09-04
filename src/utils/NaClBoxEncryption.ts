@@ -44,48 +44,108 @@ class NaClBoxEncryption {
     try {
       console.log('[NaClBoxEncryption] Encrypting data with nacl.box...');
       
+      // ENHANCED DEBUGGING: Validate all input parameters
+      console.log('[NaClBoxEncryption] Encryption input validation:');
+      console.log('- data type:', typeof data);
+      console.log('- data length:', typeof data === 'string' ? data.length : data.length);
+      console.log('- recipientPublicKey type:', typeof recipientPublicKey, 'length:', recipientPublicKey.length);
+      console.log('- senderPrivateKey provided:', !!senderPrivateKey);
+      
       // Convert data to bytes
       const dataBytes = typeof data === 'string' 
         ? naclUtil.decodeUTF8(data)
         : data;
       
+      console.log('[NaClBoxEncryption] Data converted to bytes:', dataBytes.length);
+      
+      // Decode and validate recipient's public key first
+      let recipientPubKey: Uint8Array;
+      try {
+        recipientPubKey = naclUtil.decodeBase64(recipientPublicKey);
+        console.log('[NaClBoxEncryption] ✅ Decoded recipient public key:', recipientPubKey.length, 'bytes (expected: 32)');
+        if (recipientPubKey.length !== 32) {
+          throw new Error(`Invalid recipient public key length: ${recipientPubKey.length}, expected 32`);
+        }
+      } catch (pubKeyError) {
+        console.error('[NaClBoxEncryption] ❌ Invalid recipient public key:', pubKeyError);
+        throw new Error('Invalid recipient public key: ' + pubKeyError);
+      }
+      
       // Generate ephemeral keypair for Perfect Forward Secrecy
+      console.log('[NaClBoxEncryption] Generating ephemeral keypair...');
       const ephemeralKeys = nacl.box.keyPair();
+      console.log('[NaClBoxEncryption] ✅ Ephemeral keypair generated');
+      console.log('- Ephemeral public key length:', ephemeralKeys.publicKey.length);
+      console.log('- Ephemeral private key length:', ephemeralKeys.secretKey.length);
       
       // Generate random nonce
       const nonce = nacl.randomBytes(24);
-      
-      // Decode recipient's public key
-      const recipientPubKey = naclUtil.decodeBase64(recipientPublicKey);
+      console.log('[NaClBoxEncryption] ✅ Generated nonce:', nonce.length, 'bytes');
       
       // Use ephemeral private key (or provided sender private key)
       const senderPrivKey = senderPrivateKey 
         ? naclUtil.decodeBase64(senderPrivateKey)
         : ephemeralKeys.secretKey;
       
+      console.log('[NaClBoxEncryption] Using', senderPrivateKey ? 'provided' : 'ephemeral', 'private key');
+      console.log('[NaClBoxEncryption] Private key length:', senderPrivKey.length, 'bytes (expected: 32)');
+      
+      if (senderPrivKey.length !== 32) {
+        throw new Error(`Invalid sender private key length: ${senderPrivKey.length}, expected 32`);
+      }
+      
+      // Debug parameters before encryption
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.log('[NaClBoxEncryption] Pre-encryption parameter validation:');
+        console.log('- Data bytes:', dataBytes.length);
+        console.log('- Nonce bytes:', nonce.length);
+        console.log('- Recipient public key bytes:', recipientPubKey.length);
+        console.log('- Sender private key bytes:', senderPrivKey.length);
+        
+        // Log hex values (first 8 bytes only)
+        console.log('[NaClBoxEncryption] Parameter hex values (first 8 bytes):');
+        console.log('- Data hex:', Array.from(dataBytes.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' '));
+        console.log('- Nonce hex:', Array.from(nonce.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' '));
+        console.log('- Recipient pub key hex:', Array.from(recipientPubKey.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' '));
+        console.log('- Sender priv key hex:', Array.from(senderPrivKey.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' '));
+      }
+      
       // Encrypt using nacl.box
+      console.log('[NaClBoxEncryption] Calling nacl.box with validated parameters...');
+      const encryptStart = Date.now();
       const encrypted = nacl.box(
         dataBytes,
         nonce,
         recipientPubKey,
         senderPrivKey
       );
+      const encryptDuration = Date.now() - encryptStart;
+      console.log(`[NaClBoxEncryption] nacl.box completed in ${encryptDuration}ms`);
       
       if (!encrypted) {
+        console.error('[NaClBoxEncryption] ❌ CRITICAL: nacl.box returned null');
+        console.error('[NaClBoxEncryption] This should not happen with valid parameters');
         throw new Error('Encryption failed - nacl.box returned null');
       }
+      
+      console.log('[NaClBoxEncryption] ✅ Encryption successful, encrypted length:', encrypted.length);
       
       const result = {
         encryptedContent: naclUtil.encodeBase64(encrypted),
         nonce: naclUtil.encodeBase64(nonce),
-        ephemeralPublicKey: naclUtil.encodeBase64(
-          senderPrivateKey ? naclUtil.decodeBase64(await this.getPublicKeyFromPrivate(senderPrivateKey)) : ephemeralKeys.publicKey
-        )
+        ephemeralPublicKey: senderPrivateKey 
+          ? await this.getPublicKeyFromPrivate(senderPrivateKey)
+          : naclUtil.encodeBase64(ephemeralKeys.publicKey)
       };
+      
+      console.log('[NaClBoxEncryption] ✅ Encryption result validation:');
+      console.log('- encryptedContent base64 length:', result.encryptedContent.length);
+      console.log('- nonce base64 length:', result.nonce.length);
+      console.log('- ephemeralPublicKey base64 length:', result.ephemeralPublicKey.length);
       
       console.log('[NaClBoxEncryption] Encryption completed successfully');
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        console.log('[NaClBoxEncryption] Encrypted content size: [REDACTED]');
+        console.log('[NaClBoxEncryption] Encrypted content size:', encrypted.length, 'bytes');
       }
       
       return result;
@@ -113,33 +173,105 @@ class NaClBoxEncryption {
     try {
       console.log('[NaClBoxEncryption] Decrypting data with nacl.box.open...');
       
+      // ENHANCED DEBUGGING: Validate all input parameters first
+      console.log('[NaClBoxEncryption] Input parameter validation:');
+      console.log('- encryptedContent type:', typeof encryptedContent, 'length:', encryptedContent.length);
+      console.log('- nonce type:', typeof nonce, 'length:', nonce.length);
+      console.log('- ephemeralPublicKey type:', typeof ephemeralPublicKey, 'length:', ephemeralPublicKey.length);
+      console.log('- recipientPrivateKey type:', typeof recipientPrivateKey, 'length:', recipientPrivateKey.length);
+      
       // Decode all parameters
-      const encryptedBytes = naclUtil.decodeBase64(encryptedContent);
-      const nonceBytes = naclUtil.decodeBase64(nonce);
-      const senderPubKey = naclUtil.decodeBase64(ephemeralPublicKey);
-      const recipientPrivKey = naclUtil.decodeBase64(recipientPrivateKey);
+      let encryptedBytes: Uint8Array;
+      let nonceBytes: Uint8Array;
+      let senderPubKey: Uint8Array;
+      let recipientPrivKey: Uint8Array;
+      
+      try {
+        encryptedBytes = naclUtil.decodeBase64(encryptedContent);
+        console.log('[NaClBoxEncryption] ✅ Decoded encryptedContent:', encryptedBytes.length, 'bytes');
+      } catch (e1) {
+        console.error('[NaClBoxEncryption] ❌ Failed to decode encryptedContent:', e1);
+        throw new Error('Invalid base64 in encryptedContent');
+      }
+      
+      try {
+        nonceBytes = naclUtil.decodeBase64(nonce);
+        console.log('[NaClBoxEncryption] ✅ Decoded nonce:', nonceBytes.length, 'bytes (expected: 24)');
+        if (nonceBytes.length !== 24) {
+          throw new Error(`Invalid nonce length: ${nonceBytes.length}, expected 24`);
+        }
+      } catch (e2) {
+        console.error('[NaClBoxEncryption] ❌ Failed to decode nonce:', e2);
+        throw new Error('Invalid base64 in nonce or wrong length');
+      }
+      
+      try {
+        senderPubKey = naclUtil.decodeBase64(ephemeralPublicKey);
+        console.log('[NaClBoxEncryption] ✅ Decoded ephemeralPublicKey:', senderPubKey.length, 'bytes (expected: 32)');
+        if (senderPubKey.length !== 32) {
+          throw new Error(`Invalid ephemeral public key length: ${senderPubKey.length}, expected 32`);
+        }
+      } catch (e3) {
+        console.error('[NaClBoxEncryption] ❌ Failed to decode ephemeralPublicKey:', e3);
+        throw new Error('Invalid base64 in ephemeralPublicKey or wrong length');
+      }
+      
+      try {
+        recipientPrivKey = naclUtil.decodeBase64(recipientPrivateKey);
+        console.log('[NaClBoxEncryption] ✅ Decoded recipientPrivateKey:', recipientPrivKey.length, 'bytes (expected: 32)');
+        if (recipientPrivKey.length !== 32) {
+          throw new Error(`Invalid private key length: ${recipientPrivKey.length}, expected 32`);
+        }
+      } catch (e4) {
+        console.error('[NaClBoxEncryption] ❌ Failed to decode recipientPrivateKey:', e4);
+        throw new Error('Invalid base64 in recipientPrivateKey or wrong length');
+      }
       
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        console.log('[NaClBoxEncryption] Parameters validated:');
-        console.log('- Encrypted bytes: [REDACTED]');
-        console.log('- Parameter lengths verified: OK');
+        console.log('[NaClBoxEncryption] All parameters decoded successfully');
+        console.log('- Encrypted bytes:', encryptedBytes.length);
+        console.log('- Nonce bytes:', nonceBytes.length);
+        console.log('- Sender public key bytes:', senderPubKey.length);
+        console.log('- Recipient private key bytes:', recipientPrivKey.length);
+        
+        // Log hex values for debugging (first 8 bytes only for security)
+        console.log('[NaClBoxEncryption] Parameter hex values (first 8 bytes):');
+        console.log('- Encrypted hex:', Array.from(encryptedBytes.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' '));
+        console.log('- Nonce hex:', Array.from(nonceBytes.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' '));
+        console.log('- Sender pub key hex:', Array.from(senderPubKey.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' '));
+        console.log('- Recipient priv key hex:', Array.from(recipientPrivKey.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' '));
       }
       
       // Decrypt using nacl.box.open
+      console.log('[NaClBoxEncryption] Calling nacl.box.open with validated parameters...');
+      const decryptStart = Date.now();
       const decrypted = nacl.box.open(
         encryptedBytes,
         nonceBytes,
         senderPubKey,
         recipientPrivKey
       );
+      const decryptDuration = Date.now() - decryptStart;
+      console.log(`[NaClBoxEncryption] nacl.box.open completed in ${decryptDuration}ms`);
       
       if (!decrypted) {
+        console.error('[NaClBoxEncryption] ❌ CRITICAL: nacl.box.open returned null');
+        console.error('[NaClBoxEncryption] This indicates:');
+        console.error('  1. Ciphertext authentication failed (tampered data)');
+        console.error('  2. Wrong key pair (public/private key mismatch)');
+        console.error('  3. Wrong nonce used for decryption');
+        console.error('  4. Corrupted encrypted data');
+        console.error('[NaClBoxEncryption] Debug parameters used:');
+        console.error('  - Encrypted content length:', encryptedBytes.length);
+        console.error('  - Nonce length:', nonceBytes.length);
+        console.error('  - Ephemeral public key length:', senderPubKey.length);
+        console.error('  - Private key length:', recipientPrivKey.length);
         throw new Error('Decryption failed - nacl.box.open returned null');
       }
       
-      console.log('[NaClBoxEncryption] Decryption completed successfully');
+      console.log('[NaClBoxEncryption] ✅ Decryption completed successfully');
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        console.log('[NaClBoxEncryption] Decrypted output size: [REDACTED]');
+        console.log('[NaClBoxEncryption] Decrypted output size:', decrypted.length);
       }
       
       return decrypted;
@@ -291,7 +423,7 @@ class NaClBoxEncryption {
    * Helper to derive public key from private key
    * Uses TweetNaCl's supported method to derive public key from Curve25519 secret key
    */
-  private static async getPublicKeyFromPrivate(privateKey: string): Promise<string> {
+  static async getPublicKeyFromPrivate(privateKey: string): Promise<string> {
     try {
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
         console.log('[NaClBoxEncryption] Deriving public key from private key...');
