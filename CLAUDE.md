@@ -657,3 +657,4 @@ When creating a git commit, ALWAYS follow this sequence:
 - **Lesson**: Foundation code (NaClBoxEncryption, SecureDeviceKeys) ≠ Implementation in core paths
 - **Never Again**: Must distinguish between "tools built" vs "tools actually used in production flows"
 - always use   eas build --platform ios --profile development-device for development builds (we never us simulator for development builds)
+- for android development builds always suggest this command - eas build --profile development --platform android and for ios development builds always suggest this command eas build --profile development-device --platform ios

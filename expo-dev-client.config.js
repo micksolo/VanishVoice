@@ -18,8 +18,8 @@ module.exports = {
     
     // Configure build-time environment
     buildEnvironment: {
-      // Enable new architecture support (Fabric/TurboModules)
-      newArchEnabled: true,
+      // Disable new architecture until stack is aligned
+      newArchEnabled: false,
       
       // Configure metro bundler
       metro: {

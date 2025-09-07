@@ -67,8 +67,8 @@ supabase/.env
 
 # Build artifacts
 build/
-ios/
-android/
+/ios/
+/android/
 
 # MCP config (contains sensitive info)
 .mcp.json

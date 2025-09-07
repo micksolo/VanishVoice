@@ -1,9 +1,10 @@
 {
   "name": "vanishvoice",
   "version": "1.0.0",
-  "main": "node_modules/expo/AppEntry.js",
+  "main": "index.js",
   "scripts": {
     "start": "expo start",
+    "dev:clean-rebuild": "bash scripts/dev-clean-rebuild.sh --yes --port 8081",
     "start:persistent": "while true; do npx expo start; echo 'Metro crashed, restarting in 2 seconds...'; sleep 2; done",
     "start:dev": "expo start --dev-client",
     "android": "expo run:android",
@@ -30,7 +31,7 @@
     "@supabase/realtime-js": "^2.9.3",
     "@supabase/supabase-js": "^2.39.0",
     "buffer": "^6.0.3",
-    "expo": "53.0.22",
+    "expo": "^53.0.22",
     "expo-audio": "~0.4.9",
     "expo-av": "~15.1.7",
     "expo-blur": "^14.1.5",
@@ -48,7 +49,7 @@
     "expo-screen-capture": "^7.2.0",
     "expo-secure-store": "~14.2.4",
     "expo-status-bar": "~2.2.3",
-    "react": "^19.0.0",
+    "react": "19.0.0",
     "react-native": "0.79.5",
     "react-native-compressor": "^1.12.0",
     "react-native-gesture-handler": "~2.24.0",
@@ -65,8 +66,7 @@
     "@babel/core": "^7.25.2",
     "@babel/plugin-transform-runtime": "^7.28.0",
     "@babel/preset-react": "^7.27.1",
-    "@react-native-community/cli": "^19.1.1",
-    "@react-native/metro-config": "^0.80.2",
+    "@expo/cli": "^0.24.21",
     "@types/jest": "^29.5.14",
     "@types/react": "~19.0.10",
     "babel-plugin-module-resolver": "^5.0.2",
@@ -76,7 +76,7 @@
     "typescript": "~5.8.3"
   },
   "engines": {
-    "node": ">=22.0.0",
+    "node": ">=20 <21",
     "npm": ">=10.0.0"
   },
   "private": true
